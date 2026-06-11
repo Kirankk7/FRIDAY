@@ -1137,6 +1137,28 @@ def _earcon_gate():
 run_test("Earcons: per-agent files generated", _earcons_present)
 run_test("Earcons: _play_earcon tracks agent", _earcon_gate)
 
+# Phase 51 #10 — barge-in (interrupt TTS)
+def _barge_stops_streaming():
+    import core.voice_loop as _vl, threading as _th
+    spoken = []
+    orig = _vl.speak_async
+    _vl.speak_async = lambda text, **k: spoken.append(text)
+    try:
+        ev = _th.Event()
+        def g():
+            yield "This first sentence is definitely long enough to be spoken now. "
+            ev.set()  # barge
+            yield "This second sentence must be skipped after barge-in. "
+        _vl._speak_streaming(g(), barge_event=ev)
+        return True if len(spoken) == 1 else f"barge didn't stop: {len(spoken)} spoken"
+    finally:
+        _vl.speak_async = orig
+def _barge_config():
+    import config as _c
+    return True if hasattr(_c, "BARGE_IN_ENABLED") and hasattr(_c, "BARGE_RMS_THRESHOLD") else "barge config missing"
+run_test("Barge-in: stops streaming on interrupt", _barge_stops_streaming)
+run_test("Barge-in: config flags present",         _barge_config)
+
 # Tool recall + sports disambiguation
 run_test("Router: 'what was the last result' → recall",_route("what was the last result", "system", "recall_result"))
 run_test("Router: 'what did that scan find' → recall", _route("what did that scan find", "system", "recall_result"))
