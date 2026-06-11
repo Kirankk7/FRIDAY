@@ -132,6 +132,13 @@ n8n:
   - trigger(workflow: str)           — run an n8n automation workflow (email/Telegram/pipelines)
   - list_workflows()                 — list available n8n workflows
 
+routines:
+  - create_routine(name: str)        — start recording a named command sequence
+  - stop_recording()                 — save the routine being recorded
+  - run_routine(name: str)           — replay a saved routine's commands
+  - list_routines()                  — list saved routines
+  - delete_routine(name: str)        — delete a routine
+
 terminator:
   - list_windows()                   — list open Windows app windows
   - focus_window(title: str)         — bring a window to the front
@@ -169,6 +176,7 @@ _VALID_TOOLS = {
     "self_improvement": {"analyze", "stats", "directive"},
     "terminator": {"list_windows", "focus_window", "get_window_text", "type_text", "press_keys", "launch_app", "click_element"},
     "n8n": {"trigger", "list_workflows"},
+    "routines": {"create_routine", "stop_recording", "cancel_recording", "run_routine", "list_routines", "delete_routine"},
     "system": {"system_info", "cpu_usage", "ram_usage", "browser_enable", "browser_disable", "browser_status", "speed_test", "battery_status", "recall_result"},
 }
 
