@@ -66,6 +66,11 @@ NVD_API_KEY = os.getenv("NVD_API_KEY", "")
 # Free tier: 4 req/min, 500/day. File/URL/domain reputation.
 VIRUSTOTAL_API_KEY = os.getenv("VIRUSTOTAL_API_KEY", "")
 
+# ── Phase 33 — GitHub API (Athena code/repo search) ──
+# Free token: github.com/settings/tokens (classic, public_repo scope is enough).
+# Without token: 60 req/hr + NO code search. With token: 5000/hr + code search.
+GITHUB_TOKEN = os.getenv("GITHUB_TOKEN", "")
+
 # ── Phase 53 — n8n automation (self-hosted) ──
 # Run n8n locally: docker run -it --rm -p 5678:5678 -v n8n_data:/home/node/.n8n n8nio/n8n
 # Each workflow with a Webhook trigger is reachable at {N8N_BASE_URL}/webhook/{path}.
