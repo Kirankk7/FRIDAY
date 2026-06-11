@@ -6,6 +6,7 @@ from urllib.parse import quote_plus
 
 from core.browser_agent import browser_agent
 from core.llm import ask_llm
+from core.critic import refine as _critic_refine
 
 # Google News RSS — free, no key, supports search
 _GNEWS_RSS = "https://news.google.com/rss/search?q={query}&hl=en-US&gl=US&ceid=US:en"
@@ -333,10 +334,16 @@ class AthenaAgent:
         if "google" in sources:
             context_block += f"=== WEB SEARCH ===\n{sources['google'][:1000]}\n\n"
 
+        # ── reasoning scratchpad (Phase 40a think(), now wired) ──
+        from core.think import think
+        plan = think(f"Plan a research report on: {query}",
+                     context=context_block[:1200])
+        plan_block = f"\nInternal plan (follow this):\n{plan}\n" if plan else ""
+
         # ── LLM synthesis ──
         print("[ATHENA] Synthesizing with LLM...")
 
-        prompt = f"""You are Athena, an expert research analyst. Using the sources below, write a comprehensive research report.
+        prompt = f"""You are Athena, an expert research analyst. Using the sources below, write a comprehensive research report.{plan_block}
 
 {context_block}
 
@@ -352,7 +359,8 @@ Write in clear English. No markdown headers with #. Use plain section labels. Be
 
 Report:"""
 
-        report_body = ask_llm(prompt)
+        report_body = ask_llm(prompt, agent="athena")
+        report_body = _critic_refine(query, report_body, agent="athena")  # Phase 57 (gated)
 
         if not report_body:
             return {
