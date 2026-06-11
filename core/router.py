@@ -683,6 +683,23 @@ def route_single_intent(
     if _m:
         return {"tool": "ultron", "action": "bug_bounty", "parameters": {"target": _m.group(1).strip()}, "confidence": 0.98}
 
+    # Phase 36 — HackingTool fleet (scoped allowlist, native/WSL/Docker)
+    if text in ("ht preflight", "hackingtool preflight", "pentest backend",
+                "check pentest backend", "tool backend"):
+        return {"tool": "ultron", "action": "ht_preflight", "parameters": {}, "confidence": 0.98}
+
+    _m = re.match(r"(?:ht search|hackingtool search|search (?:hacking ?)?tools?|find (?:hacking ?)?tool)\s+(.+)", text)
+    if _m:
+        return {"tool": "ultron", "action": "ht_search", "parameters": {"query": _m.group(1).strip()}, "confidence": 0.97}
+
+    # "run <tool_id> on <target>" / "ht run <tool_id> <args>"
+    _m = re.match(r"(?:ht run|hackingtool run|run tool)\s+(\S+)(?:\s+(?:on|against|with)?\s*(.+))?$", text)
+    if _m:
+        return {"tool": "ultron", "action": "ht_run",
+                "parameters": {"tool_id": _m.group(1).strip(),
+                               "args": (_m.group(2) or "").strip()},
+                "confidence": 0.96}
+
     # Katana crawl
     _m = re.match(r"(?:crawl|katana|spider)\s+(.+)", text)
     if _m:

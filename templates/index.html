@@ -59,7 +59,11 @@
                 <span id="top-date">SAT 07 JUN</span>
             </div>
             <div class="tb-sep"></div>
-            <span id="jarvis-version">v3.0</span>
+            <div id="mode-tabs">
+                <button class="mode-tab on" data-mode="command">COMMAND</button>
+                <button class="mode-tab" data-mode="operations">OPERATIONS</button>
+                <button class="mode-tab" data-mode="cyber">CYBER</button>
+            </div>
         </div>
 
         <div id="top-bar-right">
@@ -94,11 +98,12 @@
 
             <div class="p-sep"></div>
             <div class="p-title">◈ SYSTEMS</div>
-            <div class="mr"><span class="mdot ok"></span><span class="mlabel">NEURAL ENGINE</span></div>
-            <div class="mr"><span class="mdot ok"></span><span class="mlabel">WHISPER STT</span></div>
-            <div class="mr"><span class="mdot ok"></span><span class="mlabel">KOKORO TTS</span></div>
-            <div class="mr"><span class="mdot ok"></span><span class="mlabel">VECTOR MEMORY</span></div>
-            <div class="mr"><span class="mdot ok"></span><span class="mlabel">AGENTS ×10</span></div>
+            <div class="mr"><span class="mdot ok" id="m-ollama"></span><span class="mlabel">NEURAL ENGINE</span><span class="mval" id="mv-ollama"></span></div>
+            <div class="mr"><span class="mdot ok" id="m-whisper"></span><span class="mlabel">WHISPER STT</span><span class="mval" id="mv-whisper"></span></div>
+            <div class="mr"><span class="mdot ok" id="m-tts"></span><span class="mlabel">KOKORO TTS</span><span class="mval" id="mv-tts"></span></div>
+            <div class="mr"><span class="mdot ok" id="m-sched"></span><span class="mlabel">SCHEDULER</span><span class="mval" id="mv-sched"></span></div>
+            <div class="mr"><span class="mdot ok" id="m-browser"></span><span class="mlabel">BROWSER</span><span class="mval" id="mv-browser"></span></div>
+            <div class="mr"><span class="mdot ok" id="m-autotune"></span><span class="mlabel">AUTOTUNE</span><span class="mval" id="mv-autotune">ON</span></div>
 
             <div class="p-sep"></div>
             <div class="p-title">◈ TELEMETRY</div>
@@ -157,23 +162,57 @@
 
             <div class="sidebar-divider"></div>
             <div class="p-title">◈ AGENT FLEET</div>
-            <div id="agent-fleet">
-                <div class="agent-chip" data-agent="friday">FRIDAY</div>
-                <div class="agent-chip" data-agent="athena">ATHENA</div>
-                <div class="agent-chip" data-agent="ultron">ULTRON</div>
-                <div class="agent-chip" data-agent="veronica">VERONICA</div>
-                <div class="agent-chip" data-agent="vision">VISION</div>
-                <div class="agent-chip" data-agent="edith">EDITH</div>
-                <div class="agent-chip" data-agent="file">FILE</div>
-            </div>
+            <div id="agent-fleet"><!-- built by script.js (15 agents) --></div>
 
             <div class="sidebar-divider"></div>
             <div class="p-title">◈ INTEGRITY</div>
-            <div class="ibar"><span class="ibl">NEURAL</span><div class="itrack"><div class="ifill" style="width:94%"></div></div><span class="ipct">94%</span></div>
-            <div class="ibar"><span class="ibl">MEMORY</span><div class="itrack"><div class="ifill" style="width:81%"></div></div><span class="ipct">81%</span></div>
-            <div class="ibar"><span class="ibl">COMMS</span><div class="itrack"><div class="ifill" style="width:100%"></div></div><span class="ipct">100%</span></div>
+            <div class="ibar"><span class="ibl">MODEL</span><div class="itrack"><div class="ifill" id="if-model" style="width:0%"></div></div><span class="ipct" id="ip-model">—</span></div>
+            <div class="ibar"><span class="ibl">DISK</span><div class="itrack"><div class="ifill" id="if-disk" style="width:0%"></div></div><span class="ipct" id="ip-disk">—</span></div>
+            <div class="ibar"><span class="ibl">COMMS</span><div class="itrack"><div class="ifill" id="if-comms" style="width:0%"></div></div><span class="ipct" id="ip-comms">—</span></div>
         </aside>
 
+    </div>
+
+    <!-- ══ MODE VIEWS (Operations / Cyber) — overlay center in those modes ══ -->
+    <div id="mode-view" hidden>
+        <!-- OPERATIONS -->
+        <section class="mview" data-mview="operations" hidden>
+            <div class="mv-grid">
+                <div class="mv-card"><div class="mv-t">◈ TASK QUEUE</div>
+                    <div class="mv-big" id="op-tasks">0</div><div class="mv-sub">pending tasks</div></div>
+                <div class="mv-card"><div class="mv-t">◈ REMINDERS</div>
+                    <div class="mv-big" id="op-rem">0</div><div class="mv-sub">scheduled</div></div>
+                <div class="mv-card"><div class="mv-t">◈ EVENTS TODAY</div>
+                    <div class="mv-big" id="op-evt">0</div><div class="mv-sub">on calendar</div></div>
+                <div class="mv-card"><div class="mv-t">◈ SCHEDULER</div>
+                    <div class="mv-big" id="op-sched">—</div><div class="mv-sub">background runner</div></div>
+                <div class="mv-card wide"><div class="mv-t">◈ AUTOMATION</div>
+                    <div class="mv-line"><span>ROUTINES (macros)</span><span class="ok">record · replay</span></div>
+                    <div class="mv-line"><span>n8n WORKFLOWS</span><span id="op-n8n">outbound actions</span></div>
+                    <div class="mv-line"><span>TERMINATOR</span><span class="ok">desktop control</span></div>
+                    <div class="mv-line"><span>AUTOTUNE</span><span class="ok">adaptive sampling · EMA</span></div>
+                </div>
+            </div>
+        </section>
+        <!-- CYBER -->
+        <section class="mview" data-mview="cyber" hidden>
+            <div class="mv-grid">
+                <div class="mv-card"><div class="mv-t">◈ ULTRON</div>
+                    <div class="mv-big" style="color:#ff4c4c">ARMED</div><div class="mv-sub">security agent</div></div>
+                <div class="mv-card"><div class="mv-t">◈ HACKINGTOOL FLEET</div>
+                    <div class="mv-big">180+</div><div class="mv-sub">native · WSL · Docker</div></div>
+                <div class="mv-card"><div class="mv-t">◈ CVE WATCHLIST</div>
+                    <div class="mv-big" id="cy-cve">—</div><div class="mv-sub">tracked CVEs</div></div>
+                <div class="mv-card"><div class="mv-t">◈ LAST SCAN</div>
+                    <div class="mv-big" id="cy-scan" style="font-size:18px">—</div><div class="mv-sub">nmap target</div></div>
+                <div class="mv-card wide"><div class="mv-t">◈ CAPABILITIES</div>
+                    <div class="mv-line"><span>RECON</span><span class="ok">nmap · subfinder · httpx · katana</span></div>
+                    <div class="mv-line"><span>VULN</span><span class="ok">nuclei · CVE↔asset correlate</span></div>
+                    <div class="mv-line"><span>INTEL</span><span class="ok">VirusTotal · NVD · DNS</span></div>
+                    <div class="mv-line"><span>WORKFLOW</span><span class="ok">bug-bounty pipeline → PoC report</span></div>
+                </div>
+            </div>
+        </section>
     </div>
 
     <!-- ══ INPUT HUD ══ -->

@@ -7,6 +7,7 @@ import psutil
 import socket
 
 from core.llm import ask_llm
+from core.throttle import throttle
 
 _CVE_FILE = "data/cve_watchlist.json"
 
@@ -595,6 +596,7 @@ class UltronAgent:
             if _nvd_key:
                 _nvd_hdrs["apiKey"] = _nvd_key
             req = urllib.request.Request(nvd_url, headers=_nvd_hdrs)
+            throttle("nvd")   # space NVD calls to avoid 429
             with urllib.request.urlopen(req, timeout=12) as resp:
                 data = _json.loads(resp.read().decode())
             vulns = data.get("vulnerabilities", [])
@@ -1380,6 +1382,7 @@ Report:"""
 
         url = "https://www.virustotal.com/api/v3" + endpoint
         req = urllib.request.Request(url, headers={"x-apikey": _vt_key, "User-Agent": "JARVIS-Ultron/1.0"})
+        throttle("virustotal")   # 4/min free tier — space calls to avoid 429
         try:
             with urllib.request.urlopen(req, timeout=15) as resp:
                 data = _json.loads(resp.read().decode())
@@ -1683,6 +1686,7 @@ Report:"""
             if _nvd_key:
                 hdrs["apiKey"] = _nvd_key
             req = urllib.request.Request(url, headers=hdrs)
+            throttle("nvd")   # 50/30s (key) or 5/30s (no key) — space to avoid 429
             with urllib.request.urlopen(req, timeout=15) as resp:
                 data = _json.loads(resp.read().decode())
         except Exception as e:
@@ -1822,6 +1826,43 @@ Report:"""
             return {"success": False, "message": f"Hash error: {e}", "data": {}}
 
     # =====================================
+    # HACKINGTOOL (Phase 36) — 180+ tools via native/WSL/Docker, scoped allowlist
+    # =====================================
+    def ht_preflight(self) -> dict:
+        """Detect backend for the hackingtool fleet (native/WSL/Docker)."""
+        from agents.ultron.hackingtool import ht_wrapper as _ht
+        pf = _ht.ht_preflight()
+        return {"success": pf["ready"], "message": pf["message"], "data": pf}
+
+    def ht_search(self, query: str = "", category: str = "") -> dict:
+        """Search the 180+ tool index. Flags which are in Ultron's allowlist."""
+        from agents.ultron.hackingtool import ht_wrapper as _ht
+        res = _ht.ht_search(query, category)
+        runnable = [r["id"] for r in res["results"] if r["runnable"]]
+        if not res["results"]:
+            return {"success": True, "message": f"No tools match '{query}'.", "data": res}
+        lines = [f"{r['id']} [{r['tier']}] — {r['title']}" for r in res["results"][:10]]
+        msg = f"Found {res['count']} tool(s). Runnable: {len(runnable)}.\n" + "\n".join(lines)
+        return {"success": True, "message": msg, "data": res}
+
+    def ht_run(self, tool_id: str, args: str = "", allow_extended: bool = False) -> dict:
+        """Run an allowlisted hackingtool. Gated: SAFE tier only unless allow_extended."""
+        from agents.ultron.hackingtool import ht_wrapper as _ht
+        res = _ht.ht_run(tool_id, args, allow_extended=allow_extended)
+        status = res.get("status")
+        if status == "ok":
+            out = (res.get("stdout") or "").strip()
+            summary = out[:1500] if out else "(no output)"
+            return {"success": True,
+                    "message": f"{tool_id} [{res.get('backend')}] ✓\n{summary}",
+                    "data": res}
+        if status in ("refused", "no_backend", "fallback"):
+            return {"success": False, "message": res.get("message", status), "data": res}
+        # error / timeout / unclassified
+        err = res.get("message") or (res.get("stderr") or "")[:500] or status
+        return {"success": False, "message": f"{tool_id} failed: {err}", "data": res}
+
+    # =====================================
     # RUN
     # =====================================
     def run(
@@ -1890,6 +1931,18 @@ Report:"""
 
             elif action == "correlate":
                 return self.correlate()
+
+            elif action == "ht_preflight":
+                return self.ht_preflight()
+
+            elif action == "ht_search":
+                return self.ht_search(parameters.get("query", target),
+                                      parameters.get("category", ""))
+
+            elif action == "ht_run":
+                return self.ht_run(parameters.get("tool_id", ""),
+                                   parameters.get("args", ""),
+                                   parameters.get("allow_extended", False))
 
             elif action == "system_health":
                 return self.system_health()

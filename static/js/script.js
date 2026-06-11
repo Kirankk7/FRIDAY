@@ -42,14 +42,30 @@ const AGENT_COLORS = {
     chat:     '#00ffcc',
 };
 
+// Display codenames — raw key stays the routing id; this is just the label
+const AGENT_NAMES = {
+    friday:'FRIDAY', athena:'ATHENA', ultron:'ULTRON', veronica:'VERONICA',
+    vision:'VISION', edith:'EDITH', echo:'ECHO',
+    personal:'JOCASTA',          // personal assistant — notes, habits, goals
+    system:'SENTRY',             // system diagnostics — OS, battery, health
+    file:'ARCHIVE',              // file + document ops
+    scheduler:'CHRONOS',         // scheduling / time
+    self_improvement:'PHOENIX',  // self-improvement / reflection
+    terminator:'TERMINATOR',     // desktop control
+    n8n:'RELAY',                 // n8n automation / outbound
+    routines:'MACRO'             // record / replay command macros
+};
+const displayName = k => AGENT_NAMES[(k || '').toLowerCase()] || (k || '').toUpperCase();
+
 function setAgent(agent) {
     currentAgent = agent || 'friday';
     const color  = AGENT_COLORS[currentAgent] || '#00ffcc';
-    agentBadge.textContent   = currentAgent.toUpperCase();
+    const name   = displayName(currentAgent);
+    agentBadge.textContent   = name;
     agentBadge.style.color   = color;
     agentBadge.style.borderColor = `${color}50`;
     agentBadge.style.boxShadow   = `0 0 10px ${color}30`;
-    document.getElementById('sb-agent').textContent = currentAgent.toUpperCase();
+    document.getElementById('sb-agent').textContent = name;
     document.getElementById('sb-agent').style.color = color;
 }
 
@@ -209,17 +225,60 @@ function _drawHudText(col) {
 }
 
 function _drawCenterDot(col) {
-    // Subtle center dot / arc reactor hint
+    // ── ARC REACTOR CORE (Ref-B Manina Labs style) ──
     const ctx = hudCtx;
+    const t   = ringRot[2];               // shared rotation phase
     ctx.save();
-    const grad = ctx.createRadialGradient(CX, CY, 0, CX, CY, 58);
-    grad.addColorStop(0,   _rgba(col, 0.08));
-    grad.addColorStop(0.7, _rgba(col, 0.03));
-    grad.addColorStop(1,   'transparent');
-    ctx.fillStyle = grad;
-    ctx.beginPath();
-    ctx.arc(CX, CY, 58, 0, Math.PI * 2);
-    ctx.fill();
+
+    // 1. energy glow disk
+    const glow = ctx.createRadialGradient(CX, CY, 2, CX, CY, 70);
+    glow.addColorStop(0,   _rgba(col, 0.55));
+    glow.addColorStop(0.35,_rgba(col, 0.14));
+    glow.addColorStop(0.7, _rgba(col, 0.05));
+    glow.addColorStop(1,   'transparent');
+    ctx.fillStyle = glow;
+    ctx.beginPath(); ctx.arc(CX, CY, 70, 0, Math.PI * 2); ctx.fill();
+
+    // 2. segmented containment ring around the reactor
+    ctx.strokeStyle = _rgba(col, 0.5);
+    ctx.lineWidth   = 2;
+    ctx.shadowColor = _rgba(col, 0.8);
+    ctx.shadowBlur  = 12;
+    for (let i = 0; i < 9; i++) {
+        const a0 = -t * 1.3 + i * (Math.PI * 2 / 9);
+        ctx.beginPath();
+        ctx.arc(CX, CY, 60, a0, a0 + 0.42);
+        ctx.stroke();
+    }
+
+    // 3. counter-rotating triangle reactor (two stacked for depth)
+    const tri = (R, rot, alpha, lw) => {
+        ctx.strokeStyle = _rgba(col, alpha);
+        ctx.lineWidth   = lw;
+        ctx.beginPath();
+        for (let i = 0; i < 3; i++) {
+            const a  = -Math.PI / 2 + i * (Math.PI * 2 / 3) + rot;
+            const px = CX + Math.cos(a) * R, py = CY + Math.sin(a) * R;
+            i ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
+        }
+        ctx.closePath(); ctx.stroke();
+    };
+    tri(46,  t * 0.8, 0.9, 2.2);          // main reactor triangle
+    tri(34, -t * 1.1, 0.55, 1.4);         // inner counter triangle
+
+    // 4. inner hex bolt ring + bright core
+    ctx.strokeStyle = _rgba(col, 0.7);
+    ctx.lineWidth = 1.4;
+    ctx.beginPath(); ctx.arc(CX, CY, 20, 0, Math.PI * 2); ctx.stroke();
+
+    const breathe = 0.6 + 0.4 * Math.sin(Date.now() / 420);
+    const core = ctx.createRadialGradient(CX, CY, 0, CX, CY, 16);
+    core.addColorStop(0, _rgba(col, 0.95 * breathe + 0.05));
+    core.addColorStop(0.5, _rgba(col, 0.5 * breathe));
+    core.addColorStop(1, 'transparent');
+    ctx.fillStyle = core;
+    ctx.beginPath(); ctx.arc(CX, CY, 16, 0, Math.PI * 2); ctx.fill();
+
     ctx.restore();
 }
 
@@ -632,12 +691,13 @@ setAgent = function(agent) {
     _origSetAgent(agent);
     const lpAgent = document.getElementById('lp-agent');
     if (lpAgent) {
-        lpAgent.textContent = (agent || 'friday').toUpperCase();
+        lpAgent.textContent = displayName(agent || 'friday');
         const color = AGENT_COLORS[agent] || '#00d4ff';
         lpAgent.style.color = color;
         lpAgent.style.textShadow = `0 0 8px ${color}60`;
     }
     _refreshAgentChips(agent || 'friday');
+    if (typeof highlightFleet === 'function') highlightFleet((agent || 'friday').toLowerCase());
 };
 
 // Patch setState to update left panel mode
@@ -743,3 +803,110 @@ function _startSignalWave() {
 // ── SIDEBAR CLICK — just refresh status (sidebar is always visible) ──
 // Override the add/remove 'open' behavior — sidebar is now a permanent flex item.
 // sidebarOpenBtn already calls refreshStatus() via the original listener above.
+
+/* ═══════════ PHASE 45 — Command Center: live panels · 15-agent fleet · modes ═══════════ */
+
+// Full 15-agent palette (extends the 9 above)
+const FLEET_COLORS = {
+    friday:'#00d4ff', athena:'#c084fc', ultron:'#ff3344', veronica:'#4ca6ff',
+    vision:'#ffb347', edith:'#1adfb2', echo:'#ff8ad6', personal:'#4cff8a',
+    system:'#9ad0ff', file:'#a0a0a0', scheduler:'#ffd24c',
+    self_improvement:'#7CFFB2', terminator:'#ff6b3d', n8n:'#d36cff', routines:'#6cffe0'
+};
+
+
+// ── build the 15-agent fleet ──
+(function buildFleet(){
+    const el = document.getElementById('agent-fleet');
+    if (!el) return;
+    el.innerHTML = '';
+    Object.keys(FLEET_COLORS).forEach(a => {
+        const c = FLEET_COLORS[a];
+        const chip = document.createElement('div');
+        chip.className = 'agent-chip';
+        chip.dataset.agent = a;
+        chip.title = a;   // raw key on hover
+        chip.innerHTML = `<span class="ac-dot" style="color:${c}"></span>${displayName(a)}`;
+        el.appendChild(chip);
+    });
+})();
+
+function highlightFleet(agent){
+    document.querySelectorAll('.agent-chip').forEach(e =>
+        e.classList.toggle('live', e.dataset.agent === agent));
+}
+
+// ── live /health → left SYSTEMS panel + integrity bars ──
+async function refreshHealth(){
+    try {
+        const h = await (await fetch('/health')).json();
+        const dot = (id, ok, warn) => {
+            const e = document.getElementById(id); if(!e) return;
+            e.className = 'mdot ' + (ok ? 'ok' : (warn ? 'warn' : 'err'));
+        };
+        const val = (id, t) => { const e=document.getElementById(id); if(e) e.textContent=t||''; };
+
+        dot('m-ollama', h.ollama.up, false);   val('mv-ollama', h.ollama.model_loaded ? 'LOADED':'NO MODEL');
+        dot('m-whisper', h.whisper.loaded, true); val('mv-whisper', (h.whisper.model||'').toUpperCase());
+        dot('m-tts', h.tts.kokoro_worker_alive, true); val('mv-tts', (h.tts.backend||'').toUpperCase());
+        dot('m-sched', h.scheduler.running, true); val('mv-sched', h.scheduler.running?'RUN':'IDLE');
+        dot('m-browser', h.browser.enabled, true); val('mv-browser', h.browser.enabled?'ON':'OFF');
+        dot('m-autotune', true, false);
+
+        // integrity bars → real metrics
+        const bar = (f, p, pct, label) => {
+            const fe=document.getElementById(f), pe=document.getElementById(p);
+            if(fe) fe.style.width = pct+'%';
+            if(pe) pe.textContent = label;
+        };
+        bar('if-model','ip-model', h.ollama.model_loaded?100:0, h.ollama.model_loaded?'OK':'OFF');
+        if (h.disk && h.disk.pct_used!=null)
+            bar('if-disk','ip-disk', 100-h.disk.pct_used, (h.disk.free_gb||'?')+'GB');
+        bar('if-comms','ip-comms', h.ollama.up?100:0, h.ollama.up?'100%':'DOWN');
+    } catch(e) { /* offline */ }
+}
+refreshHealth();
+setInterval(refreshHealth, 7000);
+
+// (fleet highlight hooked into the existing setAgent wrapper above)
+
+// ── OPERATIONS / CYBER data ──
+async function refreshModes(){
+    try {
+        const st = await (await fetch('/status')).json();
+        const set=(id,v)=>{const e=document.getElementById(id); if(e) e.textContent=v;};
+        set('op-tasks', st.tasks_pending||0);
+        set('op-rem',   st.reminders_pending||0);
+        set('op-evt',   st.events_today||0);
+    } catch(e){}
+    try {
+        const h = await (await fetch('/health')).json();
+        const e=document.getElementById('op-sched'); if(e) e.textContent = h.scheduler.running?'RUN':'IDLE';
+    } catch(e){}
+    try {
+        const cy = await (await fetch('/cyber_status')).json();
+        const set=(id,v)=>{const e=document.getElementById(id); if(e) e.textContent=v;};
+        set('cy-cve', cy.cve_tracked||0);
+        set('cy-scan', cy.last_scan || 'none');
+    } catch(e){}
+}
+
+// ── MODE SWITCHING ──
+const modeView = document.getElementById('mode-view');
+const mainWorkspace = document.getElementById('main-workspace');
+function setMode(mode){
+    document.querySelectorAll('.mode-tab').forEach(t =>
+        t.classList.toggle('on', t.dataset.mode === mode));
+    if (mode === 'command') {
+        modeView.hidden = true;
+        if (mainWorkspace) mainWorkspace.style.display = '';   // restore orb+chat+panels
+    } else {
+        if (mainWorkspace) mainWorkspace.style.display = 'none'; // kill orb bleed-through
+        modeView.hidden = false;
+        document.querySelectorAll('.mview').forEach(s =>
+            s.hidden = (s.dataset.mview !== mode));
+        refreshModes();
+    }
+}
+document.querySelectorAll('.mode-tab').forEach(t =>
+    t.addEventListener('click', () => setMode(t.dataset.mode)));

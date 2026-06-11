@@ -4,6 +4,7 @@ Free tier: 10 req/min. Key: football-data.org/client/register
 """
 import requests
 import datetime
+from core.throttle import throttle
 
 BASE_URL = "https://api.football-data.org/v4"
 
@@ -154,6 +155,7 @@ def _find_team(name: str, api_key: str) -> tuple:
 
     # API search as last resort
     try:
+        throttle("football")
         r = requests.get(
             f"{BASE_URL}/teams",
             params={"name": name, "limit": 5},
@@ -180,6 +182,7 @@ def get_next_match(team_name: str, api_key: str) -> dict:
     date_to = (datetime.date.today() + datetime.timedelta(days=120)).isoformat()
 
     try:
+        throttle("football")
         r = requests.get(
             f"{BASE_URL}/teams/{team_id}/matches",
             params={"status": "SCHEDULED", "dateFrom": today, "dateTo": date_to, "limit": 3},
@@ -243,6 +246,7 @@ def get_recent_results(team_name: str, api_key: str, n: int = 3) -> dict:
     date_to = datetime.date.today().isoformat()
 
     try:
+        throttle("football")
         r = requests.get(
             f"{BASE_URL}/teams/{team_id}/matches",
             params={"status": "FINISHED", "dateFrom": date_from, "dateTo": date_to},
@@ -297,6 +301,7 @@ def get_standings(competition_name: str, api_key: str) -> dict:
         return {"success": False, "message": f"Competition '{competition_name}' not recognized. Try: Premier League, Bundesliga, Serie A, La Liga, Ligue 1, Champions League."}
 
     try:
+        throttle("football")
         r = requests.get(
             f"{BASE_URL}/competitions/{code}/standings",
             headers=_headers(api_key),

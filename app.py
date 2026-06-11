@@ -111,6 +111,22 @@ def home():
     return render_template("index.html")
 
 
+# Phase 45 — HUD prototypes (Command-Center finale). Pick a winner → Command Mode.
+@app.route("/hud/a")
+def hud_proto_a():
+    return render_template("hud_proto_a.html")
+
+
+@app.route("/hud/b")
+def hud_proto_b():
+    return render_template("hud_proto_b.html")
+
+
+@app.route("/hud/c")
+def hud_command():
+    return render_template("hud_command.html")
+
+
 @app.route("/chat_stream")
 def chat_stream():
 
@@ -322,6 +338,39 @@ def status():
         return jsonify({"error": str(e), "last_agent": "friday", "ollama_online": False})
 
 
+@app.route("/feedback", methods=["POST"])
+def feedback():
+    """Phase 56 — 👍/👎 on the last response feeds AutoTune's EMA learner."""
+    from core import autotune
+    data = request.get_json(silent=True) or {}
+    raw = data.get("rating", 0)
+    rating = 1 if str(raw) in ("1", "up", "+1", "good") else \
+             -1 if str(raw) in ("-1", "down", "bad") else 0
+    return jsonify(autotune.record_feedback(rating))
+
+
+@app.route("/cyber_status")
+def cyber_status():
+    """Phase 45 Cyber mode — CVE watchlist size + last nmap scan target."""
+    import json as _json
+    out = {"cve_tracked": 0, "last_scan": None}
+    try:
+        with open("data/cve_watchlist.json", "r", encoding="utf-8") as f:
+            d = _json.load(f)
+            out["cve_tracked"] = len(d) if isinstance(d, (list, dict)) else 0
+    except Exception:
+        pass
+    try:
+        with open("data/scan_history.json", "r", encoding="utf-8") as f:
+            hist = _json.load(f)
+            if isinstance(hist, dict) and hist:
+                last = sorted(hist.items(), key=lambda kv: kv[1].get("ts", ""))[-1]
+                out["last_scan"] = last[0]
+    except Exception:
+        pass
+    return jsonify(out)
+
+
 @app.route("/health")
 def health():
     """Full system health snapshot — one call to diagnose subsystems."""
@@ -406,6 +455,13 @@ def stop():
 
 
 if __name__ == "__main__":
+
+    # Phase 52 #4 — boot-time config validation (loud, never fatal)
+    try:
+        from core.config_validator import validate
+        validate(print_summary=True)
+    except Exception as _e:
+        print(f"[config] validator error (non-fatal): {_e}")
 
     app.run(
 
