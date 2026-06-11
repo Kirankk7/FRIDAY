@@ -114,6 +114,42 @@ def suggest_clarification(text: str):
 
 
 # =====================================
+# EXACT-COMMAND FAST DISPATCH (Phase 51 #7)
+# O(1) lookup for parameterless, state-independent commands — checked before
+# the regex chain. Only unambiguous fixed phrases here (verified by the
+# regression suite). Parameterized/stateful commands stay in the regex chain.
+# =====================================
+_EXACT_ROUTES = {
+    # ── Browser navigation / page (veronica) ──
+    "go back": ("veronica", "go_back"), "back": ("veronica", "go_back"),
+    "go forward": ("veronica", "go_forward"), "forward": ("veronica", "go_forward"),
+    "current page": ("veronica", "current_page"), "where am i": ("veronica", "current_page"),
+    "what page am i on": ("veronica", "current_page"), "what page is this": ("veronica", "current_page"),
+    "read page": ("veronica", "get_page_text"), "get page text": ("veronica", "get_page_text"),
+    "page content": ("veronica", "get_page_text"),
+    "read readme": ("veronica", "read_readme"), "read the readme": ("veronica", "read_readme"),
+    "show readme": ("veronica", "read_readme"),
+    "extract links": ("veronica", "extract_links"), "show links": ("veronica", "extract_links"),
+    "list links": ("veronica", "extract_links"),
+    # ── Friday lists ──
+    "list tasks": ("friday", "list_tasks"), "show tasks": ("friday", "list_tasks"),
+    "my tasks": ("friday", "list_tasks"), "show my tasks": ("friday", "list_tasks"),
+    "what are my tasks": ("friday", "list_tasks"), "task list": ("friday", "list_tasks"),
+    "list goals": ("friday", "list_goals"), "show goals": ("friday", "list_goals"),
+    "my goals": ("friday", "list_goals"), "what are my goals": ("friday", "list_goals"),
+    "list notes": ("friday", "list_notes"), "show notes": ("friday", "list_notes"),
+    "my notes": ("friday", "list_notes"), "show my notes": ("friday", "list_notes"),
+    "show habits": ("friday", "show_habits"), "my habits": ("friday", "show_habits"),
+    "habit tracker": ("friday", "show_habits"), "habits": ("friday", "show_habits"),
+    "list reminders": ("friday", "list_reminders"), "show reminders": ("friday", "list_reminders"),
+    "my reminders": ("friday", "list_reminders"), "pending reminders": ("friday", "list_reminders"),
+    # ── System / status ──
+    "browser status": ("system", "browser_status"),
+    "is browser enabled": ("system", "browser_status"),
+}
+
+
+# =====================================
 # SINGLE INTENT ROUTER
 # =====================================
 def route_single_intent(
@@ -124,6 +160,11 @@ def route_single_intent(
         text.lower()
         .strip()
     )
+
+    # Exact-command fast path — O(1) before the regex chain (Phase 51 #7)
+    _exact = _EXACT_ROUTES.get(text)
+    if _exact:
+        return {"tool": _exact[0], "action": _exact[1], "parameters": {}, "confidence": 0.99}
 
     remembered = (
         get_folder_context()
