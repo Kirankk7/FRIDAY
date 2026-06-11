@@ -35,6 +35,13 @@ TTS_BACKEND = "kokoro"
 # EARCONS (Phase 51 #11) — short per-agent audio cue before each agent speaks
 EARCONS_ENABLED = True
 
+# BARGE-IN (Phase 51 #10) — interrupt JARVIS by speaking while it talks
+# Monitors mic during TTS; sustained speech above the threshold stops playback
+# and records your new command. Threshold sits ABOVE the TTS echo bleed.
+BARGE_IN_ENABLED    = True
+BARGE_RMS_THRESHOLD = 0.07   # raise if TTS echo false-triggers; lower if it won't interrupt
+BARGE_SUSTAIN_CHUNKS = 2     # consecutive loud 0.2s chunks needed (~0.4s of speech)
+
 # BROWSER (Veronica agent — Playwright)
 # Auto-on: Playwright launches LAZILY on the first browser command (never at boot),
 # so startup stays safe even if Chrome/Playwright misbehaves. No manual "enable browser"

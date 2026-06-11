@@ -116,9 +116,10 @@ def _transcribe(model, wav_path: str) -> str:
         return ""
 
 
-def _speak_streaming(token_gen) -> str:
+def _speak_streaming(token_gen, barge_event=None) -> str:
     """
     Consume token stream. Speak each sentence as it completes.
+    If barge_event is set mid-stream (user interrupted), stop speaking early.
     Returns full response text.
     """
     buffer   = ""
@@ -126,6 +127,8 @@ def _speak_streaming(token_gen) -> str:
     MIN_CHARS = 25  # don't speak tiny fragments
 
     for token in token_gen:
+        if barge_event is not None and barge_event.is_set():
+            break
         buffer += token
         full.append(token)
 
@@ -135,9 +138,11 @@ def _speak_streaming(token_gen) -> str:
             if chunk:
                 speak_async(chunk)
             buffer = ""
+        if barge_event is not None and barge_event.is_set():
+            break
 
-    # Speak remainder
-    if buffer.strip() and len(buffer.strip()) >= 3:
+    # Speak remainder (unless interrupted)
+    if (barge_event is None or not barge_event.is_set()) and buffer.strip() and len(buffer.strip()) >= 3:
         speak_async(buffer.strip())
 
     return "".join(full)
@@ -148,6 +153,36 @@ class VoiceLoop:
         self._running  = False
         self._thread   = None
         self._model    = None
+        self._barge    = threading.Event()   # set when user interrupts speech
+        self._speaking = False
+
+    # ── Barge-in monitor (Phase 51 #10) ────────────────────────────────────
+    def _monitor_barge(self):
+        """Run while JARVIS speaks. Sustained mic speech → trip barge + stop TTS."""
+        try:
+            import sounddevice as sd
+            from config import BARGE_RMS_THRESHOLD, BARGE_SUSTAIN_CHUNKS
+        except Exception:
+            return
+        loud = 0
+        # brief grace period so the start of our own TTS doesn't self-trigger
+        time.sleep(0.5)
+        while self._speaking and self._running and not self._barge.is_set():
+            try:
+                audio = sd.rec(int(0.2 * SAMPLE_RATE), samplerate=SAMPLE_RATE,
+                               channels=1, dtype='float32', blocking=True)
+                rms = float(np.sqrt(np.mean(audio.flatten() ** 2)))
+            except Exception:
+                return
+            if rms >= BARGE_RMS_THRESHOLD:
+                loud += 1
+                if loud >= BARGE_SUSTAIN_CHUNKS:
+                    print("[voice_loop] Barge-in detected — stopping speech")
+                    self._barge.set()
+                    stop_speaking()
+                    return
+            else:
+                loud = 0
 
     def start(self, whisper_model=None):
         if self._running:
@@ -211,10 +246,46 @@ class VoiceLoop:
                         speak_async("Didn't catch that, boss.")
                         continue
 
-                    # Process → speak
-                    token_gen = process_input_stream(text)
-                    response  = _speak_streaming(token_gen)
-                    print(f"[voice_loop] Response: {response[:80]}...")
+                    # Process → speak, with barge-in (interrupt + relisten loop)
+                    try:
+                        from config import BARGE_IN_ENABLED
+                    except Exception:
+                        BARGE_IN_ENABLED = False
+
+                    current_text = text
+                    while current_text and self._running:
+                        self._barge.clear()
+                        self._speaking = True
+                        monitor = None
+                        if BARGE_IN_ENABLED:
+                            monitor = threading.Thread(target=self._monitor_barge, daemon=True)
+                            monitor.start()
+
+                        token_gen = process_input_stream(current_text)
+                        response  = _speak_streaming(
+                            token_gen, self._barge if BARGE_IN_ENABLED else None
+                        )
+                        self._speaking = False
+                        if monitor:
+                            monitor.join(timeout=0.5)
+
+                        print(f"[voice_loop] Response: {response[:80]}...")
+
+                        if self._barge.is_set():
+                            # User talked over JARVIS — record their follow-up now
+                            print("[voice_loop] Listening to interruption...")
+                            time.sleep(0.2)
+                            wav2 = _record_command()
+                            if wav2:
+                                current_text = _transcribe(self._model, wav2)
+                                try:
+                                    os.unlink(wav2)
+                                except Exception:
+                                    pass
+                                print(f"[voice_loop] Heard (barge): '{current_text}'")
+                                if current_text.strip():
+                                    continue
+                        break
 
                 finally:
                     try:
