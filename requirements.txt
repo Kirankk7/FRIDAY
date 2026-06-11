@@ -22,6 +22,9 @@ ddgs>=9.0.0
 deep-translator>=1.11.4
 FlightRadarAPI>=1.5.1
 
+# Phase 35 — Windows desktop control (Windows-only)
+pywinauto>=0.6.8 ; sys_platform == "win32"
+
 # STT
 faster-whisper>=1.0.0
 

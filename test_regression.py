@@ -1089,6 +1089,25 @@ run_test("Router: 'speed test' → system",              _route("speed test", "s
 run_test("Router: 'generate password' → friday",       _route("generate password", "friday", "generate_password"))
 run_test("Router: 'hacker news' → vision",             _route("hacker news", "vision", "hackernews"))
 
+# Phase 35 — Terminator desktop control
+run_test("Router: 'list windows' → terminator",     _route("list windows", "terminator", "list_windows"))
+run_test("Router: 'focus the chrome window'",        _route("focus the chrome window", "terminator", "focus_window"))
+run_test("Router: 'press ctrl+s' → press_keys",      _route("press ctrl+s", "terminator", "press_keys"))
+run_test("Router: 'click save button in notepad'",   _route("click the save button in notepad", "terminator", "click_element"))
+
+def _terminator_registered():
+    from core.tools_registry import TOOLS
+    return True if "terminator" in TOOLS else "terminator agent not registered"
+run_test("Terminator agent registered", _terminator_registered)
+
+def _terminator_list_windows_live():
+    if sys.platform != "win32":
+        return None
+    from agents.terminator.terminator_agent import terminator_agent
+    r = terminator_agent.run("", "list_windows", {})
+    return True if r.get("success") else f"list_windows failed: {r.get('message')}"
+run_test("Terminator: list_windows (live, Windows)", _terminator_list_windows_live)
+
 # Phase 41 — new caps routing
 run_test("Router: 'convert 500 usd to eur' → FX",   _route("convert 500 usd to eur", "vision", "currency_convert"))
 run_test("Router: 'translate good morning to french'", _route("translate good morning to french", "vision", "translate"))

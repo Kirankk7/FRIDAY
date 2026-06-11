@@ -1344,6 +1344,39 @@ def route_single_intent(
         return {"tool": "veronica", "action": "close_tab", "parameters": {}, "confidence": 0.99}
 
     # =====================================
+    # TERMINATOR — Windows desktop control (Phase 35)
+    # =====================================
+    if text in ("list windows", "show windows", "what windows are open",
+                "list open windows", "show open windows", "open windows"):
+        return {"tool": "terminator", "action": "list_windows", "parameters": {}, "confidence": 0.97}
+
+    # focus / switch to a WINDOW (tab variants handled earlier → veronica)
+    _m = re.match(r"(?:focus|switch to|bring(?: up)?|go to|activate)\s+(?:the\s+)?(.+?)\s+window", text)
+    if _m:
+        return {"tool": "terminator", "action": "focus_window", "parameters": {"title": _m.group(1).strip()}, "confidence": 0.95}
+
+    # read a window's text
+    _m = re.match(r"(?:read|what'?s in|get text from|show me)\s+(?:the\s+)?(.+?)\s+window", text)
+    if _m:
+        return {"tool": "terminator", "action": "get_window_text", "parameters": {"title": _m.group(1).strip()}, "confidence": 0.95}
+
+    # type text into focused window
+    _m = re.match(r"(?:type|type out|enter text|write)\s+(.+)", text)
+    if _m and not re.search(r"\b(?:task|note|goal|reminder|habit)\b", text):
+        return {"tool": "terminator", "action": "type_text", "parameters": {"text": _m.group(1).strip()}, "confidence": 0.9}
+
+    # press a key combo
+    _m = re.match(r"(?:press|hit|send)\s+(.+)", text)
+    if _m and re.search(r"\b(ctrl|alt|shift|enter|tab|esc|escape|space|f\d|delete|backspace)\b", _m.group(1), re.IGNORECASE):
+        return {"tool": "terminator", "action": "press_keys", "parameters": {"keys": _m.group(1).strip()}, "confidence": 0.95}
+
+    # click a named element in a window: "click X in Y"
+    _m = re.match(r"click\s+(?:the\s+)?(.+?)\s+(?:button\s+)?in\s+(?:the\s+)?(.+)", text)
+    if _m:
+        return {"tool": "terminator", "action": "click_element",
+                "parameters": {"element": _m.group(1).strip(), "window": _m.group(2).strip()}, "confidence": 0.9}
+
+    # =====================================
     # OPEN APP
     # =====================================
     if text.startswith(
