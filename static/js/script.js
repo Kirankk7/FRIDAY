@@ -889,6 +889,15 @@ async function refreshModes(){
         set('cy-cve', cy.cve_tracked||0);
         set('cy-scan', cy.last_scan || 'none');
     } catch(e){}
+    try {
+        const m = await (await fetch('/metrics')).json();
+        const set=(id,v)=>{const e=document.getElementById(id); if(e) e.textContent=v;};
+        set('op-calls', m.total_calls||0);
+        set('op-busiest', m.busiest ? displayName(m.busiest) : '—');
+        set('op-errs', m.total_errors||0);
+        const r = (m.recent||[])[0];
+        set('op-recent', r ? `${displayName(r.agent)} ${r.action||''} ${r.ms}ms` : 'idle');
+    } catch(e){}
 }
 
 // ── MODE SWITCHING ──

@@ -31,6 +31,11 @@ def model_for(agent: str | None) -> str:
 # ── Phase 56 — AutoTune (context-adaptive sampling + EMA learning) ──
 AUTOTUNE_ENABLED = os.getenv("AUTOTUNE_ENABLED", "1") not in ("0", "false", "False")
 
+# ── Phase 57 — Critic pass (gated self-review of high-stakes, non-streaming answers) ──
+# Adds one extra LLM round (critique + revise) to Ultron/Athena report synthesis.
+# Off by default — it doubles latency on those long calls. Set to 1 to enable.
+CRITIC_ENABLED = os.getenv("CRITIC_ENABLED", "0") not in ("0", "false", "False")
+
 # WHISPER STT CONFIG (Phase 17)
 WHISPER_MODEL   = "base"    # tiny/base/small/medium — base is good balance on RTX 4060
 WHISPER_DEVICE  = "cuda"    # cuda or cpu
