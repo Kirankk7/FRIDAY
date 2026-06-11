@@ -349,6 +349,13 @@ def feedback():
     return jsonify(autotune.record_feedback(rating))
 
 
+@app.route("/metrics")
+def metrics():
+    """Phase 52 #5 — per-agent telemetry (calls/latency/errors) for the HUD."""
+    from core.metrics import snapshot
+    return jsonify(snapshot())
+
+
 @app.route("/cyber_status")
 def cyber_status():
     """Phase 45 Cyber mode — CVE watchlist size + last nmap scan target."""

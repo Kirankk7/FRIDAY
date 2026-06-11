@@ -1499,6 +1499,124 @@ run_test("Validator: returns structured report",  _validator_returns_report)
 run_test("Validator: never raises",               _validator_never_raises)
 run_test("Validator: flags missing optional key", _validator_flags_missing_key)
 
+# Phase 52 #5 — telemetry
+from core import metrics as _met
+
+def _metrics_records():
+    _met.reset()
+    _met.record("ultron", 1200, True, "nmap_scan")
+    _met.record("ultron", 800, True, "subfinder")
+    _met.record("vision", 300, False, "web_search")
+    s = _met.snapshot()
+    ok = (s["total_calls"] == 3 and s["total_errors"] == 1
+          and s["busiest"] == "ultron" and s["agents"]["ultron"]["avg_ms"] == 1000)
+    _met.reset()
+    return True if ok else f"bad snapshot: {s}"
+
+def _metrics_recent_order():
+    _met.reset()
+    _met.record("a", 10, True, "x"); _met.record("b", 20, True, "y")
+    newest = _met.snapshot()["recent"][0]["agent"]
+    _met.reset()
+    return True if newest == "b" else f"recent not newest-first: {newest}"
+
+run_test("Metrics: records calls/errors/avg",  _metrics_records)
+run_test("Metrics: recent is newest-first",    _metrics_recent_order)
+
+# Phase 52 #2 — unified memory facade
+from core import unified_memory as _um
+
+def _unified_searches_vector():
+    from core.vector_memory import add_to_vector
+    add_to_vector("unified memory facade test sentinel phrase zzqq")
+    r = _um.search("sentinel zzqq")
+    return True if any(h["source"] == "vector" for h in r["results"]) else "vector hit not surfaced"
+
+def _unified_empty_query():
+    return True if _um.search("")["count"] == 0 else "empty query should return nothing"
+
+def _unified_spans_stores():
+    s = set(_um.stores())
+    return True if {"vector", "edith", "tool", "personal"} <= s else f"missing stores: {s}"
+
+run_test("UnifiedMem: search hits vector store", _unified_searches_vector)
+run_test("UnifiedMem: empty query safe",         _unified_empty_query)
+run_test("UnifiedMem: spans all stores",         _unified_spans_stores)
+
+# Phase 34 — EDITH SQLite backend
+def _edith_sqlite_roundtrip():
+    from agents.edith.edith_agent import edith_agent
+    import os as _os
+    r = edith_agent.store_memory("sqlite roundtrip probe alpha", label="probe")
+    if not r.get("success"):
+        return f"store failed: {r}"
+    s = edith_agent.search_memory("roundtrip probe alpha")
+    if s["data"].get("count", 0) < 1:
+        return "search did not find stored entry"
+    lbl = edith_agent.get_by_label("probe")
+    if "roundtrip" not in lbl.get("message", ""):
+        return "get_by_label miss"
+    return True if _os.path.exists("data/edith_memory.db") else "sqlite db not created"
+
+def _edith_api_shapes_intact():
+    from agents.edith.edith_agent import edith_agent
+    r = edith_agent.recall_recent(3)
+    return True if "memories" in r.get("data", {}) else "recall shape changed"
+
+run_test("EDITH: SQLite store/search/label roundtrip", _edith_sqlite_roundtrip)
+run_test("EDITH: return shapes unchanged",             _edith_api_shapes_intact)
+
+# Phase 57 — critic pass (gated, offline)
+from core import critic as _crit
+
+def _critic_disabled_passthrough():
+    import config
+    saved = config.CRITIC_ENABLED
+    try:
+        config.CRITIC_ENABLED = False
+        draft = "x" * 250
+        return True if _crit.refine("q", draft, "ultron") == draft else "disabled should passthrough"
+    finally:
+        config.CRITIC_ENABLED = saved
+
+def _critic_gating():
+    import config
+    saved = config.CRITIC_ENABLED
+    try:
+        config.CRITIC_ENABLED = True
+        short = _crit.should_refine("ultron", "short")          # too short → False
+        lowstakes = _crit.should_refine("friday", "y" * 300)    # not high-stakes → False
+        high = _crit.should_refine("ultron", "y" * 300)         # → True
+        return True if (not short and not lowstakes and high) else "gating wrong"
+    finally:
+        config.CRITIC_ENABLED = saved
+
+def _critic_pass_keeps_draft():
+    import config, core.llm as _L
+    saved, saved_fn = config.CRITIC_ENABLED, _L.ask_llm
+    try:
+        config.CRITIC_ENABLED = True
+        _L.ask_llm = lambda *a, **k: "PASS"
+        draft = "draft " * 60
+        return True if _crit.refine("q", draft, "ultron") == draft else "PASS should keep draft"
+    finally:
+        config.CRITIC_ENABLED, _L.ask_llm = saved, saved_fn
+
+def _critic_revises_on_issues():
+    import config, core.llm as _L
+    saved, saved_fn = config.CRITIC_ENABLED, _L.ask_llm
+    try:
+        config.CRITIC_ENABLED = True
+        _L.ask_llm = lambda p, **k: ("found a bug" if "reviewer" in p else "REVISED OUTPUT")
+        return True if _crit.refine("q", "draft " * 60, "ultron") == "REVISED OUTPUT" else "should revise"
+    finally:
+        config.CRITIC_ENABLED, _L.ask_llm = saved, saved_fn
+
+run_test("Critic: disabled = passthrough",      _critic_disabled_passthrough)
+run_test("Critic: gates to high-stakes + len",  _critic_gating)
+run_test("Critic: PASS keeps draft",            _critic_pass_keeps_draft)
+run_test("Critic: revises when issues found",   _critic_revises_on_issues)
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # 28. LIVE API INTEGRATIONS (network — skip if offline)

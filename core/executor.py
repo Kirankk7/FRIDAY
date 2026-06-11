@@ -3,6 +3,7 @@ from core.task_manager import task_manager
 from core.folder_memory import save_folder_context
 from core.state import set_last_agent, set_last_action
 from core.tool_memory import remember_result
+from core.metrics import record as record_metric
 
 import os
 import time
@@ -100,6 +101,7 @@ def execute_plan(plan):
             # ==========================
             # EXECUTE TOOL SAFELY
             # ==========================
+            _t0 = time.perf_counter()
             try:
 
                 result = (
@@ -134,6 +136,17 @@ def execute_plan(plan):
                     "data":
                     {}
                 }
+
+            # Phase 52 #5 — telemetry (per-agent calls/latency/errors)
+            try:
+                record_metric(
+                    tool,
+                    (time.perf_counter() - _t0) * 1000.0,
+                    bool(result and result.get("success", True)),
+                    action,
+                )
+            except Exception:
+                pass
 
             # ==========================
             # NONE PROTECTION

@@ -8,6 +8,7 @@ import socket
 
 from core.llm import ask_llm
 from core.throttle import throttle
+from core.critic import refine as _critic_refine
 
 _CVE_FILE = "data/cve_watchlist.json"
 
@@ -941,7 +942,8 @@ Technical, precise, actionable. No markdown # headers. Plain section labels.
 
 Report:"""
 
-        analysis = ask_llm(prompt)
+        analysis = ask_llm(prompt, agent="ultron")
+        analysis = _critic_refine(prompt, analysis, agent="ultron")  # Phase 57 (gated)
 
         # ── Build report ──
         full_report = f"""# Ultron Full Pipeline Report: {target}
@@ -1220,7 +1222,8 @@ Be technical, precise, and actionable. No markdown headers with #. Plain section
 
 Report:"""
 
-        analysis = ask_llm(prompt)
+        analysis = ask_llm(prompt, agent="ultron")
+        analysis = _critic_refine(prompt, analysis, agent="ultron")  # Phase 57 (gated)
 
         # ── Build full report ──
         full_report = f"""# Ultron Security Report: {target}
