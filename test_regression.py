@@ -1089,6 +1089,35 @@ run_test("Router: 'speed test' → system",              _route("speed test", "s
 run_test("Router: 'generate password' → friday",       _route("generate password", "friday", "generate_password"))
 run_test("Router: 'hacker news' → vision",             _route("hacker news", "vision", "hackernews"))
 
+# Phase 43 — routines / macros
+run_test("Router: 'create routine morning'", _route("create routine morning", "routines", "create_routine"))
+run_test("Router: 'run routine morning'",    _route("run routine morning", "routines", "run_routine"))
+run_test("Router: 'list routines'",          _route("list routines", "routines", "list_routines"))
+def _routine_record_replay():
+    import core.routines as _rt, os as _os, json as _json
+    f = _rt._FILE
+    bk = open(f, encoding='utf-8').read() if _os.path.exists(f) else None
+    try:
+        rm = _rt.routine_manager
+        rm.start_recording("_reg_macro_")
+        if not rm.is_recording():
+            return "recording didn't start"
+        rm.add_command("show my tasks"); rm.add_command("battery status")
+        rm.stop_recording()
+        if rm.is_recording():
+            return "recording didn't stop"
+        saved = _json.load(open(f, encoding='utf-8')).get("_reg_macro_")
+        if saved != ["show my tasks", "battery status"]:
+            return f"saved wrong: {saved}"
+        rm.delete_routine("_reg_macro_")
+        return True
+    finally:
+        if bk is not None:
+            open(f, 'w', encoding='utf-8').write(bk)
+        elif _os.path.exists(f):
+            _os.remove(f)
+run_test("Routines: record → save → delete", _routine_record_replay)
+
 # Phase 53 — n8n automation
 run_test("Router: 'run workflow X' → n8n.trigger",  _route("run workflow daily report", "n8n", "trigger"))
 run_test("Router: 'list workflows' → n8n",          _route("list workflows", "n8n", "list_workflows"))

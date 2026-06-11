@@ -28,6 +28,14 @@ from core.cognitive_loop import (
 from core.llm import ask_llm, ask_llm_stream
 from core.personal_memory import get_relevant_context as get_personal_context
 from core.state import set_last_agent
+from core.routines import routine_manager
+
+# Phrases that end routine recording
+_STOP_RECORDING = {
+    "stop recording", "end routine", "finish routine", "done recording",
+    "stop the recording", "end recording", "save routine",
+}
+_CANCEL_RECORDING = {"cancel routine", "cancel recording", "discard routine"}
 
 
 FAST_MESSAGES = {
@@ -127,6 +135,16 @@ def process_input(
         raw_input.lower()
         .strip()
     )
+
+    # =================================
+    # ROUTINE RECORDING — capture commands instead of executing (Phase 43)
+    # =================================
+    if routine_manager.is_recording():
+        if text_lower in _STOP_RECORDING:
+            return routine_manager.stop_recording()
+        if text_lower in _CANCEL_RECORDING:
+            return routine_manager.cancel_recording()
+        return routine_manager.add_command(raw_input)
 
     # =================================
     # FAST PATH — instant, no LLM
@@ -336,6 +354,17 @@ def process_input_stream(user_input: str):
     raw_input = user_input.strip()
     memory = load_memory()
     text_lower = raw_input.lower().strip()
+
+    # Routine recording — capture commands instead of executing (Phase 43)
+    if routine_manager.is_recording():
+        if text_lower in _STOP_RECORDING:
+            yield routine_manager.stop_recording()
+            return
+        if text_lower in _CANCEL_RECORDING:
+            yield routine_manager.cancel_recording()
+            return
+        yield routine_manager.add_command(raw_input)
+        return
 
     # Fast path
     if text_lower in FAST_MESSAGES:

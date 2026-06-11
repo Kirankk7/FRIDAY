@@ -149,6 +149,11 @@ _EXACT_ROUTES = {
     # ── n8n automation ──
     "list workflows": ("n8n", "list_workflows"), "show workflows": ("n8n", "list_workflows"),
     "my workflows": ("n8n", "list_workflows"), "list automations": ("n8n", "list_workflows"),
+    # ── routines / macros ──
+    "list routines": ("routines", "list_routines"), "show routines": ("routines", "list_routines"),
+    "my routines": ("routines", "list_routines"), "list macros": ("routines", "list_routines"),
+    "stop recording": ("routines", "stop_recording"), "end routine": ("routines", "stop_recording"),
+    "finish routine": ("routines", "stop_recording"),
 }
 
 
@@ -1419,6 +1424,22 @@ def route_single_intent(
     if _m:
         return {"tool": "terminator", "action": "click_element",
                 "parameters": {"element": _m.group(1).strip(), "window": _m.group(2).strip()}, "confidence": 0.9}
+
+    # =====================================
+    # ROUTINES / MACROS (Phase 43)
+    # =====================================
+    _m = re.match(r"(?:create|new|record|start|make)\s+(?:a\s+)?routine\s+(.+)", text)
+    if _m:
+        return {"tool": "routines", "action": "create_routine",
+                "parameters": {"name": _m.group(1).strip()}, "confidence": 0.97}
+    _m = re.match(r"(?:run|play|execute|do)\s+(?:the\s+)?routine\s+(.+)", text)
+    if _m:
+        return {"tool": "routines", "action": "run_routine",
+                "parameters": {"name": _m.group(1).strip()}, "confidence": 0.97}
+    _m = re.match(r"(?:delete|remove|forget)\s+(?:the\s+)?routine\s+(.+)", text)
+    if _m:
+        return {"tool": "routines", "action": "delete_routine",
+                "parameters": {"name": _m.group(1).strip()}, "confidence": 0.97}
 
     # =====================================
     # n8n AUTOMATION (Phase 53) — trigger a workflow
