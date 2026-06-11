@@ -146,6 +146,9 @@ _EXACT_ROUTES = {
     # ── System / status ──
     "browser status": ("system", "browser_status"),
     "is browser enabled": ("system", "browser_status"),
+    # ── n8n automation ──
+    "list workflows": ("n8n", "list_workflows"), "show workflows": ("n8n", "list_workflows"),
+    "my workflows": ("n8n", "list_workflows"), "list automations": ("n8n", "list_workflows"),
 }
 
 
@@ -1416,6 +1419,14 @@ def route_single_intent(
     if _m:
         return {"tool": "terminator", "action": "click_element",
                 "parameters": {"element": _m.group(1).strip(), "window": _m.group(2).strip()}, "confidence": 0.9}
+
+    # =====================================
+    # n8n AUTOMATION (Phase 53) — trigger a workflow
+    # =====================================
+    _m = re.match(r"(?:run|trigger|execute|fire|start)\s+(?:the\s+)?(?:n8n\s+)?(?:workflow|automation)\s+(.+)", text)
+    if _m:
+        return {"tool": "n8n", "action": "trigger",
+                "parameters": {"workflow": _m.group(1).strip()}, "confidence": 0.96}
 
     # =====================================
     # OPEN APP

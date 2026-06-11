@@ -1089,6 +1089,19 @@ run_test("Router: 'speed test' → system",              _route("speed test", "s
 run_test("Router: 'generate password' → friday",       _route("generate password", "friday", "generate_password"))
 run_test("Router: 'hacker news' → vision",             _route("hacker news", "vision", "hackernews"))
 
+# Phase 53 — n8n automation
+run_test("Router: 'run workflow X' → n8n.trigger",  _route("run workflow daily report", "n8n", "trigger"))
+run_test("Router: 'list workflows' → n8n",          _route("list workflows", "n8n", "list_workflows"))
+def _n8n_registered():
+    from core.tools_registry import TOOLS
+    return True if "n8n" in TOOLS else "n8n agent not registered"
+def _n8n_graceful():
+    from agents.automation.n8n_agent import n8n_agent
+    r = n8n_agent.run("", "trigger", {"workflow": "_nonexistent_reg_test_"})
+    return True if isinstance(r, dict) and "message" in r else "n8n trigger didn't return clean dict"
+run_test("n8n agent registered",                    _n8n_registered)
+run_test("n8n: graceful when unreachable (no crash)", _n8n_graceful)
+
 # Phase 35 — Terminator desktop control
 run_test("Router: 'list windows' → terminator",     _route("list windows", "terminator", "list_windows"))
 run_test("Router: 'focus the chrome window'",        _route("focus the chrome window", "terminator", "focus_window"))
