@@ -600,7 +600,21 @@ def _friday_schema():
 
 run_test("data/memory.json valid JSON",         _json_valid("data/memory.json"))
 run_test("data/friday_data.json valid JSON",    _json_valid("data/friday_data.json"))
-run_test("data/edith_memory.json valid JSON",   _json_valid("data/edith_memory.json"))
+def _edith_sqlite_valid():
+    # Phase 34 — EDITH is SQLite now; the old JSON was migrated away.
+    import sqlite3
+    path = "data/edith_memory.db"
+    if not os.path.exists(path):
+        return None  # not yet created (fresh checkout) — legitimately skippable
+    try:
+        c = sqlite3.connect(path)
+        cols = {r[1] for r in c.execute("PRAGMA table_info(memories)").fetchall()}
+        c.close()
+        need = {"id", "label", "content", "type", "timestamp"}
+        return True if need <= cols else f"edith schema missing: {need - cols}"
+    except Exception as e:
+        return f"edith db invalid: {e}"
+run_test("data/edith_memory.db valid SQLite",   _edith_sqlite_valid)
 run_test("data/personal_memory.json valid JSON",_json_valid("data/personal_memory.json"))
 run_test("data/friday_data.json schema OK",     _friday_schema)
 run_test("vector_memory.json valid JSON",       _json_valid("vector_memory.json"))
