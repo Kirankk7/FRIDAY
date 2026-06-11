@@ -16,6 +16,21 @@ OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:7b")
 # OLLAMA_MODEL = "deepseek-r1:8b"    # Code & reasoning
 # OLLAMA_MODEL = "neural-chat:7b"    # Conversational
 
+# ── Phase 52 #3 — per-agent model routing ──
+# ask_llm(agent=...) resolves its model here, falling back to OLLAMA_MODEL.
+# Map an agent → a model you've pulled (`ollama list`). Unmapped agents and
+# unpulled models degrade gracefully to OLLAMA_MODEL.
+# Example once you pull a coder model:
+#   AGENT_MODELS = {"ultron": "deepseek-coder:6.7b", "echo": "deepseek-coder:6.7b"}
+AGENT_MODELS = {}
+
+def model_for(agent: str | None) -> str:
+    """Resolve an agent name to its configured model (or the default)."""
+    return AGENT_MODELS.get(agent, OLLAMA_MODEL) if agent else OLLAMA_MODEL
+
+# ── Phase 56 — AutoTune (context-adaptive sampling + EMA learning) ──
+AUTOTUNE_ENABLED = os.getenv("AUTOTUNE_ENABLED", "1") not in ("0", "false", "False")
+
 # WHISPER STT CONFIG (Phase 17)
 WHISPER_MODEL   = "base"    # tiny/base/small/medium — base is good balance on RTX 4060
 WHISPER_DEVICE  = "cuda"    # cuda or cpu
@@ -77,6 +92,12 @@ GITHUB_TOKEN = os.getenv("GITHUB_TOKEN", "")
 # N8N_API_KEY (optional) enables listing workflows via the REST API.
 N8N_BASE_URL = os.getenv("N8N_BASE_URL", "http://localhost:5678")
 N8N_API_KEY  = os.getenv("N8N_API_KEY", "")
+
+# ── Phase 36 — HackingTool fleet (180+ tools via Ultron, scoped allowlist) ──
+# Backend for ht_run: "auto" (ht_env picks WSL>Docker on Windows), "docker"
+# (isolation), "wsl", or "native". Docker Desktop or a WSL distro required on
+# Windows; tools degrade gracefully (status=no_backend) when neither is present.
+HT_BACKEND = os.getenv("HT_BACKEND", "auto")
 
 # NO CLOUD APIS
 # - No OpenAI

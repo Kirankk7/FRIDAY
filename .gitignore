@@ -13,6 +13,9 @@ env/
 
 # ─── Runtime state / user data (regenerated at runtime) ───────────────────
 data/
+# …but the HackingTool fleet index is a shipped asset, not runtime state:
+!agents/ultron/hackingtool/data/
+!agents/ultron/hackingtool/data/tools.json
 memory.json
 vector_memory.json
 user_profile.json
@@ -48,6 +51,9 @@ test_sub.wav
 test_report_*.html
 graphify-out/
 workspace/
+
+# ─── Internal handoff doc (not for public repo) ───────────────────────────
+JARVIS_STATE.md
 
 # ─── OS / editor / tooling ────────────────────────────────────────────────
 .DS_Store

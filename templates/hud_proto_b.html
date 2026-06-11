@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JARVIS // ARC — Proto B</title>
+<style>
+  :root{
+    --bg:#04060a; --cyan:#00d4ff; --amber:#ff9600; --green:#00ff88; --red:#ff4c4c;
+    --txt:#cfe9f2; --dim:#5b7c8a; --mono:'JetBrains Mono','Consolas',monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;background:var(--bg);color:var(--txt);font-family:var(--mono);overflow:hidden}
+  body{background:radial-gradient(900px 900px at 50% 50%, rgba(0,60,90,.14), transparent 65%), var(--bg);}
+  .vig{position:fixed;inset:0;pointer-events:none;box-shadow:inset 0 0 260px 70px rgba(0,0,0,.92)}
+
+  .hud{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+  #arc{filter:drop-shadow(0 0 26px rgba(0,212,255,.22))}
+  .center{position:absolute;text-align:center;pointer-events:none}
+  .center .time{font-size:46px;letter-spacing:5px;color:#eafaff;text-shadow:0 0 18px rgba(0,212,255,.55)}
+  .center .agent{font-size:14px;letter-spacing:8px;margin-top:6px;color:var(--cyan)}
+  .center .state{font-size:10px;letter-spacing:4px;margin-top:10px;color:var(--dim)}
+
+  /* corner readouts */
+  .read{position:fixed;font-size:11px;letter-spacing:1px;line-height:1.9}
+  .read .t{color:var(--dim);font-size:9px;letter-spacing:3px;margin-bottom:4px;
+    border-bottom:1px solid rgba(0,212,255,.2);padding-bottom:3px;display:inline-block}
+  .read .r{display:flex;justify-content:space-between;gap:18px;min-width:190px}
+  .read .r .v{color:var(--txt);font-weight:600}
+  .v.ok{color:var(--green)} .v.bad{color:var(--red)} .v.warn{color:var(--amber)}
+  .tl{top:30px;left:34px} .tr{top:30px;right:34px;text-align:right}
+  .tr .r{flex-direction:row-reverse}
+  .bl{bottom:34px;left:34px} .br{bottom:34px;right:34px;text-align:right}
+  .br .r{flex-direction:row-reverse}
+
+  .switch{position:fixed;bottom:14px;left:50%;transform:translateX(-50%);font-size:10px;
+    letter-spacing:2px;color:var(--dim);border:1px solid rgba(0,212,255,.2);padding:6px 14px;
+    border-radius:20px;text-decoration:none;background:rgba(0,20,30,.5)}
+  .switch:hover{color:var(--cyan);border-color:var(--cyan)}
+  .brand{position:fixed;top:30px;left:50%;transform:translateX(-50%);letter-spacing:7px;
+    font-size:12px;color:var(--cyan);text-shadow:0 0 12px rgba(0,212,255,.5)}
+</style>
+</head>
+<body>
+<div class="vig"></div>
+<div class="brand">J · A · R · V · I · S</div>
+
+<div class="hud">
+  <canvas id="arc" width="620" height="620"></canvas>
+  <div class="center">
+    <div class="time" id="time">--:--:--</div>
+    <div class="agent" id="agent">FRIDAY</div>
+    <div class="state" id="state">STANDBY</div>
+  </div>
+</div>
+
+<div class="read tl">
+  <div class="t">SYSTEMS</div>
+  <div class="r"><span>OLLAMA</span><span class="v" id="r-ollama">—</span></div>
+  <div class="r"><span>MODEL</span><span class="v" id="r-model">—</span></div>
+  <div class="r"><span>STT</span><span class="v" id="r-stt">—</span></div>
+  <div class="r"><span>TTS</span><span class="v" id="r-tts">—</span></div>
+</div>
+<div class="read tr">
+  <div class="t">OPERATIONS</div>
+  <div class="r"><span>TASKS</span><span class="v" id="r-tasks">0</span></div>
+  <div class="r"><span>REMINDERS</span><span class="v" id="r-rem">0</span></div>
+  <div class="r"><span>EVENTS</span><span class="v" id="r-evt">0</span></div>
+  <div class="r"><span>AGENT</span><span class="v" id="r-agent">FRIDAY</span></div>
+</div>
+<div class="read bl">
+  <div class="t">RUNTIME</div>
+  <div class="r"><span>SCHEDULER</span><span class="v" id="r-sched">—</span></div>
+  <div class="r"><span>BROWSER</span><span class="v" id="r-browser">—</span></div>
+  <div class="r"><span>AUTOTUNE</span><span class="v ok">ON</span></div>
+</div>
+<div class="read br">
+  <div class="t">STORAGE</div>
+  <div class="r"><span>DISK FREE</span><span class="v" id="r-disk">—</span></div>
+  <div class="r"><span>USED</span><span class="v" id="r-used">—</span></div>
+  <div class="r"><span>HEALTH</span><span class="v" id="r-ok">—</span></div>
+</div>
+
+<a class="switch" href="/hud/a">◂ SWITCH → PROTO A</a>
+
+<script>
+const AGENT_COLORS={friday:'#00ffcc',athena:'#b48eff',ultron:'#ff4c4c',veronica:'#4ca6ff',
+  vision:'#ffb347',edith:'#1adfb2',echo:'#ff8ad6',personal:'#4cff8a',system:'#9ad0ff',
+  file:'#a0a0a0',scheduler:'#ffd24c',self_improvement:'#7CFFB2',terminator:'#ff6b3d',
+  n8n:'#d36cff',routines:'#6cffe0'};
+
+/* ── arc-reactor rings (house HUD_RINGS DNA) ── */
+const cv=document.getElementById('arc'),x=cv.getContext('2d');
+const CX=cv.width/2,CY=cv.height/2;
+let CORE={r:0,g:212,b:255};
+// radius, lineWidth, speed, dir, ticks, arcs, gap, alpha
+const RINGS=[
+  {r:296,lw:0.6,sp:0.003,d: 1,tk:0, ar:1, gp:0.0, a:0.16},
+  {r:272,lw:1.0,sp:0.005,d:-1,tk:90,ar:1, gp:0.0, a:0.28},
+  {r:244,lw:2.4,sp:0.010,d: 1,tk:0, ar:12,gp:0.16,a:0.95},
+  {r:214,lw:1.2,sp:0.020,d:-1,tk:48,ar:6, gp:0.12,a:0.65},
+  {r:184,lw:2.0,sp:0.034,d: 1,tk:0, ar:4, gp:0.22,a:0.6},
+  {r:156,lw:0.8,sp:0.055,d:-1,tk:30,ar:3, gp:0.15,a:0.42},
+  {r:128,lw:3.0,sp:0.014,d: 1,tk:0, ar:8, gp:0.10,a:0.85},
+];
+const rots=RINGS.map(()=>Math.random()*7);
+function col(a){return `rgba(${CORE.r},${CORE.g},${CORE.b},${a})`;}
+function drawRing(R,rot){
+  x.save();x.translate(CX,CY);x.rotate(rot);
+  x.lineWidth=R.lw;x.strokeStyle=col(R.a);
+  x.shadowBlur=10;x.shadowColor=col(R.a*0.8);
+  if(R.tk){for(let i=0;i<R.tk;i++){const a=(i/R.tk)*7;const x0=Math.cos(a)*(R.r-3),y0=Math.sin(a)*(R.r-3);
+    const x1=Math.cos(a)*(R.r+3),y1=Math.sin(a)*(R.r+3);
+    x.beginPath();x.moveTo(x0,y0);x.lineTo(x1,y1);x.stroke();}}
+  else if(R.ar>1){const seg=(Math.PI*2)/R.ar;const gap=seg*R.gp;
+    for(let i=0;i<R.ar;i++){const a0=i*seg+gap/2,a1=(i+1)*seg-gap/2;
+      x.beginPath();x.arc(0,0,R.r,a0,a1);x.stroke();}}
+  else{x.beginPath();x.arc(0,0,R.r,0,7);x.stroke();}
+  x.restore();
+}
+function drawCore(){
+  // inner glow disk
+  const g=x.createRadialGradient(CX,CY,4,CX,CY,108);
+  g.addColorStop(0,col(0.5));g.addColorStop(0.4,col(0.12));g.addColorStop(1,'transparent');
+  x.fillStyle=g;x.beginPath();x.arc(CX,CY,108,0,7);x.fill();
+  // triangle reactor
+  x.strokeStyle=col(0.9);x.lineWidth=2;x.shadowBlur=16;x.shadowColor=col(0.9);
+  x.beginPath();for(let i=0;i<3;i++){const a=-Math.PI/2+i*(2*Math.PI/3)+rots[2];
+    const px=CX+Math.cos(a)*54,py=CY+Math.sin(a)*54;i?x.lineTo(px,py):x.moveTo(px,py);}
+  x.closePath();x.stroke();
+}
+function frame(){
+  x.clearRect(0,0,cv.width,cv.height);
+  drawCore();
+  RINGS.forEach((R,i)=>{rots[i]+=R.sp*R.d;drawRing(R,rots[i]);});
+  x.shadowBlur=0;
+  requestAnimationFrame(frame);
+}
+frame();
+
+/* ── clock ── */
+function tick(){document.getElementById('time').textContent=new Date().toLocaleTimeString('en-GB');}
+setInterval(tick,1000);tick();
+
+/* ── live data ── */
+async function poll(){
+  try{
+    const st=await (await fetch('/status')).json();
+    const ag=(st.last_agent||'friday').toLowerCase();
+    const c=AGENT_COLORS[ag]||'#00d4ff';
+    const m=c.match(/\w\w/g).map(h=>parseInt(h,16));CORE={r:m[0],g:m[1],b:m[2]};
+    const A=document.getElementById('agent');A.textContent=ag.toUpperCase();A.style.color=c;
+    document.getElementById('r-agent').textContent=ag.toUpperCase();
+    document.getElementById('r-tasks').textContent=st.tasks_pending||0;
+    document.getElementById('r-rem').textContent=st.reminders_pending||0;
+    document.getElementById('r-evt').textContent=st.events_today||0;
+    document.getElementById('state').textContent=st.ollama_online?'● ONLINE · LISTENING':'○ OLLAMA OFFLINE';
+  }catch(e){document.getElementById('state').textContent='○ DISCONNECTED';}
+
+  try{
+    const h=await (await fetch('/health')).json();
+    const set=(id,t,cls)=>{const e=document.getElementById(id);e.textContent=t;e.className='v '+(cls||'');};
+    set('r-ollama',h.ollama.up?'ONLINE':'OFFLINE',h.ollama.up?'ok':'bad');
+    set('r-model',h.ollama.model,h.ollama.model_loaded?'ok':'warn');
+    set('r-stt',h.whisper.loaded?h.whisper.model.toUpperCase():'COLD',h.whisper.loaded?'ok':'warn');
+    set('r-tts',(h.tts.backend||'—').toUpperCase(),h.tts.kokoro_worker_alive?'ok':'warn');
+    set('r-sched',h.scheduler.running?'RUNNING':'IDLE',h.scheduler.running?'ok':'warn');
+    set('r-browser',h.browser.enabled?'ON':'OFF',h.browser.enabled?'ok':'');
+    if(h.disk){set('r-disk',(h.disk.free_gb||'?')+' GB');set('r-used',(h.disk.pct_used||'?')+'%',h.disk.pct_used>90?'bad':'');}
+    set('r-ok',h.ok?'NOMINAL':'DEGRADED',h.ok?'ok':'warn');
+  }catch(e){}
+}
+poll();setInterval(poll,5000);
+</script>
+</body>
+</html>

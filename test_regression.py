@@ -995,6 +995,42 @@ def _bb_report_formatter():
 run_test("Ultron: bug-bounty nuclei parser",   _bb_nuclei_parser)
 run_test("Ultron: bug-bounty report formatter", _bb_report_formatter)
 
+# Phase 36 — HackingTool wrapper gates (offline; no backend needed)
+from agents.ultron.hackingtool import ht_wrapper as _htw
+
+def _ht_blocks_offensive():
+    r = _htw.ht_run("post_exploitation.Havoc")
+    return True if r.get("status") == "refused" else f"offensive tool not refused: {r.get('status')}"
+
+def _ht_gates_extended():
+    r = _htw.ht_run("web_attack.Ffuf", "x")
+    if r.get("status") != "refused":
+        return f"extended tool not gated: {r.get('status')}"
+    r2 = _htw.ht_run("web_attack.Ffuf", "x", allow_extended=True)
+    return True if r2.get("status") != "refused" else "allow_extended did not unlock"
+
+def _ht_blocks_injection():
+    r = _htw.ht_run("information_gathering.Amass", "a.com; rm -rf /")
+    return True if r.get("status") == "refused" and "metacharacter" in r.get("message", "") else f"injection not refused: {r}"
+
+def _ht_canonicalizes_lowercase():
+    # router lowercases ids; wrapper must resolve to canonical allowlisted id (not 'refused')
+    r = _htw.ht_run("information_gathering.amass", "example.com")
+    return True if r.get("status") != "refused" else "lowercase id wrongly refused"
+
+def _ht_search_flags_tier():
+    res = _htw.ht_search("havoc")
+    hits = [x for x in res["results"] if x["id"] == "post_exploitation.Havoc"]
+    if not hits:
+        return "Havoc not found in index"
+    return True if hits[0]["tier"] == "blocked" and not hits[0]["runnable"] else "Havoc should be blocked/non-runnable"
+
+run_test("Ultron HT: blocks offensive tool",   _ht_blocks_offensive)
+run_test("Ultron HT: gates extended tier",     _ht_gates_extended)
+run_test("Ultron HT: blocks arg injection",    _ht_blocks_injection)
+run_test("Ultron HT: canonicalizes lowercase id", _ht_canonicalizes_lowercase)
+run_test("Ultron HT: search flags blocked tier", _ht_search_flags_tier)
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # 24. FILE AGENT — MarkItDown + apply_patch + SSRF (Phase 31, 40b, 40d)
@@ -1066,6 +1102,12 @@ run_test("Router: 'is google.com malicious' → vt_scan",_route("is google.com m
 run_test("Router: 'find exploits for CVE-2021-44228'", _route("find exploits for cve-2021-44228", "ultron", "find_exploits"))
 run_test("Router: 'bug bounty example.com' → bug_bounty", _route("bug bounty example.com", "ultron", "bug_bounty"))
 run_test("Router: 'hunt example.com' → bug_bounty",       _route("hunt example.com", "ultron", "bug_bounty"))
+
+# Phase 36 — HackingTool fleet
+run_test("Router: 'ht search subdomain' → ht_search",     _route("ht search subdomain", "ultron", "ht_search"))
+run_test("Router: 'search hacking tools holehe' → ht_search", _route("search hacking tools holehe", "ultron", "ht_search"))
+run_test("Router: 'hackingtool preflight' → ht_preflight", _route("hackingtool preflight", "ultron", "ht_preflight"))
+run_test("Router: 'ht run X on Y' → ht_run",              _route("ht run information_gathering.amass on example.com", "ultron", "ht_run"))
 
 # DNS gating vs web search
 run_test("Router: 'look up google.com' → dns",         _route("look up google.com", "ultron", "dns_lookup"))
@@ -1330,6 +1372,132 @@ def _new_config_keys():
 run_test("Logger: API present",          _logger_imports)
 run_test("Think: empty input safe",      _think_safe_empty)
 run_test("Config: new API keys present", _new_config_keys)
+
+# Phase 56 — AutoTune + Phase 52 #3 per-agent model routing
+from core import autotune as _at
+
+def _at_classifies_code():
+    ctx, conf, _ = _at.classify("write a python function to parse json")
+    return True if ctx == "code" else f"expected code, got {ctx}"
+
+def _at_classifies_creative():
+    ctx, _, _ = _at.classify("brainstorm wild story ideas about a dragon")
+    return True if ctx == "creative" else f"expected creative, got {ctx}"
+
+def _at_code_temp_lower_than_creative():
+    code = _at.tune("debug this function error")["temperature"]
+    creative = _at.tune("write me a poem about the sea")["temperature"]
+    return True if code < creative else f"code temp {code} !< creative {creative}"
+
+def _at_params_are_ollama_keys():
+    p = _at.tune("hello there")
+    need = {"temperature", "top_p", "top_k", "repeat_penalty"}
+    return True if need <= set(p) else f"missing Ollama option keys: {need - set(p)}"
+
+def _at_clamps_bounds():
+    p = _at.tune("chaos!!!! glitch corrupt void entropy madness")
+    ok = 0.0 <= p["temperature"] <= 2.0 and 1 <= p["top_k"] <= 100
+    return True if ok else f"params out of bounds: {p}"
+
+def _at_feedback_ema():
+    import os as _os
+    f = "data/autotune_feedback.json"
+    existed = _os.path.exists(f)
+    _at.tune("write code to sort an array")
+    r = _at.record_feedback(1)
+    ok = r.get("ok") and r.get("context") == "code"
+    if not existed:
+        try: _os.remove(f)
+        except Exception: pass
+    return True if ok else f"feedback not recorded: {r}"
+
+def _at_default_routes_through_options():
+    # ask_llm must accept agent/autotune_on/params kwargs (single edit point)
+    import inspect, core.llm as _L
+    sig = inspect.signature(_L.ask_llm).parameters
+    return True if {"agent", "autotune_on", "params"} <= set(sig) else "ask_llm missing new kwargs"
+
+def _model_routing_resolves():
+    from config import model_for, OLLAMA_MODEL
+    # unmapped agent → default; mechanism present for per-agent override
+    return True if model_for("nonexistent") == OLLAMA_MODEL and model_for(None) == OLLAMA_MODEL \
+        else "model_for fallback broken"
+
+run_test("AutoTune: classifies code prompt",        _at_classifies_code)
+run_test("AutoTune: classifies creative prompt",    _at_classifies_creative)
+run_test("AutoTune: code temp < creative temp",     _at_code_temp_lower_than_creative)
+run_test("AutoTune: emits Ollama option keys",      _at_params_are_ollama_keys)
+run_test("AutoTune: clamps params to bounds",       _at_clamps_bounds)
+run_test("AutoTune: EMA feedback records",          _at_feedback_ema)
+run_test("AutoTune: ask_llm exposes tune kwargs",   _at_default_routes_through_options)
+run_test("ModelRouting: model_for falls back",      _model_routing_resolves)
+
+# Phase 52 #1 — shared API throttle
+from core import throttle as _thr
+
+def _throttle_spaces_calls():
+    _thr.reset("football")
+    import time as _t
+    t0=_t.monotonic(); _thr.throttle("football")          # first = no wait
+    first=_t.monotonic()-t0
+    t0=_t.monotonic(); _thr.throttle("football")          # second = spaced
+    second=_t.monotonic()-t0
+    _thr.reset("football")
+    if first > 0.5:
+        return f"first call should not wait, waited {first:.1f}s"
+    return True if second >= 5.0 else f"second call not throttled ({second:.1f}s)"
+
+def _throttle_key_relaxes_interval():
+    # nvd interval should be smaller when a key is present
+    import config
+    saved = config.NVD_API_KEY
+    try:
+        config.NVD_API_KEY = ""
+        no_key = _thr._interval("nvd")
+        config.NVD_API_KEY = "x"
+        with_key = _thr._interval("nvd")
+        return True if with_key < no_key else f"key didn't relax interval ({with_key} vs {no_key})"
+    finally:
+        config.NVD_API_KEY = saved
+
+def _throttle_unknown_api_default():
+    return True if _thr._interval("nonexistent_api") == _thr._DEFAULT_INTERVAL else "unknown api should use default interval"
+
+run_test("Throttle: spaces repeat calls",        _throttle_spaces_calls)
+run_test("Throttle: key relaxes interval",       _throttle_key_relaxes_interval)
+run_test("Throttle: unknown api uses default",   _throttle_unknown_api_default)
+
+# Phase 52 #4 — startup config validator
+from core import config_validator as _cv
+
+def _validator_returns_report():
+    r = _cv.validate(print_summary=False)
+    keys = {"ok", "errors", "warnings", "info"}
+    if not keys <= set(r):
+        return f"report missing keys: {keys - set(r)}"
+    return True if isinstance(r["errors"], list) and isinstance(r["ok"], bool) else "bad report types"
+
+def _validator_never_raises():
+    try:
+        _cv.validate(print_summary=False)
+        return True
+    except Exception as e:
+        return f"validator raised: {e}"
+
+def _validator_flags_missing_key():
+    import config
+    saved = config.VIRUSTOTAL_API_KEY
+    try:
+        config.VIRUSTOTAL_API_KEY = ""
+        r = _cv.validate(print_summary=False)
+        hit = any("VIRUSTOTAL_API_KEY" in i for i in r["info"])
+        return True if hit else "missing VT key not surfaced in info"
+    finally:
+        config.VIRUSTOTAL_API_KEY = saved
+
+run_test("Validator: returns structured report",  _validator_returns_report)
+run_test("Validator: never raises",               _validator_never_raises)
+run_test("Validator: flags missing optional key", _validator_flags_missing_key)
 
 
 # ══════════════════════════════════════════════════════════════════════════════

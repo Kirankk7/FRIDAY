@@ -528,40 +528,8 @@ body::after {
     50%    {opacity:0.9; transform:scale(1.04)}
 }
 
-/* ORB CORE */
-#orb-core {
-    position: absolute;
-    width: 112px; height: 112px;
-    border-radius: 50%;
-    background: radial-gradient(circle at 32% 28%,
-        rgba(80,200,255,0.9),
-        rgba(0,100,220,0.75) 55%,
-        rgba(0,30,90,0.8) 100%
-    );
-    box-shadow:
-        0 0 0 2px rgba(0,180,255,0.25),
-        0 0 28px rgba(0,180,255,0.55),
-        0 0 60px rgba(0,120,255,0.25),
-        inset -18px -18px 36px rgba(0,0,0,0.5),
-        inset 14px 14px 28px rgba(100,220,255,0.2);
-    animation: orb-idle 2.2s ease-in-out infinite;
-    z-index: 12;
-}
-@keyframes orb-idle { 0%,100%{transform:scale(1)} 50%{transform:scale(1.04)} }
-
-#orb-pulse {
-    position: absolute;
-    width: 72px; height: 72px;
-    border-radius: 50%;
-    top: 50%; left: 50%;
-    transform: translate(-50%, -50%);
-    background: radial-gradient(circle, rgba(100,220,255,0.45), transparent 70%);
-    animation: pulse-inner 2.2s ease-in-out infinite;
-}
-@keyframes pulse-inner {
-    0%,100%{transform:translate(-50%,-50%) scale(0.8); opacity:0.3}
-    50%    {transform:translate(-50%,-50%) scale(1.15); opacity:0.6}
-}
+/* ORB CORE — solid planet ball retired; arc-reactor core now drawn on #hud-ring canvas */
+#orb-core, #orb-pulse { display: none; }
 
 /* canvas rings */
 #hud-ring {
@@ -972,3 +940,56 @@ body::after {
 @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
+
+/* ═══════════ PHASE 45 — MODE TABS + MODE VIEWS + LIVE PANELS ═══════════ */
+#mode-tabs { display:flex; gap:5px; }
+.mode-tab {
+    font-family: 'Share Tech Mono', monospace; font-size: 9px; letter-spacing: 2px;
+    color: var(--j-mute); background: transparent; border: 1px solid var(--j-border);
+    padding: 5px 11px; border-radius: 14px; cursor: pointer; transition: all .2s;
+}
+.mode-tab:hover { color: var(--j-text2); border-color: var(--j-border-hi); }
+.mode-tab.on {
+    color: var(--j-a); border-color: var(--j-a);
+    background: var(--j-a-dim); box-shadow: 0 0 12px rgba(0,200,255,.25);
+}
+
+/* live value on system rows */
+.mval { margin-left: auto; font-size: 8px; letter-spacing: 1px; color: var(--j-mute); }
+
+/* agent fleet — 15 chips, live glow */
+.agent-chip .ac-dot {
+    display:inline-block; width:7px; height:7px; border-radius:50%;
+    background: currentColor; box-shadow: 0 0 6px currentColor; margin-right:6px;
+}
+.agent-chip.live { border-color: var(--j-a); background: var(--j-a-dim); box-shadow: 0 0 10px rgba(0,200,255,.3); }
+
+/* ── MODE VIEWS (Operations / Cyber) ── */
+#mode-view {
+    flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center;
+    overflow: auto;
+    background: radial-gradient(900px 600px at 50% 45%, rgba(0,30,60,.35), var(--j-bg));
+}
+#mode-view[hidden] { display: none; }
+.mview[hidden] { display: none; }
+.mv-grid {
+    display: grid; grid-template-columns: repeat(3, 220px); gap: 16px;
+    grid-auto-rows: 150px; padding: 20px;
+}
+.mv-card {
+    border: 1px solid var(--j-border); background: var(--j-panel); border-radius: 10px;
+    padding: 16px; position: relative; box-shadow: var(--j-glow2);
+    display: flex; flex-direction: column;
+}
+.mv-card::before {
+    content:''; position:absolute; top:-1px; left:14px; right:14px; height:1px;
+    background: linear-gradient(90deg, transparent, var(--j-a), transparent); opacity:.5;
+}
+.mv-card.wide { grid-column: span 3; grid-row: span 1; }
+.mv-t { font-size: 10px; letter-spacing: 2px; color: var(--j-a); margin-bottom: 10px; }
+.mv-big { font-size: 40px; font-family:'Orbitron',sans-serif; color: var(--j-text2);
+    text-shadow: 0 0 16px rgba(0,200,255,.4); line-height: 1; }
+.mv-sub { font-size: 9px; letter-spacing: 1px; color: var(--j-mute); margin-top: auto; }
+.mv-line { display:flex; justify-content:space-between; font-size: 11px; padding: 7px 0;
+    border-bottom: 1px dashed rgba(0,200,255,.1); color: var(--j-text); }
+.mv-line .ok { color: var(--j-green); }

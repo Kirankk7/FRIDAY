@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JARVIS // COMMAND — Proto A</title>
+<style>
+  :root{
+    --bg:#03070d; --panel:rgba(10,22,34,.55); --line:rgba(0,212,255,.18);
+    --cyan:#00d4ff; --cyan-dim:#0a6b85; --amber:#ff9600; --green:#00ff88;
+    --red:#ff4c4c; --txt:#bfe9f5; --txt-dim:#5b7c8a; --mono:'JetBrains Mono','Consolas',monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;background:var(--bg);color:var(--txt);font-family:var(--mono);overflow:hidden}
+  body{
+    background:
+      radial-gradient(1200px 700px at 50% 42%, rgba(0,80,120,.12), transparent 70%),
+      repeating-linear-gradient(0deg, transparent 0 38px, rgba(0,212,255,.025) 38px 39px),
+      repeating-linear-gradient(90deg, transparent 0 38px, rgba(0,212,255,.025) 38px 39px),
+      var(--bg);
+  }
+  .vignette{position:fixed;inset:0;pointer-events:none;box-shadow:inset 0 0 240px 60px rgba(0,0,0,.9)}
+
+  /* ── top bar ── */
+  .topbar{position:fixed;top:0;left:0;right:0;height:58px;display:flex;align-items:center;
+    justify-content:space-between;padding:0 26px;border-bottom:1px solid var(--line);
+    background:linear-gradient(180deg,rgba(0,20,30,.6),transparent);z-index:5}
+  .brand{display:flex;align-items:center;gap:14px;letter-spacing:4px;font-weight:700}
+  .brand b{color:var(--cyan);text-shadow:0 0 14px rgba(0,212,255,.6)}
+  .brand .sub{color:var(--txt-dim);font-size:11px;letter-spacing:3px}
+  .sysdot{width:9px;height:9px;border-radius:50%;background:var(--green);box-shadow:0 0 12px var(--green)}
+  .sysdot.off{background:var(--red);box-shadow:0 0 12px var(--red)}
+  .clock{font-size:22px;letter-spacing:3px;color:#dff6ff;text-shadow:0 0 10px rgba(0,212,255,.4)}
+  .clock small{font-size:11px;color:var(--txt-dim);letter-spacing:2px;display:block;text-align:right}
+
+  /* ── grid layout ── */
+  .stage{position:fixed;inset:58px 0 34px 0;display:grid;
+    grid-template-columns:330px 1fr 330px;gap:0;align-items:stretch}
+
+  .panel{margin:18px;border:1px solid var(--line);background:var(--panel);
+    backdrop-filter:blur(7px);border-radius:10px;padding:16px 16px 14px;
+    box-shadow:0 0 0 1px rgba(0,0,0,.4) inset, 0 14px 40px rgba(0,0,0,.5);position:relative}
+  .panel::before{content:'';position:absolute;top:-1px;left:14px;right:14px;height:1px;
+    background:linear-gradient(90deg,transparent,var(--cyan),transparent);opacity:.5}
+  .ptitle{font-size:11px;letter-spacing:3px;color:var(--cyan);margin-bottom:14px;
+    display:flex;align-items:center;gap:8px}
+  .ptitle::after{content:'';flex:1;height:1px;background:var(--line)}
+
+  /* ── system rows ── */
+  .row{display:flex;justify-content:space-between;align-items:center;padding:9px 0;
+    border-bottom:1px dashed rgba(0,212,255,.08);font-size:12px}
+  .row .k{color:var(--txt-dim);letter-spacing:1px}
+  .row .v{color:var(--txt);font-weight:600}
+  .v.ok{color:var(--green)} .v.bad{color:var(--red)} .v.warn{color:var(--amber)}
+  .pill{font-size:10px;padding:2px 8px;border-radius:20px;border:1px solid currentColor}
+
+  .gauge{height:7px;border-radius:6px;background:rgba(0,212,255,.1);overflow:hidden;margin-top:7px}
+  .gauge > i{display:block;height:100%;background:linear-gradient(90deg,var(--cyan),var(--green));
+    box-shadow:0 0 10px var(--cyan);width:0;transition:width .6s}
+
+  /* ── center core ── */
+  .core{position:relative;display:flex;align-items:center;justify-content:center}
+  #globe{filter:drop-shadow(0 0 22px rgba(0,212,255,.25))}
+  .core .state{position:absolute;bottom:26px;left:50%;transform:translateX(-50%);
+    font-size:11px;letter-spacing:5px;color:var(--cyan);text-shadow:0 0 12px rgba(0,212,255,.6)}
+  .core .agentlbl{position:absolute;top:24px;left:50%;transform:translateX(-50%);
+    font-size:13px;letter-spacing:4px;color:#dff6ff}
+
+  /* ── ops panel ── */
+  .stat3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin:6px 0 16px}
+  .stat{border:1px solid var(--line);border-radius:8px;padding:12px 6px;text-align:center;
+    background:rgba(0,212,255,.04)}
+  .stat .n{font-size:26px;color:#dff6ff;text-shadow:0 0 12px rgba(0,212,255,.4)}
+  .stat .l{font-size:9px;letter-spacing:2px;color:var(--txt-dim);margin-top:4px}
+  .fleet{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+  .agent{display:flex;align-items:center;gap:8px;font-size:11px;padding:6px 8px;border-radius:6px;
+    border:1px solid rgba(255,255,255,.05);background:rgba(255,255,255,.015)}
+  .agent .dot{width:8px;height:8px;border-radius:50%;box-shadow:0 0 8px currentColor;flex:none}
+  .agent.live{border-color:var(--cyan);background:rgba(0,212,255,.08)}
+
+  /* ── ticker ── */
+  .ticker{position:fixed;bottom:0;left:0;right:0;height:34px;border-top:1px solid var(--line);
+    background:linear-gradient(0deg,rgba(0,20,30,.7),transparent);overflow:hidden;
+    display:flex;align-items:center;z-index:5}
+  .ticker .scroll{white-space:nowrap;font-size:11px;letter-spacing:2px;color:var(--txt-dim);
+    animation:slide 38s linear infinite;padding-left:100%}
+  .ticker .scroll b{color:var(--cyan)}
+  @keyframes slide{to{transform:translateX(-100%)}}
+  .switch{position:fixed;bottom:42px;right:18px;font-size:10px;letter-spacing:2px;color:var(--txt-dim);
+    border:1px solid var(--line);padding:6px 12px;border-radius:20px;text-decoration:none;z-index:6;
+    background:rgba(0,20,30,.6)}
+  .switch:hover{color:var(--cyan);border-color:var(--cyan)}
+</style>
+</head>
+<body>
+<div class="vignette"></div>
+
+<div class="topbar">
+  <div class="brand"><span class="sysdot" id="sysdot"></span>
+    <span><b>J.A.R.V.I.S</b> &nbsp;<span class="sub">// COMMAND CENTER</span></span>
+  </div>
+  <div class="clock"><span id="clock">--:--:--</span><small id="datestr">PROTO A · GLOBE</small></div>
+</div>
+
+<div class="stage">
+  <!-- LEFT — SYSTEMS -->
+  <div class="panel">
+    <div class="ptitle">SYSTEMS</div>
+    <div class="row"><span class="k">OLLAMA</span><span class="v" id="s-ollama">—</span></div>
+    <div class="row"><span class="k">MODEL</span><span class="v" id="s-model">—</span></div>
+    <div class="row"><span class="k">WHISPER STT</span><span class="v" id="s-whisper">—</span></div>
+    <div class="row"><span class="k">TTS</span><span class="v" id="s-tts">—</span></div>
+    <div class="row"><span class="k">BROWSER</span><span class="v" id="s-browser">—</span></div>
+    <div class="row"><span class="k">SCHEDULER</span><span class="v" id="s-sched">—</span></div>
+    <div class="row" style="border:none"><span class="k">DISK</span><span class="v" id="s-disk">—</span></div>
+    <div class="gauge"><i id="s-diskbar"></i></div>
+  </div>
+
+  <!-- CENTER — GLOBE CORE -->
+  <div class="core">
+    <div class="agentlbl" id="c-agent">FRIDAY</div>
+    <canvas id="globe" width="460" height="460"></canvas>
+    <div class="state" id="c-state">● SYSTEMS NOMINAL</div>
+  </div>
+
+  <!-- RIGHT — OPERATIONS -->
+  <div class="panel">
+    <div class="ptitle">OPERATIONS</div>
+    <div class="stat3">
+      <div class="stat"><div class="n" id="o-tasks">0</div><div class="l">TASKS</div></div>
+      <div class="stat"><div class="n" id="o-rem">0</div><div class="l">REMIND</div></div>
+      <div class="stat"><div class="n" id="o-evt">0</div><div class="l">EVENTS</div></div>
+    </div>
+    <div class="ptitle">AGENT FLEET · 15</div>
+    <div class="fleet" id="fleet"></div>
+  </div>
+</div>
+
+<div class="ticker"><div class="scroll" id="ticker">INITIALIZING…</div></div>
+<a class="switch" href="/hud/b">SWITCH → PROTO B ▸</a>
+
+<script>
+const AGENT_COLORS={friday:'#00ffcc',athena:'#b48eff',ultron:'#ff4c4c',veronica:'#4ca6ff',
+  vision:'#ffb347',edith:'#1adfb2',echo:'#ff8ad6',personal:'#4cff8a',system:'#9ad0ff',
+  file:'#a0a0a0',scheduler:'#ffd24c',self_improvement:'#7CFFB2',terminator:'#ff6b3d',
+  n8n:'#d36cff',routines:'#6cffe0'};
+const FLEET=Object.keys(AGENT_COLORS);
+
+/* ── clock ── */
+function tick(){const d=new Date();
+  document.getElementById('clock').textContent=d.toLocaleTimeString('en-GB');}
+setInterval(tick,1000);tick();
+
+/* ── fleet build ── */
+const fleetEl=document.getElementById('fleet');
+FLEET.forEach(a=>{const c=AGENT_COLORS[a];
+  fleetEl.insertAdjacentHTML('beforeend',
+    `<div class="agent" data-a="${a}"><span class="dot" style="color:${c}"></span>${a.toUpperCase()}</div>`);});
+
+/* ── wireframe globe ── */
+const cv=document.getElementById('globe'),x=cv.getContext('2d');
+const CX=cv.width/2,CY=cv.height/2,R=150;
+let rot=0,tiltA=0;
+let CORE={r:0,g:212,b:255}; // cyan default
+function project(lat,lon){
+  const la=lat*Math.PI/180, lo=lon*Math.PI/180+rot;
+  let X=Math.cos(la)*Math.sin(lo), Y=Math.sin(la), Z=Math.cos(la)*Math.cos(lo);
+  // tilt
+  const t=0.42; const Y2=Y*Math.cos(t)-Z*Math.sin(t), Z2=Y*Math.sin(t)+Z*Math.cos(t);
+  return {x:CX+X*R, y:CY+Y2*R, z:Z2};
+}
+function col(a){return `rgba(${CORE.r},${CORE.g},${CORE.b},${a})`;}
+function drawGlobe(){
+  x.clearRect(0,0,cv.width,cv.height);
+  // outer halo
+  const g=x.createRadialGradient(CX,CY,R*0.6,CX,CY,R*1.25);
+  g.addColorStop(0,col(0.05));g.addColorStop(1,'transparent');
+  x.fillStyle=g;x.beginPath();x.arc(CX,CY,R*1.25,0,7);x.fill();
+  // latitude lines
+  for(let lat=-60;lat<=60;lat+=30){
+    x.beginPath();let first=true;
+    for(let lon=0;lon<=360;lon+=6){const p=project(lat,lon);
+      const a=(p.z+1)/2;x.strokeStyle=col(0.12+a*0.5);x.lineWidth=p.z>0?1.1:0.5;
+      if(first){x.moveTo(p.x,p.y);first=false}else x.lineTo(p.x,p.y);}
+    x.stroke();
+  }
+  // longitude lines
+  for(let lon=0;lon<360;lon+=30){
+    x.beginPath();let first=true;
+    for(let lat=-90;lat<=90;lat+=6){const p=project(lat,lon);
+      const a=(p.z+1)/2;x.strokeStyle=col(0.1+a*0.45);x.lineWidth=p.z>0?1.0:0.4;
+      if(first){x.moveTo(p.x,p.y);first=false}else x.lineTo(p.x,p.y);}
+    x.stroke();
+  }
+  // node dots on front
+  for(let i=0;i<40;i++){
+    const lat=(i*47%160)-80, lon=(i*97)%360;const p=project(lat,lon);
+    if(p.z>0.1){x.fillStyle=col(0.3+p.z*0.5);x.beginPath();x.arc(p.x,p.y,1.4,0,7);x.fill();}
+  }
+  // arc-reactor rings around globe
+  for(let k=0;k<3;k++){const rr=R*(1.06+k*0.07),sp=rot*(1+k*0.6)*(k%2?-1:1);
+    x.strokeStyle=col(0.25-k*0.05);x.lineWidth=1;
+    for(let s=0;s<6;s++){const a0=sp+s*(Math.PI/3),a1=a0+Math.PI/4;
+      x.beginPath();x.arc(CX,CY,rr,a0,a1);x.stroke();}}
+  rot+=0.0045;
+  requestAnimationFrame(drawGlobe);
+}
+drawGlobe();
+
+/* ── live data ── */
+function setCore(c){CORE=c;}
+async function poll(){
+  try{
+    const st=await (await fetch('/status')).json();
+    const ag=(st.last_agent||'friday').toLowerCase();
+    document.getElementById('c-agent').textContent=ag.toUpperCase();
+    const c=AGENT_COLORS[ag]||'#00d4ff';
+    document.getElementById('c-agent').style.color=c;
+    document.getElementById('o-tasks').textContent=st.tasks_pending||0;
+    document.getElementById('o-rem').textContent=st.reminders_pending||0;
+    document.getElementById('o-evt').textContent=st.events_today||0;
+    document.querySelectorAll('.agent').forEach(e=>e.classList.toggle('live',e.dataset.a===ag));
+    // tint globe to agent colour
+    const m=c.match(/\w\w/g).map(h=>parseInt(h,16));setCore({r:m[0],g:m[1],b:m[2]});
+    document.getElementById('sysdot').classList.toggle('off',!st.ollama_online);
+  }catch(e){document.getElementById('sysdot').classList.add('off');}
+
+  try{
+    const h=await (await fetch('/health')).json();
+    const set=(id,txt,cls)=>{const e=document.getElementById(id);e.textContent=txt;e.className='v '+(cls||'');};
+    set('s-ollama',h.ollama.up?'ONLINE':'OFFLINE',h.ollama.up?'ok':'bad');
+    set('s-model',(h.ollama.model||'—'),h.ollama.model_loaded?'ok':'warn');
+    set('s-whisper',h.whisper.loaded?'LOADED':'COLD',h.whisper.loaded?'ok':'warn');
+    set('s-tts',(h.tts.backend||'—').toUpperCase()+(h.tts.kokoro_worker_alive?' ✓':''),h.tts.kokoro_worker_alive?'ok':'warn');
+    set('s-browser',h.browser.enabled?'ENABLED':'OFF',h.browser.enabled?'ok':'');
+    set('s-sched',h.scheduler.running?'RUNNING':'IDLE',h.scheduler.running?'ok':'warn');
+    if(h.disk&&h.disk.free_gb!=null){
+      set('s-disk',h.disk.free_gb+'GB FREE',h.disk.pct_used>90?'bad':'');
+      document.getElementById('s-diskbar').style.width=(100-h.disk.pct_used)+'%';}
+    document.getElementById('c-state').textContent=h.ok?'● ALL SYSTEMS NOMINAL':'● DEGRADED — CHECK SYSTEMS';
+    document.getElementById('c-state').style.color=h.ok?'var(--cyan)':'var(--amber)';
+    document.getElementById('ticker').innerHTML=
+      `<b>OLLAMA</b> ${h.ollama.model} · <b>STT</b> ${h.whisper.model} · <b>TTS</b> ${h.tts.backend} · `+
+      `<b>DISK</b> ${h.disk.free_gb||'?'}GB free · <b>SCHED</b> ${h.scheduler.running?'up':'idle'} · `+
+      `JARVIS LOCAL AI · 15 AGENTS · AUTOTUNE ON · HACKINGTOOL FLEET ARMED · `.repeat(2);
+  }catch(e){}
+}
+poll();setInterval(poll,5000);
+</script>
+</body>
+</html>

@@ -2,7 +2,25 @@ import requests
 import json
 import time
 import threading
-from config import OLLAMA_HOST, OLLAMA_MODEL
+from config import OLLAMA_HOST, OLLAMA_MODEL, AUTOTUNE_ENABLED, model_for
+from core import autotune
+
+
+def _resolve_options(prompt, agent, autotune_on, params, base):
+    """
+    Build the Ollama `options` dict. Precedence: explicit params > AutoTune > base.
+    NOTE: Ollama reads sampling params from `options`, not top-level payload keys —
+    the old top-level temperature/top_p were silently ignored.
+    """
+    opts = dict(base)
+    if autotune_on and AUTOTUNE_ENABLED and params is None:
+        try:
+            opts.update(autotune.tune(prompt))
+        except Exception as e:
+            print(f"[llm] autotune skipped: {e}")
+    if params:
+        opts.update(params)
+    return opts
 
 # ─── Circuit breaker (Phase 51 #3) ────────────────────────────────────────────
 # After N consecutive connection/timeout failures, trip the breaker and fail fast
@@ -38,20 +56,23 @@ def _cb_record_failure():
                   f"failing fast for {_CB_COOLDOWN}s")
 
 
-def ask_llm_stream(prompt: str):
+def ask_llm_stream(prompt: str, agent: str = None, autotune_on: bool = True,
+                   params: dict = None):
     """Generator — yields tokens from Ollama as they arrive."""
     if _cb_is_open():
         yield _CB_MSG
         return
     try:
         url = f"{OLLAMA_HOST}/api/generate"
+        options = _resolve_options(
+            prompt, agent, autotune_on, params,
+            {"temperature": 0.7, "top_p": 0.9, "num_predict": 500},
+        )
         payload = {
-            "model": OLLAMA_MODEL,
+            "model": model_for(agent),
             "prompt": prompt,
             "stream": True,
-            "temperature": 0.7,
-            "top_p": 0.9,
-            "num_predict": 500,
+            "options": options,
         }
         with requests.post(url, json=payload, stream=True, timeout=120) as response:
             for line in response.iter_lines():
@@ -83,9 +104,8 @@ def ask_llm_fast(prompt: str, max_tokens: int = 80) -> str:
             "model": OLLAMA_MODEL,
             "prompt": prompt,
             "stream": False,
-            "temperature": 0,
-            "top_p": 1.0,
-            "num_predict": max_tokens,
+            # Routing must be deterministic — fixed temp 0, no AutoTune.
+            "options": {"temperature": 0, "top_p": 1.0, "num_predict": max_tokens},
         }
         response = requests.post(url, json=payload, timeout=30)
         if response.status_code == 200:
@@ -99,27 +119,30 @@ def ask_llm_fast(prompt: str, max_tokens: int = 80) -> str:
         return ""
 
 
-def ask_llm(prompt: str) -> str:
+def ask_llm(prompt: str, agent: str = None, autotune_on: bool = True,
+            params: dict = None) -> str:
     """
     Query local Ollama LLM.
-    
-    - No cloud APIs
-    - No API keys needed
-    - All inference local
-    - Configurable model in config.py
+
+    - No cloud APIs / keys — all inference local.
+    - agent: routes to a per-agent model (config.AGENT_MODELS), else default.
+    - autotune_on: pick sampling params by query context (Phase 56).
+    - params: explicit Ollama options override (skips AutoTune).
     """
     if _cb_is_open():
         return _CB_MSG
     try:
         url = f"{OLLAMA_HOST}/api/generate"
-
+        model = model_for(agent)
+        options = _resolve_options(
+            prompt, agent, autotune_on, params,
+            {"temperature": 0.7, "top_p": 0.9, "num_predict": 500},
+        )
         payload = {
-            "model": OLLAMA_MODEL,
+            "model": model,
             "prompt": prompt,
             "stream": False,
-            "temperature": 0.7,
-            "top_p": 0.9,
-            "num_predict": 500,  # Max tokens for response
+            "options": options,
         }
 
         # Longer timeout for local LLM thinking
@@ -131,7 +154,8 @@ def ask_llm(prompt: str) -> str:
 
             if answer and len(answer) > 0:
                 _cb_record_success()
-                print(f"[llm] {len(answer)} chars from {OLLAMA_MODEL}")
+                print(f"[llm] {len(answer)} chars from {model} "
+                      f"(ctx={autotune.last_context()})")
                 return answer
             else:
                 return "I'm thinking about that, boss. Give me a moment."
