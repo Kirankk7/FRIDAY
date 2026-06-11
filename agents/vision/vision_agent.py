@@ -1,0 +1,409 @@
+import re
+import requests
+import feedparser
+from urllib.parse import quote_plus
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
+
+OLLAMA_URL = "http://localhost:11434/api/generate"
+
+# Google News RSS — free, no API key, supports search queries
+_GNEWS_RSS = "https://news.google.com/rss/search?q={query}&hl=en-US&gl=US&ceid=US:en"
+
+# Fallback general feeds (keyword filter applied)
+_FEEDS = [
+    "http://feeds.bbci.co.uk/news/rss.xml",
+    "https://www.aljazeera.com/xml/rss/all.xml",
+    "https://feeds.reuters.com/reuters/topNews",
+]
+
+
+class VisionAgent:
+    """
+    Vision Agent — news search + summarize.
+    Uses free RSS feeds. No API key required.
+    """
+
+    def __init__(self):
+        self.articles = []
+
+    def call_llm(self, prompt: str, max_tokens: int = 200) -> str:
+        """Use configured OLLAMA_MODEL (qwen2.5:7b) — not hardcoded gemma:2b."""
+        try:
+            from config import OLLAMA_MODEL, OLLAMA_HOST
+            response = requests.post(
+                f"{OLLAMA_HOST}/api/generate",
+                json={
+                    "model": OLLAMA_MODEL,
+                    "prompt": prompt,
+                    "stream": False,
+                    "temperature": 0.4,
+                    "num_predict": max_tokens,
+                },
+                timeout=30,
+            )
+            return response.json().get("response", "").strip()
+        except Exception:
+            return ""
+
+    # Keep old name as alias so summarize_news() still works
+    def call_gemma(self, prompt: str) -> str:
+        return self.call_llm(prompt, max_tokens=200)
+
+    def clean_text(self, text: str) -> str:
+        text = re.sub(r"\*\*?", "", text)
+        text = re.sub(r"- ", "", text)
+        for junk in [
+            "Sure, here's a summary of the news you provided:",
+            "Sure, here's a summary:",
+            "Here's what's happening:",
+            "Here is the summary:",
+            "Alright, here's what's going on.",
+            "Let me break it down."
+        ]:
+            text = text.replace(junk, "")
+        return text.strip()
+
+    def _feedparser_safe(self, url: str, timeout_sec: int = 8):
+        """feedparser.parse with a hard timeout (runs in thread)."""
+        with ThreadPoolExecutor(max_workers=1) as ex:
+            future = ex.submit(feedparser.parse, url)
+            try:
+                return future.result(timeout=timeout_sec)
+            except (FuturesTimeout, Exception):
+                return type("Feed", (), {"entries": []})()
+
+    def _fetch_google_news_rss(self, query: str) -> list:
+        """Primary source — Google News RSS search. Returns up to 10 entries sorted by date."""
+        try:
+            url = _GNEWS_RSS.format(query=quote_plus(query))
+            feed = self._feedparser_safe(url)
+            articles = []
+            for entry in feed.entries[:10]:
+                articles.append({
+                    "title": entry.get("title", ""),
+                    "description": entry.get("summary", ""),
+                    "source": entry.get("source", {}).get("title", "Google News") if isinstance(entry.get("source"), dict) else "Google News",
+                    "published": entry.get("published", ""),
+                })
+            return articles
+        except Exception:
+            return []
+
+    def _fetch_fallback_feeds(self, query: str) -> list:
+        """Fallback — parse BBC/AJ/Reuters and filter by keyword."""
+        keywords = query.lower().split()
+        articles = []
+        for feed_url in _FEEDS:
+            try:
+                feed = self._feedparser_safe(feed_url)
+                for entry in feed.entries[:20]:
+                    title = entry.get("title", "").lower()
+                    summary = entry.get("summary", "").lower()
+                    if any(kw in title or kw in summary for kw in keywords):
+                        articles.append({
+                            "title": entry.get("title", ""),
+                            "description": entry.get("summary", ""),
+                            "source": feed.feed.get("title", feed_url),
+                        })
+                if len(articles) >= 5:
+                    break
+            except Exception:
+                continue
+        return articles[:5]
+
+    def search_news(self, query: str) -> dict:
+        if not query:
+            return {"success": False, "message": "Search query missing.", "data": {}}
+
+        self.articles = self._fetch_google_news_rss(query)
+
+        if not self.articles:
+            self.articles = self._fetch_fallback_feeds(query)
+
+        if not self.articles:
+            return {"success": False, "message": "No news found.", "data": {}}
+
+        headlines = [a.get("title", "") for a in self.articles]
+
+        return {
+            "success": True,
+            "message": f"Found {len(self.articles)} news articles.",
+            "data": {
+                "query": query,
+                "headlines": headlines,
+                "article_count": len(self.articles),
+            }
+        }
+
+    def summarize_news(self) -> dict:
+        if not self.articles:
+            return {"success": False, "message": "No articles to summarize.", "data": {}}
+
+        combined = " ".join(
+            a.get("title", "") + ". " + a.get("description", "") + ". "
+            for a in self.articles
+        )
+
+        prompt = f"""Explain this news in simple spoken English.
+STRICT: No introductions. No "Sure"/"Here's". No headings or bullets. Just explain directly.
+
+Content:
+{combined}
+
+Answer:"""
+
+        raw = self.call_gemma(prompt)
+        cleaned = self.clean_text(raw)
+
+        if not cleaned:
+            return {"success": False, "message": "Couldn't generate a summary.", "data": {}}
+
+        return {
+            "success": True,
+            "message": cleaned,
+            "data": {"article_count": len(self.articles)}
+        }
+
+    def quick_answer(self, query: str) -> dict:
+        """
+        Fast factual lookup: RSS headlines only, no LLM call.
+        Target: 1-3 seconds. Cognitive loop LLM handles spoken formatting.
+        """
+        if not query:
+            return {"success": False, "message": "Query missing.", "data": {}}
+
+        # Two parallel RSS searches for better coverage
+        import datetime
+        today_str = datetime.date.today().strftime("%B %Y")
+        # First noun (likely team/person) — used for specific matchup articles
+        _stopwords = {"when", "is", "are", "next", "the", "a", "an", "what", "will", "does", "did"}
+        _words = [w for w in query.lower().split() if w not in _stopwords]
+        subject = _words[0] if _words else query.split()[0]
+        alt_query = f"{subject} match {today_str}"
+
+        with ThreadPoolExecutor(max_workers=2) as ex:
+            f1 = ex.submit(self._fetch_google_news_rss, query)
+            f2 = ex.submit(self._fetch_google_news_rss, alt_query)
+            arts1 = f1.result()
+            arts2 = f2.result()
+
+        # Merge, deduplicate by title, keep top 10
+        seen = set()
+        articles = []
+        for a in arts1 + arts2:
+            t = a.get("title", "")[:60]
+            if t not in seen:
+                seen.add(t)
+                articles.append(a)
+        articles = articles[:10]
+
+        if not articles:
+            articles = self._fetch_fallback_feeds(query)
+
+        if not articles:
+            return {
+                "success": False,
+                "message": f"I couldn't find recent news on '{query}'.",
+                "data": {},
+            }
+
+        # Strip HTML entities and tags from all article text
+        def _clean(s: str) -> str:
+            s = re.sub(r"<[^>]+>", "", s)           # HTML tags
+            s = re.sub(r"&nbsp;", " ", s)            # &nbsp;
+            s = re.sub(r"&amp;", "&", s)
+            s = re.sub(r"&lt;", "<", s)
+            s = re.sub(r"&gt;", ">", s)
+            s = re.sub(r"&#\d+;", "", s)             # numeric entities
+            s = re.sub(r"\s+", " ", s).strip()
+            return s
+
+        import datetime
+        today = datetime.date.today().strftime("%B %d, %Y")
+
+        # Build clean headline list with publication dates
+        context_lines = []
+        for a in articles[:8]:
+            title = _clean(a.get("title", ""))
+            pub   = a.get("published", "").strip()
+            line  = f"- {title}" + (f" ({pub})" if pub else "")
+            context_lines.append(line)
+
+        # Pack as __NEWS_CONTEXT__ block — cognitive_loop passes to LLM for spoken answer
+        headline_block = "\n".join(context_lines)
+        message = (
+            f"__NEWS_CONTEXT__\nToday: {today}\nQuery: {query}\n"
+            f"Headlines:\n{headline_block}"
+        )
+
+        return {
+            "success": True,
+            "message": message,
+            "data": {"query": query, "sources": len(articles)},
+        }
+
+    def hackernews(self, n: int = 5) -> dict:
+        """
+        Phase 42 — Top N stories from Hacker News front page.
+        Scrapes news.ycombinator.com — no API key needed.
+        """
+        try:
+            import requests as _req
+            from html.parser import HTMLParser
+
+            r = _req.get("https://news.ycombinator.com/", timeout=10,
+                         headers={"User-Agent": "Mozilla/5.0"})
+            if r.status_code != 200:
+                return {"success": False, "message": f"HN fetch failed: HTTP {r.status_code}", "data": {}}
+
+            # Parse titles from HN HTML (titleline spans)
+            stories = []
+            import re as _re
+            # Match: <span class="titleline"><a href="...">TITLE</a>
+            for m in _re.finditer(r'class="titleline"[^>]*>.*?<a[^>]*href="([^"]*)"[^>]*>([^<]+)</a>', r.text):
+                url, title = m.group(1), m.group(2)
+                if title and title.strip():
+                    stories.append({"title": title.strip(), "url": url})
+                if len(stories) >= n:
+                    break
+
+            if not stories:
+                return {"success": False, "message": "Could not parse HN stories.", "data": {}}
+
+            lines = [f"{i+1}. {s['title']}" for i, s in enumerate(stories)]
+            return {
+                "success": True,
+                "message": "Top Hacker News stories: " + " | ".join(lines),
+                "data": {"stories": stories, "count": len(stories)}
+            }
+        except Exception as e:
+            return {"success": False, "message": f"HackerNews error: {e}", "data": {}}
+
+    def web_search(self, query: str, n: int = 5) -> dict:
+        """
+        Phase 32 — live web search via DuckDuckGo (ddgs). Free, no API key.
+        Returns a __NEWS_CONTEXT__ block so cognitive_loop summarizes it for speech.
+        """
+        if not query:
+            return {"success": False, "message": "Search query missing.", "data": {}}
+
+        try:
+            from ddgs import DDGS
+        except ImportError:
+            print("[vision] ddgs not installed — falling back to RSS quick_answer")
+            return self.quick_answer(query)
+
+        try:
+            results = list(DDGS().text(query, max_results=n))
+        except Exception as e:
+            print(f"[vision] ddgs error ({e}) — falling back to RSS")
+            return self.quick_answer(query)
+
+        if not results:
+            return self.quick_answer(query)
+
+        import datetime
+        today = datetime.date.today().strftime("%B %d, %Y")
+
+        def _clean(s: str) -> str:
+            s = re.sub(r"<[^>]+>", "", s or "")
+            s = re.sub(r"\s+", " ", s).strip()
+            return s
+
+        lines = []
+        for r in results[:n]:
+            title = _clean(r.get("title", ""))
+            body = _clean(r.get("body", ""))[:160]
+            line = f"- {title}" + (f": {body}" if body else "")
+            lines.append(line)
+
+        message = (
+            f"__NEWS_CONTEXT__\nToday: {today}\nQuery: {query}\n"
+            f"Web results:\n" + "\n".join(lines)
+        )
+        return {
+            "success": True,
+            "message": message,
+            "data": {"query": query, "results": len(results)},
+        }
+
+    def sports_query(self, query: str) -> dict:
+        """
+        Phase 39 — Real match data from football-data.org API.
+        Falls back to quick_answer (RSS) if no API key or team not found.
+        """
+        try:
+            from config import FOOTBALL_API_KEY
+            from agents.vision.sports_api import get_next_match, get_recent_results, get_standings
+        except ImportError:
+            return self.quick_answer(query)
+
+        if not FOOTBALL_API_KEY:
+            print("[vision] FOOTBALL_API_KEY not set — falling back to RSS")
+            return self.quick_answer(query)
+
+        # Detect intent
+        is_results = bool(re.search(
+            r"\b(?:results?|scores?|recent|latest|last\s+match)\b", query, re.IGNORECASE
+        ))
+        is_standings = bool(re.search(r"\bstandings?\b", query, re.IGNORECASE))
+
+        # Extract team/competition name — strip sports stopwords
+        _stop = {
+            "next", "match", "game", "fixture", "fixtures", "result", "results",
+            "schedule", "football", "soccer", "playing", "play", "upcoming",
+            "recent", "latest", "last", "standings", "when", "is", "are", "will",
+            "does", "the", "a", "an", "vs", "against", "score", "scores",
+            "who", "what", "their", "in"
+        }
+        words = query.lower().split()
+        # Strip possessives: "portugal's" → "portugal", "man's" → "man"
+        clean_words = [re.sub(r"'s?$", "", w) for w in words]
+        name_words = [w for w in clean_words if w and w not in _stop]
+        subject = " ".join(name_words).strip()
+
+        if not subject:
+            return self.quick_answer(query)
+
+        print(f"[vision] sports_query: subject={subject!r} results={is_results} standings={is_standings}")
+
+        if is_standings:
+            result = get_standings(subject, FOOTBALL_API_KEY)
+        elif is_results:
+            result = get_recent_results(subject, FOOTBALL_API_KEY)
+        else:
+            result = get_next_match(subject, FOOTBALL_API_KEY)
+
+        if not result["success"]:
+            print(f"[vision] sports_api miss ({result['message']}) — falling back to RSS")
+            return self.quick_answer(query)
+
+        return {
+            "success": True,
+            "message": result["message"],
+            "data": result.get("data", {})
+        }
+
+    def run(self, input_text: str, action: str = None, parameters: dict = None) -> dict:
+        try:
+            parameters = parameters or {}
+            if not action:
+                return {"success": False, "message": "No vision action specified.", "data": {}}
+            if action == "search_news":
+                return self.search_news(parameters.get("query", ""))
+            elif action == "summarize_news":
+                return self.summarize_news()
+            elif action == "quick_answer":
+                return self.quick_answer(parameters.get("query", input_text))
+            elif action == "sports_query":
+                return self.sports_query(parameters.get("query", input_text))
+            elif action == "web_search":
+                return self.web_search(parameters.get("query", input_text), parameters.get("n", 5))
+            elif action == "hackernews":
+                return self.hackernews(parameters.get("n", 5))
+            return {"success": False, "message": f"Unsupported vision action: {action}", "data": {}}
+        except Exception as e:
+            return {"success": False, "message": f"Vision agent error: {str(e)}", "data": {}}
+
+
+vision_agent = VisionAgent()

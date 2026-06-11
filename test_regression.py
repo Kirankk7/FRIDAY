@@ -1,0 +1,1463 @@
+"""
+JARVIS Regression Suite — run with: python test_regression.py
+Tests all agents, router patterns, memory, TTS, core systems, and chat pipeline.
+No Flask server required. Ollama optional (chat tests skip if offline).
+Generates: test_report_YYYY-MM-DD_HHMMSS.html in project root.
+"""
+
+import io
+import os
+import sys
+import time
+import datetime
+import traceback
+import html as _html
+
+# Force UTF-8 output on Windows
+if sys.platform == "win32":
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
+
+# Always run from project root
+os.chdir(os.path.dirname(os.path.abspath(__file__)))
+
+# ─── Color output ─────────────────────────────────────────────────────────────
+GREEN  = "\033[92m"
+RED    = "\033[91m"
+YELLOW = "\033[93m"
+CYAN   = "\033[96m"
+BOLD   = "\033[1m"
+RESET  = "\033[0m"
+
+_pass = 0
+_fail = 0
+_skip = 0
+_failures  = []
+_run_start = time.time()
+
+# Report data: list of {section, name, status, detail, duration_ms}
+_report    = []
+_cur_section = "General"
+
+def _result(name: str, status: str, detail: str = "", duration_ms: float = 0.0):
+    global _pass, _fail, _skip
+    _report.append({
+        "section":     _cur_section,
+        "name":        name,
+        "status":      status,
+        "detail":      detail,
+        "duration_ms": round(duration_ms, 1),
+    })
+    if status == "PASS":
+        _pass += 1
+        print(f"  {GREEN}✓{RESET} {name}  {CYAN}({duration_ms:.0f}ms){RESET}")
+    elif status == "FAIL":
+        _fail += 1
+        _failures.append((name, detail))
+        print(f"  {RED}✗{RESET} {name}  {CYAN}({duration_ms:.0f}ms){RESET}")
+        if detail:
+            print(f"    {RED}{detail}{RESET}")
+    elif status == "SKIP":
+        _skip += 1
+        print(f"  {YELLOW}~{RESET} {name}  {YELLOW}(skipped){RESET}")
+
+def section(title: str):
+    global _cur_section
+    _cur_section = title
+    print(f"\n{BOLD}{CYAN}{'─'*50}{RESET}")
+    print(f"{BOLD}{CYAN}  {title}{RESET}")
+    print(f"{BOLD}{CYAN}{'─'*50}{RESET}")
+
+def run_test(name: str, fn):
+    """Run fn(). PASS on True/no-exception, FAIL on False/exception, SKIP on None."""
+    t0 = time.time()
+    try:
+        result = fn()
+        ms = (time.time() - t0) * 1000
+        if result is None:
+            _result(name, "SKIP", "", ms)
+        elif result is True or result == "pass":
+            _result(name, "PASS", "", ms)
+        else:
+            _result(name, "FAIL", str(result), ms)
+    except Exception as e:
+        ms = (time.time() - t0) * 1000
+        _result(name, "FAIL", f"{type(e).__name__}: {e}", ms)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 1. IMPORTS
+# ══════════════════════════════════════════════════════════════════════════════
+section("1. Module Imports")
+
+def _import(mod):
+    def _():
+        __import__(mod)
+        return True
+    return _
+
+run_test("config",                   _import("config"))
+run_test("core.memory",              _import("core.memory"))
+run_test("core.vector_memory",       _import("core.vector_memory"))
+run_test("core.emotion_memory",      _import("core.emotion_memory"))
+run_test("core.personal_memory",     _import("core.personal_memory"))
+run_test("core.folder_memory",       _import("core.folder_memory"))
+run_test("core.runtime_flags",       _import("core.runtime_flags"))
+run_test("core.state",               _import("core.state"))
+run_test("core.personality",         _import("core.personality"))
+run_test("core.router",              _import("core.router"))
+run_test("core.llm_router",          _import("core.llm_router"))
+run_test("core.coordinator",         _import("core.coordinator"))
+run_test("core.tools_registry",      _import("core.tools_registry"))
+run_test("core.kokoro_tts",          _import("core.kokoro_tts"))
+run_test("agents.system_agent",      _import("agents.system_agent"))
+run_test("agents.friday.friday_agent",   _import("agents.friday.friday_agent"))
+run_test("agents.edith.edith_agent",     _import("agents.edith.edith_agent"))
+run_test("agents.personal.personal_agent", _import("agents.personal.personal_agent"))
+run_test("agents.echo.echo_agent",       _import("agents.echo.echo_agent"))
+run_test("agents.vision.vision_agent",   _import("agents.vision.vision_agent"))
+run_test("agents.self_improvement.self_improvement_agent",
+         _import("agents.self_improvement.self_improvement_agent"))
+run_test("core.scheduler",           _import("core.scheduler"))
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 2. CONFIG
+# ══════════════════════════════════════════════════════════════════════════════
+section("2. Config Values")
+
+import config
+
+def _cfg_has(attr, expected_type=None):
+    def _():
+        val = getattr(config, attr, None)
+        if val is None:
+            return f"config.{attr} missing"
+        if expected_type and not isinstance(val, expected_type):
+            return f"config.{attr} wrong type: {type(val).__name__}"
+        return True
+    return _
+
+run_test("OLLAMA_HOST present",    _cfg_has("OLLAMA_HOST", str))
+run_test("OLLAMA_MODEL present",   _cfg_has("OLLAMA_MODEL", str))
+run_test("WHISPER_MODEL present",  _cfg_has("WHISPER_MODEL", str))
+run_test("WHISPER_DEVICE present", _cfg_has("WHISPER_DEVICE", str))
+run_test("STT_BACKEND present",    _cfg_has("STT_BACKEND", str))
+run_test("TTS_BACKEND present",    _cfg_has("TTS_BACKEND", str))
+run_test("BROWSER_ENABLED present",_cfg_has("BROWSER_ENABLED", bool))
+
+def _tts_backend_valid():
+    val = getattr(config, "TTS_BACKEND", "")
+    return True if val in ("kokoro", "edge") else f"TTS_BACKEND invalid: {val}"
+run_test("TTS_BACKEND valid value", _tts_backend_valid)
+
+def _stt_backend_valid():
+    val = getattr(config, "STT_BACKEND", "")
+    return True if val in ("whisper", "parakeet") else f"STT_BACKEND invalid: {val}"
+run_test("STT_BACKEND valid value", _stt_backend_valid)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 3. RUNTIME FLAGS
+# ══════════════════════════════════════════════════════════════════════════════
+section("3. Runtime Flags")
+
+from core.runtime_flags import is_browser_enabled, set_browser_enabled
+
+def _flag_toggle():
+    initial = is_browser_enabled()
+    set_browser_enabled(not initial)
+    toggled = is_browser_enabled()
+    set_browser_enabled(initial)          # restore
+    restored = is_browser_enabled()
+    if toggled == (not initial) and restored == initial:
+        return True
+    return f"Toggle failed: initial={initial} toggled={toggled} restored={restored}"
+
+run_test("Browser flag toggles correctly", _flag_toggle)
+run_test("Browser flag restores to config default", lambda: is_browser_enabled() == config.BROWSER_ENABLED)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 4. VECTOR MEMORY
+# ══════════════════════════════════════════════════════════════════════════════
+section("4. Vector Memory (TF-IDF)")
+
+from core.vector_memory import add_to_vector, search_similar, _tokenize, _cosine
+
+def _tokenize_basic():
+    tokens = _tokenize("machine learning neural networks are great")
+    expected = {"machine", "learning", "neural", "networks", "great"}
+    missing = expected - set(tokens)
+    return True if not missing else f"Missing tokens: {missing}"
+
+def _tokenize_stopwords():
+    tokens = _tokenize("the cat sat on the mat")
+    stopwords_present = [t for t in tokens if t in ("the", "on")]
+    return True if not stopwords_present else f"Stopwords not filtered: {stopwords_present}"
+
+def _cosine_identical():
+    a = {"word": 0.5, "test": 0.5}
+    score = _cosine(a, a)
+    return True if abs(score - 1.0) < 1e-6 else f"Expected 1.0, got {score}"
+
+def _cosine_disjoint():
+    a = {"word": 0.5}
+    b = {"other": 0.5}
+    score = _cosine(a, b)
+    return True if score == 0.0 else f"Expected 0.0, got {score}"
+
+def _vector_add_and_search():
+    add_to_vector("JARVIS regression test neural network deep learning")
+    results = search_similar("neural network deep learning", top_k=5)
+    return True if len(results) > 0 else "search_similar returned no results after add"
+
+run_test("Tokenizer extracts content words",      _tokenize_basic)
+run_test("Tokenizer filters stopwords",           _tokenize_stopwords)
+run_test("Cosine: identical vectors → 1.0",       _cosine_identical)
+run_test("Cosine: disjoint vectors → 0.0",        _cosine_disjoint)
+run_test("Add + search returns results",          _vector_add_and_search)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 5. ROUTER PATTERNS
+# ══════════════════════════════════════════════════════════════════════════════
+section("5. Router Pattern Coverage")
+
+from core.router import route_single_intent
+
+def _route(text, tool, action=None):
+    def _():
+        r = route_single_intent(text)
+        if r.get("tool") != tool:
+            return f"Expected tool={tool}, got tool={r.get('tool')} (action={r.get('action')})"
+        if action and r.get("action") != action:
+            return f"Expected action={action}, got action={r.get('action')}"
+        return True
+    return _
+
+# Friday — tasks (use exact phrases from router tuple)
+run_test("Router: 'add task buy milk'",            _route("add task buy milk",          "friday", "add_task"))
+run_test("Router: 'show my tasks'",                _route("show my tasks",              "friday", "list_tasks"))
+run_test("Router: 'my goals'",                     _route("my goals",                   "friday", "list_goals"))
+run_test("Router: 'add note meeting went well'",   _route("add note meeting went well", "friday", "add_note"))
+run_test("Router: 'show my notes'",                _route("show my notes",              "friday", "list_notes"))
+run_test("Router: 'log weight 75kg'",              _route("log weight 75kg",            "friday", "log_health"))
+run_test("Router: 'plan my day'",                  _route("plan my day",                "friday", "plan_day"))
+
+# EDITH — memory
+run_test("Router: 'remember this'",                _route("remember this",              "edith",  "store_memory"))
+run_test("Router: 'what do you remember about X'", _route("what do you remember about jarvis", "edith", "search_memory"))
+run_test("Router: 'show memory'",                  _route("show memory",                "edith",  "recall_memory"))
+
+# Personal
+run_test("Router: 'my name is Tony'",              _route("my name is tony",            "personal", "set_fact"))
+run_test("Router: 'what do you know about me'",    _route("what do you know about me",  "personal", "get_all"))
+
+# System (browser only — cpu/ram have no regex pattern, route via LLM)
+run_test("Router: 'system info'",                  _route("system info",                "veronica", "system_info"))  # veronica handles this
+run_test("Router: 'enable browser'",               _route("enable browser",             "system", "browser_enable"))
+run_test("Router: 'disable browser'",              _route("disable browser",            "system", "browser_disable"))
+run_test("Router: 'browser status'",               _route("browser status",             "system", "browser_status"))
+
+# Echo
+run_test("Router: 'list tools'",                   _route("list tools",                 "echo",   "list_tools"))
+run_test("Router: 'create a tool that pings host'",_route("create a tool that pings a host", "echo", "generate_tool"))
+
+# Athena — must use "deep research" prefix to bypass veronica
+run_test("Router: 'deep research quantum computing'", _route("deep research quantum computing", "athena", "deep_research"))
+# "research X" routes to veronica (by design — verified)
+run_test("Router: 'research X' → veronica",           _route("research quantum computing", "veronica", "research"))
+
+# Scheduler
+run_test("Router: 'list scheduled tasks'",         _route("list scheduled tasks",       "scheduler", "list_tasks"))
+
+# Chat fallback — route_single_intent may return None (LLM handles it) or chat dict
+def _route_chat_or_none(text):
+    def _():
+        r = route_single_intent(text)
+        if r is None:
+            return True  # falls through to LLM — correct for casual chat
+        if r.get("tool") == "chat":
+            return True
+        return f"Expected chat/None, got {r.get('tool')}.{r.get('action')}"
+    return _
+
+run_test("Router: casual 'what is the meaning of life'", _route_chat_or_none("what is the meaning of life"))
+run_test("Router: casual 'tell me a joke'",              _route_chat_or_none("tell me a joke"))
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 6. BRAIN FAST PATH
+# ══════════════════════════════════════════════════════════════════════════════
+section("6. Brain Fast Path (greetings)")
+
+from core.brain import process_input, FAST_MESSAGES
+
+def _greeting(text):
+    def _():
+        t0 = time.time()
+        resp = process_input(text)
+        elapsed = time.time() - t0
+        if not resp or not resp.strip():
+            return f"Empty response for '{text}'"
+        if elapsed > 2.0:
+            return f"Too slow: {elapsed:.2f}s (expected <2s for fast path)"
+        return True
+    return _
+
+run_test("Fast path: 'hello'",         _greeting("hello"))
+run_test("Fast path: 'hey jarvis'",    _greeting("hey jarvis"))
+run_test("Fast path: 'good morning'",  _greeting("good morning"))
+run_test("Fast path: 'how are you'",   _greeting("how are you"))
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 7. SYSTEM AGENT
+# ══════════════════════════════════════════════════════════════════════════════
+section("7. System Agent")
+
+from agents.system_agent import system_agent
+
+def _sys_action(action):
+    def _():
+        r = system_agent.run(input_text="", action=action, parameters={})
+        if not isinstance(r, dict):
+            return f"Non-dict response: {type(r)}"
+        if not r.get("success"):
+            return f"success=False: {r.get('message')}"
+        return True
+    return _
+
+run_test("system_info action",       _sys_action("system_info"))
+run_test("cpu_usage action",         _sys_action("cpu_usage"))
+run_test("ram_usage action",         _sys_action("ram_usage"))
+run_test("browser_status action",    _sys_action("browser_status"))
+
+def _browser_enable_disable():
+    r1 = system_agent.run(input_text="", action="browser_enable", parameters={})
+    r2 = system_agent.run(input_text="", action="browser_disable", parameters={})
+    if not r1.get("success"):
+        return f"browser_enable failed: {r1.get('message')}"
+    if not r2.get("success"):
+        return f"browser_disable failed: {r2.get('message')}"
+    return True
+
+run_test("browser_enable + browser_disable", _browser_enable_disable)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 8. FRIDAY AGENT
+# ══════════════════════════════════════════════════════════════════════════════
+section("8. Friday Agent (Personal Assistant)")
+
+from agents.friday.friday_agent import friday_agent
+
+def _friday_task_lifecycle():
+    r = friday_agent.run(input_text="", action="add_task", parameters={"text": "_regression_test_task_"})
+    if not r.get("success"):
+        return f"add_task failed: {r.get('message')}"
+    r2 = friday_agent.run(input_text="", action="list_tasks", parameters={})
+    if not r2.get("success"):
+        return f"list_tasks failed: {r2.get('message')}"
+    if "_regression_test_task_" not in r2.get("message", ""):
+        return "Added task not visible in list"
+    r3 = friday_agent.run(input_text="", action="complete_task", parameters={"identifier": "_regression_test_task_"})
+    if not r3.get("success"):
+        return f"complete_task failed: {r3.get('message')}"
+    return True
+
+def _friday_note():
+    r = friday_agent.run(input_text="", action="add_note", parameters={"text": "_regression_note_xyz_"})
+    if not r.get("success"):
+        return f"add_note failed: {r.get('message')}"
+    r2 = friday_agent.run(input_text="", action="list_notes", parameters={})
+    if "_regression_note_xyz_" not in r2.get("message", ""):
+        return "Note not in list after add"
+    return True
+
+def _friday_goal():
+    r = friday_agent.run(input_text="", action="add_goal", parameters={"text": "_regression_goal_xyz_"})
+    if not r.get("success"):
+        return f"add_goal failed: {r.get('message')}"
+    r2 = friday_agent.run(input_text="", action="list_goals", parameters={})
+    if "_regression_goal_xyz_" not in r2.get("message", ""):
+        return "Goal not in list after add"
+    return True
+
+def _friday_health():
+    r = friday_agent.run(input_text="", action="log_health", parameters={"metric": "weight", "value": "70kg"})
+    if not r.get("success"):
+        return f"log_health failed: {r.get('message')}"
+    r2 = friday_agent.run(input_text="", action="show_health", parameters={"metric": "weight"})
+    if not r2.get("success"):
+        return f"show_health failed: {r2.get('message')}"
+    return True
+
+def _friday_habit():
+    r = friday_agent.run(input_text="", action="add_habit", parameters={"name": "_reg_habit_"})
+    if not r.get("success"):
+        return f"add_habit failed: {r.get('message')}"
+    r2 = friday_agent.run(input_text="", action="log_habit", parameters={"name": "_reg_habit_"})
+    if not r2.get("success"):
+        return f"log_habit failed: {r2.get('message')}"
+    r3 = friday_agent.run(input_text="", action="show_habits", parameters={})
+    if not r3.get("success"):
+        return f"show_habits failed"
+    return True
+
+def _friday_reminder():
+    r = friday_agent.run(input_text="", action="set_reminder", parameters={"text": "_reg_reminder_", "minutes": 999})
+    if not r.get("success"):
+        return f"set_reminder failed: {r.get('message')}"
+    r2 = friday_agent.run(input_text="", action="list_reminders", parameters={})
+    if not r2.get("success"):
+        return f"list_reminders failed"
+    return True
+
+run_test("Friday: task add → list → complete",  _friday_task_lifecycle)
+run_test("Friday: note add → list",             _friday_note)
+run_test("Friday: goal add → list",             _friday_goal)
+run_test("Friday: log_health + show_health",    _friday_health)
+run_test("Friday: add_habit + log_habit",       _friday_habit)
+run_test("Friday: set_reminder + list",         _friday_reminder)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 9. EDITH AGENT
+# ══════════════════════════════════════════════════════════════════════════════
+section("9. EDITH Agent (Project Memory)")
+
+from agents.edith.edith_agent import edith_agent
+
+def _edith_store_search():
+    content = "_regression_edith_note_unique_abc123_"
+    r = edith_agent.run(input_text="", action="store_memory", parameters={"content": content, "label": "regression"})
+    if not r.get("success"):
+        return f"store_memory failed: {r.get('message')}"
+    r2 = edith_agent.run(input_text="", action="search_memory", parameters={"query": "regression_edith_note"})
+    if not r2.get("success"):
+        return f"search_memory failed: {r2.get('message')}"
+    if content not in r2.get("message", ""):
+        return "Stored content not found in search results"
+    return True
+
+def _edith_recall_by_label():
+    r = edith_agent.run(input_text="", action="recall_memory", parameters={})
+    if not r.get("success"):
+        return f"recall_memory failed: {r.get('message')}"
+    return True
+
+def _edith_empty_content():
+    r = edith_agent.run(input_text="", action="store_memory", parameters={"content": ""})
+    return True if not r.get("success") else "Should reject empty content"
+
+run_test("EDITH: store + search",          _edith_store_search)
+run_test("EDITH: recall_memory (recent)",  _edith_recall_by_label)
+run_test("EDITH: reject empty content",   _edith_empty_content)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 10. PERSONAL AGENT
+# ══════════════════════════════════════════════════════════════════════════════
+section("10. Personal Agent (User Facts)")
+
+from agents.personal.personal_agent import personal_agent
+
+def _personal_set_get():
+    r = personal_agent.run(input_text="", action="set_fact", parameters={"key": "test_key_reg", "value": "test_value_reg"})
+    if not r.get("success"):
+        return f"set_fact failed: {r.get('message')}"
+    r2 = personal_agent.run(input_text="", action="get_all", parameters={})
+    if not r2.get("success"):
+        return f"get_all failed: {r2.get('message')}"
+    if "test_value_reg" not in r2.get("message", ""):
+        return "Set fact not visible in get_all"
+    return True
+
+run_test("Personal: set_fact + get_all", _personal_set_get)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 11. ECHO AGENT
+# ══════════════════════════════════════════════════════════════════════════════
+section("11. Echo Agent (Tool Generator)")
+
+from agents.echo.echo_agent import echo_agent
+
+def _echo_list():
+    r = echo_agent.run(action="list_tools", parameters={})
+    if not isinstance(r, dict):
+        return f"Non-dict response: {type(r)}"
+    if "success" not in r:
+        return "Missing 'success' key"
+    return True
+
+def _echo_invalid_action():
+    r = echo_agent.run(action="nonexistent_action", parameters={})
+    return True if not r.get("success") else "Should fail on unknown action"
+
+run_test("Echo: list_tools returns valid dict",    _echo_list)
+run_test("Echo: unknown action returns failure",   _echo_invalid_action)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 12. SCHEDULER
+# ══════════════════════════════════════════════════════════════════════════════
+section("12. Scheduler")
+
+from core.scheduler import scheduler
+
+def _sched_add_list_remove():
+    r = scheduler.run(input_text="", action="add_task", parameters={"raw": "check system health every morning"})
+    if not r.get("success"):
+        return f"add_task failed: {r.get('message')}"
+    r2 = scheduler.run(input_text="", action="list_tasks", parameters={})
+    if not r2.get("success"):
+        return f"list_tasks failed: {r2.get('message')}"
+    if "health" not in r2.get("message", "").lower() and "task" not in r2.get("message", "").lower():
+        return "Added task not visible in list"
+    return True
+
+def _sched_invalid_schedule():
+    r = scheduler.run(input_text="", action="add_task", parameters={"raw": "do something"})
+    # No schedule phrase — should fail gracefully (not crash)
+    return True  # crash = FAIL, any return = PASS
+
+run_test("Scheduler: add_task + list_tasks",    _sched_add_list_remove)
+run_test("Scheduler: no-schedule raw (no crash)", _sched_invalid_schedule)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 13. TOOLS REGISTRY
+# ══════════════════════════════════════════════════════════════════════════════
+section("13. Tools Registry")
+
+from core.tools_registry import TOOLS, register_tool, unregister_tool, execute_tool
+
+def _registry_has_all_agents():
+    required = {"system", "file", "veronica", "vision", "ultron",
+                "edith", "echo", "athena", "personal", "friday",
+                "scheduler", "self_improvement"}
+    missing = required - set(TOOLS.keys())
+    return True if not missing else f"Missing agents: {missing}"
+
+def _registry_execute_known():
+    r = execute_tool("system", "", action="system_info", parameters={})
+    if not r.get("success"):
+        return f"execute_tool(system_info) failed: {r.get('message')}"
+    return True
+
+def _registry_execute_unknown():
+    r = execute_tool("nonexistent_tool_xyz", "", action="do_thing", parameters={})
+    return True if not r.get("success") else "Unknown tool should return failure"
+
+def _registry_dynamic():
+    class _Dummy:
+        def run(self, input_text="", action=None, parameters=None):
+            return {"success": True, "message": "dummy ok", "data": {}}
+    register_tool("_test_dummy_", _Dummy())
+    r = execute_tool("_test_dummy_", "", action="anything", parameters={})
+    unregister_tool("_test_dummy_")
+    if not r.get("success"):
+        return "Dynamic tool execute failed"
+    return True
+
+run_test("Registry has all required agents",         _registry_has_all_agents)
+run_test("execute_tool: known tool works",           _registry_execute_known)
+run_test("execute_tool: unknown tool returns fail",  _registry_execute_unknown)
+run_test("Dynamic register + execute + unregister",  _registry_dynamic)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 14. DATA FILE INTEGRITY
+# ══════════════════════════════════════════════════════════════════════════════
+section("14. Data File Integrity")
+
+import json
+
+def _json_valid(path):
+    def _():
+        if not os.path.exists(path):
+            return None  # skip — file not created yet, OK
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                json.load(f)
+            return True
+        except json.JSONDecodeError as e:
+            return f"Invalid JSON in {path}: {e}"
+    return _
+
+def _friday_schema():
+    path = "data/friday_data.json"
+    if not os.path.exists(path):
+        return None
+    with open(path, "r", encoding="utf-8") as f:
+        d = json.load(f)
+    required = {"tasks", "goals", "notes", "health_log", "reminders", "habits", "events"}
+    missing = required - set(d.keys())
+    return True if not missing else f"Missing keys: {missing}"
+
+run_test("data/memory.json valid JSON",         _json_valid("data/memory.json"))
+run_test("data/friday_data.json valid JSON",    _json_valid("data/friday_data.json"))
+run_test("data/edith_memory.json valid JSON",   _json_valid("data/edith_memory.json"))
+run_test("data/personal_memory.json valid JSON",_json_valid("data/personal_memory.json"))
+run_test("data/friday_data.json schema OK",     _friday_schema)
+run_test("vector_memory.json valid JSON",       _json_valid("vector_memory.json"))
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 15. KOKORO TTS
+# ══════════════════════════════════════════════════════════════════════════════
+section("15. Kokoro TTS")
+
+def _kokoro_available():
+    from core.kokoro_tts import is_available
+    return True if is_available() else "kokoro package not installed"
+
+def _kokoro_voice_map():
+    from core.kokoro_tts import KOKORO_VOICES
+    required = {"friday", "athena", "ultron", "veronica", "vision", "edith", "default"}
+    missing = required - set(KOKORO_VOICES.keys())
+    return True if not missing else f"Missing voices: {missing}"
+
+def _kokoro_synthesize():
+    try:
+        from core.kokoro_tts import synthesize
+        audio = synthesize("Hello.", "friday")
+        if not audio or len(audio) < 100:
+            return f"Audio too small: {len(audio)} bytes"
+        # Check WAV header (RIFF)
+        if audio[:4] != b"RIFF":
+            return "Output is not valid WAV (missing RIFF header)"
+        return True
+    except Exception as e:
+        return f"{type(e).__name__}: {e}"
+
+run_test("Kokoro package available",              _kokoro_available)
+run_test("Kokoro voice map complete",             _kokoro_voice_map)
+run_test("Kokoro synthesize short text → WAV",   _kokoro_synthesize)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 16. COORDINATOR (multi-agent detection)
+# ══════════════════════════════════════════════════════════════════════════════
+section("16. Coordinator (Multi-Agent)")
+
+from core.coordinator import should_coordinate
+
+def _compound_yes(text):
+    def _():
+        return True if should_coordinate(text) else f"'{text}' should be detected as compound"
+    return _
+
+def _compound_no(text):
+    def _():
+        return True if not should_coordinate(text) else f"'{text}' should NOT be detected as compound"
+    return _
+
+run_test("Compound: 'scan site and then research it'",   _compound_yes("scan site and then research it"))
+run_test("Compound: 'remember this and also list tasks'",_compound_yes("remember this and also list tasks"))
+run_test("Non-compound: 'list my tasks'",                _compound_no("list my tasks"))
+run_test("Non-compound: 'what is quantum computing'",    _compound_no("what is quantum computing"))
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 17. EMOTION DETECTION
+# ══════════════════════════════════════════════════════════════════════════════
+section("17. Emotion Detection")
+
+from core.emotion_memory import detect_emotion
+
+def _emotion(text, expected):
+    def _():
+        e = detect_emotion(text)
+        return True if e == expected else f"Expected '{expected}', got '{e}'"
+    return _
+
+run_test("Emotion: frustrated text",  _emotion("i am so angry and frustrated right now", "frustrated"))
+run_test("Emotion: excited text",     _emotion("this is so excited and awesome", "excited"))
+run_test("Emotion: neutral text",     _emotion("list my tasks for today", "neutral"))
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 18. CHAT PIPELINE (end-to-end — requires process_input to return non-empty str)
+# ══════════════════════════════════════════════════════════════════════════════
+section("18. Chat Pipeline (End-to-End)")
+
+import urllib.request
+from core.brain import process_input
+
+def _ollama_reachable() -> bool:
+    try:
+        req = urllib.request.urlopen("http://localhost:11434/api/tags", timeout=3)
+        return req.status == 200
+    except Exception:
+        return False
+
+_OLLAMA_UP = _ollama_reachable()
+print(f"  {'Ollama: ONLINE — LLM tests will run' if _OLLAMA_UP else 'Ollama: OFFLINE — LLM tests will skip'}")
+
+def _chat(query, max_sec=10, requires_ollama=False):
+    """Returns test fn. Skips if Ollama required but offline."""
+    def _():
+        if requires_ollama and not _OLLAMA_UP:
+            return None  # skip
+        t0 = time.time()
+        resp = process_input(query)
+        elapsed = time.time() - t0
+        if not resp or not resp.strip():
+            return f"Empty response for: '{query}'"
+        if elapsed > max_sec:
+            return f"Too slow: {elapsed:.1f}s > {max_sec}s"
+        return True
+    return _
+
+def _chat_tool_returns(query, expected_fragment, max_sec=8):
+    """Response must contain a fragment (tool result check)."""
+    def _():
+        resp = process_input(query)
+        if not resp or not resp.strip():
+            return f"Empty response for: '{query}'"
+        if expected_fragment.lower() not in resp.lower():
+            return f"Expected '{expected_fragment}' in response, got: {resp[:120]}"
+        return True
+    return _
+
+# Tool-routed — no Ollama needed (regex router handles these)
+run_test("Chat: 'show my tasks' → Friday responds",      _chat("show my tasks", max_sec=8))
+run_test("Chat: 'show my notes' → Friday responds",      _chat("show my notes", max_sec=8))
+run_test("Chat: 'browser status' → status returned",     _chat("browser status", max_sec=8))
+run_test("Chat: 'what do you know about me' → Personal", _chat("what do you know about me", max_sec=8))
+run_test("Chat: 'show memory' → EDITH responds",         _chat("show memory", max_sec=8))
+run_test("Chat: 'list tools' → Echo responds",           _chat("list tools", max_sec=8))
+run_test("Chat: 'my goals' → Friday list",               _chat("my goals", max_sec=8))
+run_test("Chat: 'show habits' → Friday habits",          _chat("show habits", max_sec=8))
+
+# LLM fallback — requires Ollama
+run_test("Chat (LLM): 'what is 2 + 2'",                  _chat("what is 2 + 2",    max_sec=30, requires_ollama=True))
+run_test("Chat (LLM): 'tell me a joke'",                  _chat("tell me a joke",   max_sec=30, requires_ollama=True))
+run_test("Chat (LLM): 'explain what you can do'",         _chat("explain what you can do", max_sec=30, requires_ollama=True))
+
+# Crash-safety — weird inputs must not raise
+def _no_crash(query):
+    def _():
+        try:
+            resp = process_input(query)
+            return True  # any response (even empty) is OK — must just not raise
+        except Exception as e:
+            return f"Raised {type(e).__name__}: {e}"
+    return _
+
+run_test("Chat: empty string doesn't crash",         _no_crash(""))
+run_test("Chat: whitespace-only doesn't crash",      _no_crash("   "))
+run_test("Chat: very long input doesn't crash",      _no_crash("hello " * 200))
+run_test("Chat: unicode emoji doesn't crash",        _no_crash("hey jarvis 🤖💻🔥"))
+run_test("Chat: SQL injection chars don't crash",    _no_crash("'; DROP TABLE users; --"))
+run_test("Chat: null bytes don't crash",             _no_crash("test\x00value"))
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 19. URL GUARD — SSRF (Phase 40b)
+# ══════════════════════════════════════════════════════════════════════════════
+section("19. URL Guard (SSRF)")
+
+from core.url_guard import is_safe_url
+
+def _ssrf_block(url):
+    def _():
+        safe, reason = is_safe_url(url)
+        return True if not safe else f"'{url}' should be blocked, was allowed"
+    return _
+
+# All these short-circuit BEFORE DNS (IP literal / scheme / hostname) — offline-safe
+run_test("SSRF: block 192.168.x private",       _ssrf_block("http://192.168.1.1/admin"))
+run_test("SSRF: block 127.0.0.1 loopback",      _ssrf_block("http://127.0.0.1:5000"))
+run_test("SSRF: block 10.x private",            _ssrf_block("http://10.0.0.5"))
+run_test("SSRF: block 169.254 link-local",      _ssrf_block("http://169.254.169.254/latest/meta-data/"))
+run_test("SSRF: block localhost hostname",      _ssrf_block("http://localhost/x"))
+run_test("SSRF: block non-http scheme (ftp)",   _ssrf_block("ftp://example.com"))
+run_test("SSRF: block file:// scheme",          _ssrf_block("file:///etc/passwd"))
+run_test("SSRF: block empty url",               _ssrf_block(""))
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 20. OLLAMA CIRCUIT BREAKER (Phase 51 #3)
+# ══════════════════════════════════════════════════════════════════════════════
+section("20. Circuit Breaker")
+
+def _breaker_trips_and_fails_fast():
+    import core.llm as _llm
+    saved_host = _llm.OLLAMA_HOST
+    _llm._cb_record_success()  # reset
+    try:
+        _llm.OLLAMA_HOST = "http://127.0.0.1:9"  # dead port → fast refuse
+        for _ in range(_llm._CB_THRESHOLD):
+            _llm.ask_llm("hi")
+        if not _llm._cb_is_open():
+            return "Breaker did not open after threshold failures"
+        t0 = time.time()
+        r = _llm.ask_llm("still down")
+        dt = time.time() - t0
+        if dt > 0.1:
+            return f"Open breaker not failing fast: {dt*1000:.0f}ms"
+        if r != _llm._CB_MSG:
+            return "Open breaker did not return circuit-breaker message"
+        return True
+    finally:
+        _llm.OLLAMA_HOST = saved_host
+        _llm._cb_record_success()  # reset so live LLM tests still work
+
+def _breaker_reset_on_success():
+    import core.llm as _llm
+    _llm._cb_record_failure(); _llm._cb_record_failure()
+    _llm._cb_record_success()
+    return True if _llm._cb_failures == 0 and not _llm._cb_is_open() else "Reset failed"
+
+run_test("Breaker trips after threshold + fails fast", _breaker_trips_and_fails_fast)
+run_test("Breaker resets on success",                  _breaker_reset_on_success)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 21. LLM ROUTER CACHE (Phase 51 #1)
+# ══════════════════════════════════════════════════════════════════════════════
+section("21. LLM Router Cache")
+
+def _cache_hits_on_repeat():
+    import core.llm_router as _lr
+    calls = {"n": 0}
+    saved = _lr.ask_llm_fast
+    _lr._LLM_CACHE.clear()
+    def fake(prompt, max_tokens=80):
+        calls["n"] += 1
+        return '{"tool":"ultron","action":"system_health","parameters":{}}'
+    _lr.ask_llm_fast = fake
+    try:
+        a = _lr.llm_classify_intent("do the regression thing now")
+        b = _lr.llm_classify_intent("do the regression thing now")
+        if calls["n"] != 1:
+            return f"Expected 1 LLM call (cached), got {calls['n']}"
+        if not a or a.get("tool") != "ultron":
+            return "First classify wrong"
+        # mutation safety
+        a["tool"] = "HACKED"
+        c = _lr.llm_classify_intent("do the regression thing now")
+        if c.get("tool") != "ultron":
+            return "Cache mutated by caller"
+        return True
+    finally:
+        _lr.ask_llm_fast = saved
+        _lr._LLM_CACHE.clear()
+
+def _cache_stores_none():
+    import core.llm_router as _lr
+    calls = {"n": 0}
+    saved = _lr.ask_llm_fast
+    _lr._LLM_CACHE.clear()
+    def fake(prompt, max_tokens=80):
+        calls["n"] += 1
+        return ""  # unknown → None
+    _lr.ask_llm_fast = fake
+    try:
+        _lr.llm_classify_intent("some gibberish nonsense xyzzy")
+        _lr.llm_classify_intent("some gibberish nonsense xyzzy")
+        return True if calls["n"] == 1 else f"None not cached: {calls['n']} calls"
+    finally:
+        _lr.ask_llm_fast = saved
+        _lr._LLM_CACHE.clear()
+
+run_test("Router cache: hit on repeat (1 LLM call)", _cache_hits_on_repeat)
+run_test("Router cache: caches None results",        _cache_stores_none)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 22. TOOL-RESULT MEMORY (Phase 51 #6)
+# ══════════════════════════════════════════════════════════════════════════════
+section("22. Tool-Result Memory")
+
+def _tool_memory_roundtrip():
+    import core.tool_memory as _tm
+    # snapshot + restore real file so we don't pollute it
+    saved = None
+    if os.path.exists(_tm._FILE):
+        with open(_tm._FILE, "r", encoding="utf-8") as f:
+            saved = f.read()
+    _tm._buf.clear(); _tm._loaded = True
+    try:
+        _tm.remember_result("ultron", "nmap_scan", "Found 2 open ports: ssh, http")
+        _tm.remember_result("vision", "web_search", "results about python")
+        last = _tm.last_result()
+        if not last or last["tool"] != "vision":
+            return "last_result wrong"
+        hits = _tm.search_results("nmap")
+        if not hits or "ssh" not in hits[0]["message"]:
+            return "search_results keyword failed"
+        empty = _tm.search_results("flight_nonexistent")
+        if empty:
+            return "search_results should be empty for missing keyword"
+        return True
+    finally:
+        _tm._buf.clear(); _tm._loaded = False
+        if saved is not None:
+            with open(_tm._FILE, "w", encoding="utf-8") as f:
+                f.write(saved)
+
+def _recall_action():
+    import core.tool_memory as _tm
+    _tm._buf.clear(); _tm._loaded = True
+    _tm.remember_result("ultron", "vt_scan", "CLEAN 0/91")
+    try:
+        r = system_agent.run("", "recall_result", {})
+        if not r.get("success") or "vt_scan" not in r.get("message", ""):
+            return f"recall_result failed: {r.get('message')}"
+        return True
+    finally:
+        _tm._buf.clear(); _tm._loaded = False
+
+run_test("Tool memory: store → last → search",  _tool_memory_roundtrip)
+run_test("Tool memory: system.recall_result",   _recall_action)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 23. ULTRON SECURITY HELPERS (offline)
+# ══════════════════════════════════════════════════════════════════════════════
+section("23. Ultron Security (offline)")
+
+import agents.ultron.ultron_agent as _ult
+
+def _extract_ports():
+    p = _ult._extract_open_ports("22/tcp open ssh\n80/tcp open http\n443/tcp closed https\n")
+    if "22/tcp ssh" not in p or "80/tcp http" not in p:
+        return f"Wrong ports: {p}"
+    if any("443" in x for x in p):
+        return "Closed port should not be included"
+    return True
+
+def _cve_keywords():
+    kws = _ult._cve_product_keywords({"affected": ["f5:nginx 1.20", "openbsd:openssh 8.2"]})
+    return True if "nginx" in kws and "openssh" in kws else f"Wrong keywords: {kws}"
+
+def _product_match():
+    hits = _ult._match_products({"openssh", "ssh"}, {"openssh", "nginx"})
+    return True if "openssh" in hits else f"No match: {hits}"
+
+def _sanitize_rejects_injection():
+    try:
+        _ult._sanitize_arg("target.com; rm -rf /")
+        return "Should have raised on shell metacharacters"
+    except ValueError:
+        return True
+
+def _sanitize_allows_clean():
+    try:
+        out = _ult._sanitize_arg("example.com")
+        return True if out == "example.com" else f"Mangled clean arg: {out}"
+    except Exception as e:
+        return f"Rejected clean arg: {e}"
+
+def _run_cmd_allowlist():
+    out = _ult.run_cmd(["rm", "-rf", "/"])
+    return True if "not an allowlisted" in out.lower() or "refused" in out.lower() else f"Allowed non-allowlisted: {out}"
+
+def _run_cmd_injection_block():
+    out = _ult.run_cmd(["nmap", "-F", "x.com; whoami"])
+    return True if "refused" in out.lower() else f"Allowed injection arg: {out}"
+
+run_test("Ultron: _extract_open_ports",        _extract_ports)
+run_test("Ultron: _cve_product_keywords",      _cve_keywords)
+run_test("Ultron: _match_products",            _product_match)
+run_test("Ultron: sanitizer rejects injection",_sanitize_rejects_injection)
+run_test("Ultron: sanitizer allows clean arg", _sanitize_allows_clean)
+run_test("Ultron: run_cmd allowlist blocks rm",_run_cmd_allowlist)
+run_test("Ultron: run_cmd blocks injection arg",_run_cmd_injection_block)
+
+# Bug-bounty workflow (Phase 54) — parser + report formatter
+def _bb_nuclei_parser():
+    raw = ("[CVE-2021-44228] [http] [critical] https://t.com/api\n"
+           "[exposed-panel] [http] [medium] https://t.com/admin\n"
+           "[CVE-2021-44228] [http] [critical] https://t.com/api")  # dup
+    f = _ult._parse_nuclei_findings(raw)
+    if len(f) != 2:
+        return f"expected 2 deduped findings, got {len(f)}"
+    if f[0]["severity"] != "critical" or f[0]["cve"] != "CVE-2021-44228":
+        return "should sort critical-first + extract CVE"
+    return True
+
+def _bb_report_formatter():
+    f = [{"template": "CVE-2021-44228", "severity": "critical", "url": "https://t.com", "cve": "CVE-2021-44228"}]
+    rpt = _ult.ultron_agent._format_bb_report(
+        "x.com", f, {"CVE-2021-44228": "poc-url"},
+        {"sections": {}, "urls": []}, validated=True)
+    ok = ("# Bug Bounty Report" in rpt and "CRITICAL" in rpt
+          and "CVE-2021-44228" in rpt and "Remediation" in rpt)
+    return True if ok else "report missing expected sections"
+
+run_test("Ultron: bug-bounty nuclei parser",   _bb_nuclei_parser)
+run_test("Ultron: bug-bounty report formatter", _bb_report_formatter)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 24. FILE AGENT — MarkItDown + apply_patch + SSRF (Phase 31, 40b, 40d)
+# ══════════════════════════════════════════════════════════════════════════════
+section("24. File Agent (docs + patch)")
+
+from agents.file.file_agent import file_agent
+
+def _read_document_md():
+    # Use an existing repo doc
+    for cand in ("requirements.txt", "SETUP_LOCAL.md", "ARCHITECTURE_LOCAL.md"):
+        if os.path.exists(cand):
+            r = file_agent.run("", "read_document", {"path": cand})
+            if not r.get("success"):
+                return f"read_document failed on {cand}: {r.get('message')}"
+            if not r.get("message", "").strip():
+                return "read_document returned empty text"
+            return True
+    return None  # skip — no doc available
+
+def _apply_patch_works():
+    import tempfile
+    tmp = tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False, encoding="utf-8")
+    tmp.write("line one\nline two\nline three\n"); tmp.close()
+    try:
+        diff = "@@ -1,3 +1,3 @@\n line one\n-line two\n+line TWO patched\n line three"
+        r = file_agent.run("", "apply_patch", {"path": tmp.name, "diff": diff})
+        if not r.get("success"):
+            return f"apply_patch failed: {r.get('message')}"
+        content = open(tmp.name, encoding="utf-8").read()
+        return True if "line TWO patched" in content else "Patch not applied to file"
+    finally:
+        os.remove(tmp.name)
+
+def _apply_patch_mismatch_aborts():
+    import tempfile
+    tmp = tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False, encoding="utf-8")
+    tmp.write("real content\n"); tmp.close()
+    try:
+        r = file_agent.run("", "apply_patch", {"path": tmp.name, "diff": "@@ -1,1 +1,1 @@\n-WRONG\n+x"})
+        if r.get("success"):
+            return "Mismatched patch should have been refused"
+        content = open(tmp.name, encoding="utf-8").read()
+        return True if "real content" in content else "File was modified despite mismatch"
+    finally:
+        os.remove(tmp.name)
+
+def _read_document_blocks_internal_url():
+    r = file_agent.run("", "read_document", {"path": "http://169.254.169.254/latest/"})
+    return True if not r.get("success") else "Should refuse internal URL fetch"
+
+run_test("File: read_document on repo doc",       _read_document_md)
+run_test("File: apply_patch applies diff",        _apply_patch_works)
+run_test("File: apply_patch aborts on mismatch",  _apply_patch_mismatch_aborts)
+run_test("File: read_document blocks SSRF url",   _read_document_blocks_internal_url)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 25. NEW ROUTER PATTERNS (this session's features)
+# ══════════════════════════════════════════════════════════════════════════════
+section("25. New Router Patterns")
+
+# Ultron security / CVE / VirusTotal
+run_test("Router: 'scan example.com' → nmap",          _route("scan example.com", "ultron", "nmap_scan"))
+run_test("Router: 'search cve for log4j'",             _route("search cve for log4j", "ultron", "search_cve"))
+run_test("Router: 'am i exposed' → correlate",         _route("am i exposed", "ultron", "correlate"))
+run_test("Router: 'virustotal google.com' → vt_scan",  _route("virustotal google.com", "ultron", "vt_scan"))
+run_test("Router: 'is google.com malicious' → vt_scan",_route("is google.com malicious", "ultron", "vt_scan"))
+run_test("Router: 'find exploits for CVE-2021-44228'", _route("find exploits for cve-2021-44228", "ultron", "find_exploits"))
+run_test("Router: 'bug bounty example.com' → bug_bounty", _route("bug bounty example.com", "ultron", "bug_bounty"))
+run_test("Router: 'hunt example.com' → bug_bounty",       _route("hunt example.com", "ultron", "bug_bounty"))
+
+# DNS gating vs web search
+run_test("Router: 'look up google.com' → dns",         _route("look up google.com", "ultron", "dns_lookup"))
+run_test("Router: 'look up quantum computing online' → web", _route("look up quantum computing online", "vision", "web_search"))
+run_test("Router: 'search the web for rust' → web",    _route("search the web for rust", "vision", "web_search"))
+
+# Hash with algo word strip
+def _hash_algo_strip():
+    r = route_single_intent("hash sha256 hello")
+    p = r.get("parameters", {})
+    if r.get("action") != "hash_target":
+        return f"Wrong action: {r.get('action')}"
+    if p.get("target") != "hello" or p.get("algorithm") != "sha256":
+        return f"Algo not stripped: target={p.get('target')} algo={p.get('algorithm')}"
+    return True
+run_test("Router: 'hash sha256 hello' strips algo",    _hash_algo_strip)
+
+# Quick wins
+run_test("Router: 'battery status' → system",          _route("battery status", "system", "battery_status"))
+run_test("Router: 'speed test' → system",              _route("speed test", "system", "speed_test"))
+run_test("Router: 'generate password' → friday",       _route("generate password", "friday", "generate_password"))
+run_test("Router: 'hacker news' → vision",             _route("hacker news", "vision", "hackernews"))
+
+# Tool recall + sports disambiguation
+run_test("Router: 'what was the last result' → recall",_route("what was the last result", "system", "recall_result"))
+run_test("Router: 'what did that scan find' → recall", _route("what did that scan find", "system", "recall_result"))
+run_test("Router: 'manchester united results' → sports", _route("manchester united results", "vision", "sports_query"))
+
+# Live-crash regressions (found via chat battery 2026-06-10)
+# Bug: sports suffix regex hijacked browser command ending in "result"
+run_test("Router: 'click first result' → veronica (not sports)", _route("click first result", "veronica", "open_result"))
+run_test("Router: 'open first result' → veronica (not sports)",  _route("open first result", "veronica", "open_result"))
+run_test("Router: 'liverpool fixtures' → sports (still works)",   _route("liverpool fixtures", "vision", "sports_query"))
+
+# Bug: echo (executes generated code) must NOT be LLM-routable
+def _echo_not_llm_routable():
+    from core.llm_router import _VALID_TOOLS
+    return True if "echo" not in _VALID_TOOLS else "echo must not be LLM-routable (executes code)"
+run_test("Echo not in LLM router valid set", _echo_not_llm_routable)
+
+# Bug: browser-disabled methods must raise (caught → clean msg), not hang
+def _browser_disabled_no_hang():
+    from core.runtime_flags import is_browser_enabled, set_browser_enabled
+    from core.browser_agent import browser_agent
+    initial = is_browser_enabled()
+    set_browser_enabled(False)
+    try:
+        t0 = time.time()
+        r = browser_agent.click_first_result()   # must return fast failure, not block
+        dt = time.time() - t0
+        if dt > 3:
+            return f"click_first_result hung {dt:.0f}s with browser disabled"
+        if r.get("success"):
+            return "Should fail when browser disabled"
+        return True
+    finally:
+        set_browser_enabled(initial)
+run_test("Browser disabled: click_first_result fails fast", _browser_disabled_no_hang)
+
+# Browser auto-start (no manual "enable browser" needed)
+def _browser_auto_on():
+    import importlib, core.runtime_flags as _rf
+    importlib.reload(_rf)
+    return True if _rf.is_browser_enabled() else "Browser should default ON (auto-start)"
+def _submit_bounded():
+    import inspect
+    from core.browser_worker import browser_worker as _bw
+    sig = inspect.signature(_bw.submit)
+    return True if "timeout" in sig.parameters else "submit() must have timeout guard (no infinite hang)"
+run_test("Browser auto-on by default (no enable cmd)", _browser_auto_on)
+run_test("Browser submit() is time-bounded",          _submit_bounded)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 26. CLARIFICATION + STREAMING TTS LOGIC
+# ══════════════════════════════════════════════════════════════════════════════
+section("26. Clarification + TTS")
+
+from core.router import suggest_clarification
+
+def _clarify_command_ish():
+    r = suggest_clarification("scan stuff")
+    return True if r and r.get("clarify") else "Command-ish input should clarify"
+
+def _clarify_skips_chat():
+    r = suggest_clarification("i had a great workout today")
+    return True if r is None else "Narrative chat should NOT clarify"
+
+def _clarify_skips_question():
+    r = suggest_clarification("what is the meaning of life")
+    return True if r is None else "Plain question should NOT clarify"
+
+run_test("Clarify: command-ish → offers help",  _clarify_command_ish)
+run_test("Clarify: narrative chat → skips",     _clarify_skips_chat)
+run_test("Clarify: plain question → skips",     _clarify_skips_question)
+
+def _sentence_split():
+    import re as _re
+    pat = _re.compile(r'(.+?[.!?]+["\')\]]?)(\s+|$)', _re.DOTALL)
+    buf = "Morning. Ready when you are. Port 22 open"
+    out = []
+    b = buf
+    while True:
+        m = pat.match(b)
+        if not m:
+            break
+        out.append(m.group(1).strip()); b = b[m.end():]
+    if b.strip():
+        out.append(b.strip())
+    return True if out == ["Morning.", "Ready when you are.", "Port 22 open"] else f"Wrong split: {out}"
+
+def _voice_exports():
+    from core.voice import enqueue_speech, kokoro_status, stop_speaking
+    return True if all(callable(f) for f in (enqueue_speech, kokoro_status, stop_speaking)) else "Voice exports missing"
+
+run_test("TTS: sentence splitter correctness",  _sentence_split)
+run_test("TTS: voice queue exports callable",   _voice_exports)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 27. LOGGER + THINK + CONFIG KEYS
+# ══════════════════════════════════════════════════════════════════════════════
+section("27. Logger + Think + Config")
+
+def _logger_imports():
+    from core.logger import log, install_tee
+    return True if callable(install_tee) and hasattr(log, "info") else "Logger API incomplete"
+
+def _think_safe_empty():
+    from core.think import think
+    return True if think("") == "" else "think('') should return ''"
+
+def _new_config_keys():
+    missing = [k for k in ("NVD_API_KEY", "VIRUSTOTAL_API_KEY", "FOOTBALL_API_KEY") if not hasattr(config, k)]
+    return True if not missing else f"Missing config keys: {missing}"
+
+run_test("Logger: API present",          _logger_imports)
+run_test("Think: empty input safe",      _think_safe_empty)
+run_test("Config: new API keys present", _new_config_keys)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 28. LIVE API INTEGRATIONS (network — skip if offline)
+# ══════════════════════════════════════════════════════════════════════════════
+section("28. Live API Integrations")
+
+def _net_up():
+    try:
+        urllib.request.urlopen("https://duckduckgo.com", timeout=4)
+        return True
+    except Exception:
+        return False
+
+_NET = _net_up()
+print(f"  {'Network: ONLINE — live API tests will run' if _NET else 'Network: OFFLINE — live API tests will skip'}")
+
+def _live(fn):
+    def _():
+        if not _NET:
+            return None
+        return fn()
+    return _
+
+def _vt_live():
+    r = _ult.ultron_agent.run("", "vt_scan", {"target": "google.com"})
+    if not r.get("success"):
+        return f"vt_scan failed: {r.get('message')}"
+    return True if "clean" in r["message"].lower() or "/" in r["message"] else f"Unexpected: {r['message'][:80]}"
+
+def _ddgs_live():
+    from agents.vision.vision_agent import vision_agent
+    r = vision_agent.run("", "web_search", {"query": "python programming", "n": 3})
+    return True if r.get("success") and "__NEWS_CONTEXT__" in r.get("message", "") else f"web_search failed: {r.get('message','')[:80]}"
+
+def _football_live():
+    from config import FOOTBALL_API_KEY
+    if not FOOTBALL_API_KEY:
+        return None
+    from agents.vision.sports_api import get_standings
+    r = get_standings("premier league", FOOTBALL_API_KEY)
+    return True if r.get("success") else f"standings failed: {r.get('message')}"
+
+def _nvd_live():
+    r = _ult.ultron_agent.run("", "search_cve", {"keyword": "log4j", "severity": "CRITICAL", "days_back": 0})
+    return True if r.get("success") else f"search_cve failed: {r.get('message')}"
+
+def _dns_live():
+    r = _ult.ultron_agent.run("", "dns_lookup", {"target": "google.com"})
+    return True if r.get("success") else f"dns_lookup failed: {r.get('message')}"
+
+run_test("Live: VirusTotal vt_scan google.com",  _live(_vt_live))
+run_test("Live: DuckDuckGo web_search",          _live(_ddgs_live))
+run_test("Live: Football standings",             _live(_football_live))
+run_test("Live: NVD search_cve",                 _live(_nvd_live))
+run_test("Live: DNS lookup",                     _live(_dns_live))
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# CONSOLE SUMMARY
+# ══════════════════════════════════════════════════════════════════════════════
+total      = _pass + _fail + _skip
+elapsed_s  = time.time() - _run_start
+
+print(f"\n{BOLD}{'═'*50}{RESET}")
+print(f"{BOLD}  RESULTS: {GREEN}{_pass} passed{RESET}  {RED}{_fail} failed{RESET}  {YELLOW}{_skip} skipped{RESET}  / {total} total  ({elapsed_s:.1f}s){RESET}")
+print(f"{BOLD}{'═'*50}{RESET}")
+
+if _failures:
+    print(f"\n{RED}{BOLD}Failed tests:{RESET}")
+    for name, detail in _failures:
+        print(f"  {RED}✗ {name}{RESET}")
+        if detail:
+            print(f"    {detail}")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# HTML REPORT
+# ══════════════════════════════════════════════════════════════════════════════
+import config as _cfg
+
+def _generate_html_report():
+    now     = datetime.datetime.now()
+    ts      = now.strftime("%Y-%m-%d_%H%M%S")
+    fname   = f"test_report_{ts}.html"
+
+    # Group by section
+    sections_map: dict[str, list] = {}
+    for entry in _report:
+        sec = entry["section"]
+        sections_map.setdefault(sec, []).append(entry)
+
+    status_color = {"PASS": "#22c55e", "FAIL": "#ef4444", "SKIP": "#f59e0b"}
+    status_bg    = {"PASS": "#f0fdf4", "FAIL": "#fef2f2", "SKIP": "#fffbeb"}
+    status_icon  = {"PASS": "✓", "FAIL": "✗", "SKIP": "~"}
+
+    # Section summary rows
+    sec_rows = []
+    for sec_name, entries in sections_map.items():
+        p = sum(1 for e in entries if e["status"] == "PASS")
+        f = sum(1 for e in entries if e["status"] == "FAIL")
+        s = sum(1 for e in entries if e["status"] == "SKIP")
+        t = len(entries)
+        bar_pct = round(p / t * 100) if t else 0
+        sec_rows.append(f"""
+        <tr>
+          <td style="padding:8px 12px;font-weight:600">{_html.escape(sec_name)}</td>
+          <td style="padding:8px 12px;color:#22c55e;text-align:center">{p}</td>
+          <td style="padding:8px 12px;color:#ef4444;text-align:center">{f}</td>
+          <td style="padding:8px 12px;color:#f59e0b;text-align:center">{s}</td>
+          <td style="padding:8px 12px;text-align:center">{t}</td>
+          <td style="padding:8px 12px;min-width:120px">
+            <div style="background:#e5e7eb;border-radius:4px;height:10px">
+              <div style="background:{'#22c55e' if f==0 else '#ef4444'};border-radius:4px;height:10px;width:{bar_pct}%"></div>
+            </div>
+          </td>
+        </tr>""")
+
+    # All test rows
+    test_rows = []
+    for entry in _report:
+        bg  = status_bg.get(entry["status"], "#fff")
+        col = status_color.get(entry["status"], "#6b7280")
+        ico = status_icon.get(entry["status"], "?")
+        det = f'<div style="font-size:12px;color:#dc2626;margin-top:4px;font-family:monospace">{_html.escape(str(entry["detail"]))}</div>' if entry["detail"] else ""
+        test_rows.append(f"""
+        <tr style="background:{bg}">
+          <td style="padding:7px 12px;color:{col};font-weight:700;text-align:center;font-size:16px">{ico}</td>
+          <td style="padding:7px 12px;font-size:13px;color:#6b7280">{_html.escape(entry['section'])}</td>
+          <td style="padding:7px 12px;font-size:13px">{_html.escape(entry['name'])}{det}</td>
+          <td style="padding:7px 12px;font-size:12px;color:#9ca3af;text-align:right">{entry['duration_ms']}ms</td>
+        </tr>""")
+
+    pass_pct = round(_pass / total * 100) if total else 0
+    ring_color = "#22c55e" if _fail == 0 else "#ef4444"
+
+    html_out = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>JARVIS Regression Report — {now.strftime("%Y-%m-%d %H:%M")}</title>
+<style>
+  * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+  body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+         background: #0f172a; color: #e2e8f0; min-height: 100vh; padding: 32px 24px; }}
+  h1 {{ font-size: 28px; font-weight: 800; letter-spacing: -0.5px; }}
+  h2 {{ font-size: 16px; font-weight: 700; margin-bottom: 12px; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px; }}
+  .card {{ background: #1e293b; border-radius: 12px; padding: 24px; margin-bottom: 20px; }}
+  table {{ width: 100%; border-collapse: collapse; }}
+  th {{ text-align: left; padding: 10px 12px; font-size: 12px; color: #64748b;
+        text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid #334155; }}
+  tr:not(:last-child) td {{ border-bottom: 1px solid #1e293b; }}
+  .badge {{ display: inline-block; padding: 3px 10px; border-radius: 99px; font-size: 13px; font-weight: 700; }}
+  .stat-box {{ display: inline-flex; flex-direction: column; align-items: center;
+               background: #0f172a; border-radius: 10px; padding: 16px 28px; margin-right: 12px; }}
+  .stat-num {{ font-size: 36px; font-weight: 800; }}
+  .stat-lbl {{ font-size: 12px; color: #64748b; text-transform: uppercase; letter-spacing: 1px; margin-top: 2px; }}
+  .env-row {{ display: flex; flex-wrap: wrap; gap: 8px; }}
+  .env-pill {{ background: #0f172a; border-radius: 6px; padding: 5px 12px; font-size: 12px;
+               font-family: monospace; color: #7dd3fc; }}
+  @media(max-width:600px) {{ .stat-box {{ padding: 12px 18px; }} .stat-num {{ font-size: 28px; }} }}
+</style>
+</head>
+<body>
+
+<div style="max-width:960px;margin:0 auto">
+
+  <!-- Header -->
+  <div style="display:flex;align-items:center;gap:20px;margin-bottom:28px">
+    <div style="font-size:40px">🤖</div>
+    <div>
+      <h1>JARVIS Regression Report</h1>
+      <div style="color:#64748b;font-size:14px;margin-top:4px">
+        {now.strftime("%A, %B %d %Y  %H:%M:%S")} &nbsp;·&nbsp; Total time: {elapsed_s:.1f}s
+      </div>
+    </div>
+    <div style="margin-left:auto;text-align:center">
+      <div style="font-size:42px;font-weight:800;color:{ring_color}">{pass_pct}%</div>
+      <div style="font-size:12px;color:#64748b;text-transform:uppercase;letter-spacing:1px">Pass rate</div>
+    </div>
+  </div>
+
+  <!-- Stats -->
+  <div class="card" style="display:flex;flex-wrap:wrap;gap:12px">
+    <div class="stat-box"><span class="stat-num" style="color:#22c55e">{_pass}</span><span class="stat-lbl">Passed</span></div>
+    <div class="stat-box"><span class="stat-num" style="color:#ef4444">{_fail}</span><span class="stat-lbl">Failed</span></div>
+    <div class="stat-box"><span class="stat-num" style="color:#f59e0b">{_skip}</span><span class="stat-lbl">Skipped</span></div>
+    <div class="stat-box"><span class="stat-num" style="color:#94a3b8">{total}</span><span class="stat-lbl">Total</span></div>
+    <div class="stat-box"><span class="stat-num" style="color:#7dd3fc">{'0' if _fail == 0 else str(_fail)}</span><span class="stat-lbl">{'All Clear' if _fail == 0 else 'Need Fix'}</span></div>
+  </div>
+
+  <!-- Environment -->
+  <div class="card">
+    <h2>Environment</h2>
+    <div class="env-row">
+      <span class="env-pill">Python {sys.version.split()[0]}</span>
+      <span class="env-pill">LLM: {getattr(_cfg,'OLLAMA_MODEL','?')}</span>
+      <span class="env-pill">STT: {getattr(_cfg,'STT_BACKEND','?')}</span>
+      <span class="env-pill">TTS: {getattr(_cfg,'TTS_BACKEND','?')}</span>
+      <span class="env-pill">Whisper: {getattr(_cfg,'WHISPER_MODEL','?')}/{getattr(_cfg,'WHISPER_DEVICE','?')}</span>
+      <span class="env-pill">Browser: {'ON' if getattr(_cfg,'BROWSER_ENABLED',False) else 'OFF'}</span>
+      <span class="env-pill">Ollama: {'ONLINE' if _OLLAMA_UP else 'OFFLINE'}</span>
+      <span class="env-pill">Platform: {sys.platform}</span>
+    </div>
+  </div>
+
+  <!-- Failures (only if any) -->
+  {'<div class="card"><h2 style="color:#ef4444;margin-bottom:16px">&#10007; Failures</h2><table><thead><tr><th>Test</th><th>Detail</th></tr></thead><tbody>' +
+   "".join(f'<tr><td style="padding:8px 12px;font-weight:600;color:#fca5a5">{_html.escape(n)}</td><td style="padding:8px 12px;font-family:monospace;font-size:12px;color:#fca5a5">{_html.escape(d)}</td></tr>' for n,d in _failures) +
+   '</tbody></table></div>' if _failures else ''}
+
+  <!-- Section Summary -->
+  <div class="card">
+    <h2>Section Summary</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Section</th><th style="text-align:center">Pass</th>
+          <th style="text-align:center">Fail</th><th style="text-align:center">Skip</th>
+          <th style="text-align:center">Total</th><th>Progress</th>
+        </tr>
+      </thead>
+      <tbody>{''.join(sec_rows)}</tbody>
+    </table>
+  </div>
+
+  <!-- All Tests -->
+  <div class="card">
+    <h2>All Tests</h2>
+    <table>
+      <thead>
+        <tr><th style="width:36px"></th><th style="width:200px">Section</th><th>Test</th><th style="text-align:right">Time</th></tr>
+      </thead>
+      <tbody>{''.join(test_rows)}</tbody>
+    </table>
+  </div>
+
+  <div style="text-align:center;color:#334155;font-size:12px;margin-top:24px;padding-bottom:32px">
+    Generated by JARVIS test_regression.py · {now.isoformat()}
+  </div>
+
+</div>
+</body>
+</html>"""
+
+    with open(fname, "w", encoding="utf-8") as f:
+        f.write(html_out)
+    return fname
+
+
+report_file = _generate_html_report()
+print(f"\n{GREEN}{BOLD}Report saved:{RESET} {report_file}")
+print(f"Open with: start {report_file}\n")
+
+sys.exit(0 if _fail == 0 else 1)
