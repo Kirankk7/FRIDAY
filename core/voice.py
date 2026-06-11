@@ -46,6 +46,36 @@ def _get_agent() -> str:
     return get_last_agent() or "default"
 
 
+# ─── Per-agent earcons (Phase 51 #11) ─────────────────────────────────────────
+_last_earcon_agent = None
+_last_earcon_ts    = 0.0
+
+def _play_earcon(agent: str):
+    """Play a short distinct cue for the agent (async, non-blocking).
+    Plays once per response, not per streamed sentence: skipped when the same
+    agent spoke within the last 6s (mid-response continuation)."""
+    global _last_earcon_agent, _last_earcon_ts
+    if not getattr(config, "EARCONS_ENABLED", True):
+        return
+    agent = (agent or "default").lower()
+    now = time.time()
+    if agent == _last_earcon_agent and (now - _last_earcon_ts) < 6.0:
+        _last_earcon_ts = now   # keep extending while the same agent streams
+        return
+    _last_earcon_agent = agent
+    _last_earcon_ts = now
+    try:
+        path = os.path.join("assets", "earcons", f"{agent}.wav")
+        if not os.path.exists(path):
+            path = os.path.join("assets", "earcons", "default.wav")
+        if not os.path.exists(path):
+            return
+        import winsound
+        winsound.PlaySound(path, winsound.SND_FILENAME | winsound.SND_ASYNC)
+    except Exception:
+        pass
+
+
 def _get_edge_voice() -> str:
     return AGENT_VOICES.get(_get_agent(), DEFAULT_VOICE)
 
@@ -216,6 +246,9 @@ def speak_async(text: str, agent: str = None):
     agent    = agent or _get_agent()
     backend  = getattr(config, "TTS_BACKEND", "edge").lower()
     print(f"[voice] speak({backend}/{agent}): {text[:80]!r}...")
+
+    # Per-agent earcon — plays now (async) while TTS generates below
+    _play_earcon(agent)
 
     if backend == "kokoro":
         filename = f"temp_{uuid.uuid4().hex}.wav"

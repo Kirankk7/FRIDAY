@@ -32,6 +32,9 @@ PARAKEET_MODEL = "nvidia/parakeet-tdt-0.6b"   # 0.6b = ~2GB VRAM, fast. 1.1b = ~
 # "kokoro" = local Kokoro-82M neural TTS (offline, no internet needed)
 TTS_BACKEND = "kokoro"
 
+# EARCONS (Phase 51 #11) — short per-agent audio cue before each agent speaks
+EARCONS_ENABLED = True
+
 # BROWSER (Veronica agent — Playwright)
 # Auto-on: Playwright launches LAZILY on the first browser command (never at boot),
 # so startup stays safe even if Chrome/Playwright misbehaves. No manual "enable browser"

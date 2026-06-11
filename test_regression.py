@@ -1114,6 +1114,29 @@ run_test("Router: 'translate good morning to french'", _route("translate good mo
 run_test("Router: 'bitcoin price' → crypto",        _route("bitcoin price", "vision", "crypto_price"))
 run_test("Router: 'track flight EK202' → flight",   _route("track flight ek202", "vision", "track_flight"))
 
+# Phase 51 #11 — per-agent earcons
+def _earcons_present():
+    import os as _os
+    need = ["friday", "ultron", "athena", "vision", "default"]
+    missing = [a for a in need if not _os.path.exists(f"assets/earcons/{a}.wav")]
+    return True if not missing else f"missing earcons: {missing}"
+def _earcon_gate():
+    import core.voice as _v, time as _t
+    saved = (_v._last_earcon_agent, _v._last_earcon_ts)
+    try:
+        _v._last_earcon_agent = None; _v._last_earcon_ts = 0
+        import config as _c
+        if not getattr(_c, "EARCONS_ENABLED", True):
+            return None
+        # function must exist + be callable + handle missing file gracefully
+        _v._play_earcon("friday")     # first
+        a1 = _v._last_earcon_agent
+        return True if a1 == "friday" else "earcon agent not tracked"
+    finally:
+        _v._last_earcon_agent, _v._last_earcon_ts = saved
+run_test("Earcons: per-agent files generated", _earcons_present)
+run_test("Earcons: _play_earcon tracks agent", _earcon_gate)
+
 # Tool recall + sports disambiguation
 run_test("Router: 'what was the last result' → recall",_route("what was the last result", "system", "recall_result"))
 run_test("Router: 'what did that scan find' → recall", _route("what did that scan find", "system", "recall_result"))
