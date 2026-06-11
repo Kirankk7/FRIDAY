@@ -127,6 +127,15 @@ self_improvement:
   - analyze()                        — analyze recent responses, generate improvement directive
   - stats()                          — show response quality stats and top issues
   - directive()                      — show current active improvement directive
+
+terminator:
+  - list_windows()                   — list open Windows app windows
+  - focus_window(title: str)         — bring a window to the front
+  - get_window_text(title: str)      — read a window's visible text
+  - type_text(text: str)             — type text into the focused window
+  - press_keys(keys: str)            — press a key combo (e.g. "ctrl+s", "enter")
+  - launch_app(name: str)            — launch a Windows app
+  - click_element(window: str, element: str) — click a named button/element in a window
 """
 
 _VALID_TOOLS = {
@@ -154,6 +163,7 @@ _VALID_TOOLS = {
         "generate_password", "calculate_calories", "plan_workout",
     },
     "self_improvement": {"analyze", "stats", "directive"},
+    "terminator": {"list_windows", "focus_window", "get_window_text", "type_text", "press_keys", "launch_app", "click_element"},
     "system": {"system_info", "cpu_usage", "ram_usage", "browser_enable", "browser_disable", "browser_status", "speed_test", "battery_status", "recall_result"},
 }
 
