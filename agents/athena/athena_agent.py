@@ -74,7 +74,102 @@ class AthenaAgent:
             return ""
 
     # =====================================
-    # FETCH GITHUB
+    # GITHUB API (Phase 33) — direct REST, no browser
+    # =====================================
+    def _gh_headers(self) -> dict:
+        h = {"Accept": "application/vnd.github+json", "User-Agent": "JARVIS-Athena/1.0"}
+        try:
+            from config import GITHUB_TOKEN
+            if GITHUB_TOKEN:
+                h["Authorization"] = f"Bearer {GITHUB_TOKEN}"
+        except Exception:
+            pass
+        return h
+
+    def github_repos(self, query: str, n: int = 5) -> dict:
+        """Search GitHub repositories (works without token at 60/hr)."""
+        if not query:
+            return {"success": False, "message": "Search query missing.", "data": {}}
+        try:
+            r = requests.get(
+                "https://api.github.com/search/repositories",
+                params={"q": query, "sort": "stars", "order": "desc", "per_page": n},
+                headers=self._gh_headers(), timeout=12,
+            )
+            if r.status_code == 403:
+                return {"success": False, "message": "GitHub rate limit hit (60/hr without token). Set GITHUB_TOKEN for 5000/hr.", "data": {}}
+            if r.status_code != 200:
+                return {"success": False, "message": f"GitHub API error {r.status_code}.", "data": {}}
+            items = r.json().get("items", [])
+            if not items:
+                return {"success": True, "message": f"No repos found for '{query}'.", "data": {}}
+            lines = []
+            for it in items[:n]:
+                lines.append(f"{it['full_name']} ⭐{it['stargazers_count']:,} — {(it.get('description') or '')[:80]}")
+            return {"success": True,
+                    "message": f"Top GitHub repos for '{query}':\n" + "\n".join(lines),
+                    "data": {"repos": [it["full_name"] for it in items]}}
+        except Exception as e:
+            return {"success": False, "message": f"GitHub repo search failed: {e}", "data": {}}
+
+    def github_code(self, query: str, language: str = "", n: int = 5) -> dict:
+        """Search GitHub code content (REQUIRES a token)."""
+        if not query:
+            return {"success": False, "message": "Search query missing.", "data": {}}
+        try:
+            from config import GITHUB_TOKEN
+        except Exception:
+            GITHUB_TOKEN = ""
+        if not GITHUB_TOKEN:
+            return {"success": False,
+                    "message": "Code search needs a GitHub token. Set GITHUB_TOKEN in .env (github.com/settings/tokens).",
+                    "data": {}}
+        q = query + (f" language:{language}" if language else "")
+        try:
+            r = requests.get(
+                "https://api.github.com/search/code",
+                params={"q": q, "per_page": n}, headers=self._gh_headers(), timeout=12,
+            )
+            if r.status_code != 200:
+                return {"success": False, "message": f"GitHub code search error {r.status_code}.", "data": {}}
+            items = r.json().get("items", [])
+            if not items:
+                return {"success": True, "message": f"No code found for '{query}'.", "data": {}}
+            lines = [f"{it['repository']['full_name']}: {it['path']}" for it in items[:n]]
+            return {"success": True,
+                    "message": f"Code matches for '{query}':\n" + "\n".join(lines),
+                    "data": {"matches": lines}}
+        except Exception as e:
+            return {"success": False, "message": f"GitHub code search failed: {e}", "data": {}}
+
+    def github_file(self, owner: str, repo: str, path: str) -> dict:
+        """Read a file from a public GitHub repo."""
+        if not (owner and repo and path):
+            return {"success": False, "message": "Need owner, repo, and file path.", "data": {}}
+        try:
+            r = requests.get(
+                f"https://api.github.com/repos/{owner}/{repo}/contents/{path}",
+                headers=self._gh_headers(), timeout=12,
+            )
+            if r.status_code == 404:
+                return {"success": False, "message": f"File not found: {owner}/{repo}/{path}", "data": {}}
+            if r.status_code != 200:
+                return {"success": False, "message": f"GitHub API error {r.status_code}.", "data": {}}
+            data = r.json()
+            import base64
+            content = base64.b64decode(data.get("content", "")).decode("utf-8", "replace")
+            return {"success": True, "message": content[:4000],
+                    "data": {"path": path, "size": data.get("size")}}
+        except Exception as e:
+            return {"success": False, "message": f"Couldn't read file: {e}", "data": {}}
+
+    def _github_api_text(self, query: str) -> str:
+        """Quick GitHub context for deep_research — top repos via API (no browser)."""
+        r = self.github_repos(query, n=5)
+        return r.get("message", "") if r.get("success") else ""
+
+    # =====================================
+    # FETCH GITHUB (legacy browser-based — kept for deep_research fallback)
     # =====================================
     def fetch_github(self, query: str) -> str:
 
@@ -196,9 +291,9 @@ class AthenaAgent:
                 sources["finance"] = finance_text
                 print(f"[ATHENA] Finance: {len(finance_text)} chars")
 
-        # ── Source 2: GitHub ──
+        # ── Source 2: GitHub (direct API — no browser, Phase 33) ──
         print("[ATHENA] Fetching GitHub...")
-        github_text = self.fetch_github(query)
+        github_text = self._github_api_text(query)
 
         if github_text:
             sources["github"] = github_text
@@ -285,13 +380,14 @@ Report:"""
 *Generated by JARVIS Athena Research Agent*
 """
 
+        summary = report_body[:400] + "..." if len(report_body) > 400 else report_body
+
         # ── Save to EDITH memory ──
         try:
             from agents.edith.edith_agent import edith_agent
             edith_agent.store_memory(
                 content=summary,
                 label=query.lower().replace(" ", "_")[:40],
-                memory_type="research"
             )
         except Exception:
             pass
@@ -304,8 +400,6 @@ Report:"""
             if saved_path
             else "Could not save report."
         )
-
-        summary = report_body[:400] + "..." if len(report_body) > 400 else report_body
 
         return {
             "success": True,
@@ -342,6 +436,15 @@ Report:"""
                 return self.deep_research(
                     parameters.get("query", input_text)
                 )
+
+            elif action == "github_repos":
+                return self.github_repos(parameters.get("query", input_text), parameters.get("n", 5))
+
+            elif action == "github_code":
+                return self.github_code(parameters.get("query", input_text), parameters.get("language", ""))
+
+            elif action == "github_file":
+                return self.github_file(parameters.get("owner", ""), parameters.get("repo", ""), parameters.get("path", ""))
 
             return {
                 "success": False,

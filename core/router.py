@@ -1176,27 +1176,22 @@ def route_single_intent(
             0.99
         }
 
-    if text.startswith(
-        "search github for "
-    ):
+    # ── GitHub code search (Phase 33) — needs token ──
+    _m = re.match(r"(?:search|find)\s+code\s+(?:for\s+)?(.+)", text)
+    if _m:
+        return {"tool": "athena", "action": "github_code",
+                "parameters": {"query": _m.group(1).strip()}, "confidence": 0.95}
+    _m = re.match(r"github\s+code\s+(?:search\s+)?(.+)", text)
+    if _m:
+        return {"tool": "athena", "action": "github_code",
+                "parameters": {"query": _m.group(1).strip()}, "confidence": 0.95}
 
-        return {
+    # ── GitHub repo search (Phase 33) — API, no browser ──
+    _m = re.match(r"(?:search github(?: repos?| repositories)?(?: for)?|github repos?(?: for)?|search repos?(?: for)?|find(?: github)? repos?(?: for)?)\s+(.+)", text)
+    if _m:
+        return {"tool": "athena", "action": "github_repos",
+                "parameters": {"query": _m.group(1).strip()}, "confidence": 0.94}
 
-            "tool":
-            "veronica",
-
-            "action":
-            "open_url",
-
-            "parameters": {
-
-                "url":
-                text
-            },
-
-            "confidence":
-            0.99
-        }
     # =====================================
     # CLICK / OPEN RESULT BY INDEX
     # =====================================

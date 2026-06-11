@@ -1089,6 +1089,19 @@ run_test("Router: 'speed test' → system",              _route("speed test", "s
 run_test("Router: 'generate password' → friday",       _route("generate password", "friday", "generate_password"))
 run_test("Router: 'hacker news' → vision",             _route("hacker news", "vision", "hackernews"))
 
+# Phase 33 — GitHub API (Athena)
+run_test("Router: 'search github for X' → repos",  _route("search github for transformers", "athena", "github_repos"))
+run_test("Router: 'search code for X' → code",     _route("search code for async fetch", "athena", "github_code"))
+def _gh_code_no_token():
+    from agents.athena.athena_agent import athena_agent
+    # with no token configured, code search must fail gracefully (not crash)
+    import config as _c
+    if getattr(_c, "GITHUB_TOKEN", ""):
+        return None  # skip if a token IS set
+    r = athena_agent.run("", "github_code", {"query": "asyncio"})
+    return True if (not r["success"] and "token" in r["message"].lower()) else "should ask for token"
+run_test("GitHub: code search asks for token gracefully", _gh_code_no_token)
+
 # Phase 43 — routines / macros
 run_test("Router: 'create routine morning'", _route("create routine morning", "routines", "create_routine"))
 run_test("Router: 'run routine morning'",    _route("run routine morning", "routines", "run_routine"))
@@ -1390,6 +1403,12 @@ def _translate_live():
 run_test("Live: crypto price (CoinGecko)",       _live(_crypto_live))
 run_test("Live: currency convert (er-api)",      _live(_fx_live))
 run_test("Live: translate (deep-translator)",    _live(_translate_live))
+
+def _gh_repos_live():
+    from agents.athena.athena_agent import athena_agent
+    r = athena_agent.run("", "github_repos", {"query": "flask", "n": 3})
+    return True if r.get("success") and "github" in r["message"].lower() else f"repo search failed: {r.get('message','')[:60]}"
+run_test("Live: GitHub repo search (no key needed)", _live(_gh_repos_live))
 
 
 # ══════════════════════════════════════════════════════════════════════════════

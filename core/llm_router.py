@@ -39,6 +39,9 @@ ultron:
 
 athena:
   - deep_research(query: str)        — multi-source research report (GitHub + news + web)
+  - github_repos(query: str)         — search GitHub repositories
+  - github_code(query: str, language: str) — search GitHub code content (needs token)
+  - github_file(owner: str, repo: str, path: str) — read a file from a GitHub repo
 
 veronica:
   - open_url(url: str)               — open a URL or "search X for Y" string
@@ -151,7 +154,7 @@ terminator:
 
 _VALID_TOOLS = {
     "ultron": {"nmap_scan", "full_recon", "subfinder", "httpx_probe", "nuclei_scan", "system_health", "file_scan", "log_check", "export_html", "full_pipeline", "katana_crawl", "take_screenshot", "find_exploits", "search_cve", "cve_track", "cve_list", "cve_check", "cve_untrack", "correlate", "dns_lookup", "hash_target", "vt_scan", "bug_bounty", "scan_localhost", "security_summary"},
-    "athena": {"deep_research"},
+    "athena": {"deep_research", "github_repos", "github_code", "github_file"},
     "veronica": {"open_url", "open_app", "summarize_page", "get_page_text", "research", "new_tab", "switch_tab", "list_tabs", "close_tab"},
     "vision": {"search_news", "summarize_news", "quick_answer", "web_search", "sports_query", "hackernews", "crypto_price", "currency_convert", "translate", "track_flight"},
     "file": {"list_files", "open_file", "create_file", "delete_file"},
