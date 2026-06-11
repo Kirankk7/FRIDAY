@@ -66,6 +66,13 @@ NVD_API_KEY = os.getenv("NVD_API_KEY", "")
 # Free tier: 4 req/min, 500/day. File/URL/domain reputation.
 VIRUSTOTAL_API_KEY = os.getenv("VIRUSTOTAL_API_KEY", "")
 
+# ── Phase 53 — n8n automation (self-hosted) ──
+# Run n8n locally: docker run -it --rm -p 5678:5678 -v n8n_data:/home/node/.n8n n8nio/n8n
+# Each workflow with a Webhook trigger is reachable at {N8N_BASE_URL}/webhook/{path}.
+# N8N_API_KEY (optional) enables listing workflows via the REST API.
+N8N_BASE_URL = os.getenv("N8N_BASE_URL", "http://localhost:5678")
+N8N_API_KEY  = os.getenv("N8N_API_KEY", "")
+
 # NO CLOUD APIS
 # - No OpenAI
 # - No Gemini

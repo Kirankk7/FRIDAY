@@ -10,6 +10,7 @@ from agents.personal.personal_agent import personal_agent
 from agents.friday.friday_agent import friday_agent
 from agents.self_improvement.self_improvement_agent import self_improvement_agent
 from agents.terminator.terminator_agent import terminator_agent
+from agents.automation.n8n_agent import n8n_agent
 from core.scheduler import scheduler
 
 
@@ -27,6 +28,7 @@ TOOLS = {
     "scheduler": scheduler,
     "self_improvement": self_improvement_agent,
     "terminator": terminator_agent,
+    "n8n": n8n_agent,
 }
 
 
