@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>J.A.R.V.I.S — STARK INTELLIGENCE v3.0</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+
+<!-- PERSISTENT SCANLINES OVERLAY -->
+<div id="scanlines" aria-hidden="true"></div>
+
+<!-- BOOT OVERLAY -->
+<div id="boot-overlay" aria-live="polite">
+    <div id="boot-sweep"></div>
+    <div id="boot-arc">
+        <div class="boot-ring br-outer"></div>
+        <div class="boot-ring br-mid"></div>
+        <div class="boot-ring br-inner"></div>
+        <div id="boot-core-text">J.A.R.V.I.S</div>
+    </div>
+    <div id="boot-lines"></div>
+    <div id="boot-footer">
+        <span id="boot-label">INITIALIZING SYSTEMS</span>
+        <div id="boot-progress-bar">
+            <div id="boot-progress-fill"></div>
+        </div>
+    </div>
+</div>
+
+<!-- NOTIFICATIONS -->
+<div id="notification-area" aria-live="assertive"></div>
+
+<!-- ═══════════════════════════════════════ MAIN HUD ═══════════════════════════════════════ -->
+<div id="hud-container">
+
+    <!-- ══ TOP BAR ══ -->
+    <header id="top-bar">
+        <div id="top-bar-left">
+            <div id="jarvis-logo">
+                <span id="jarvis-title">J.A.R.V.I.S</span>
+                <span id="jarvis-sub">STARK INDUSTRIES · AI CORE</span>
+            </div>
+            <div id="online-pip" title="System Online"></div>
+        </div>
+
+        <div id="top-bar-center">
+            <div id="agent-badge-wrap">
+                <span id="agent-label">ACTIVE AGENT</span>
+                <span id="agent-badge">FRIDAY</span>
+            </div>
+            <div class="tb-sep"></div>
+            <div id="clock-block">
+                <span id="top-time">00:00</span>
+                <span id="top-date">SAT 07 JUN</span>
+            </div>
+            <div class="tb-sep"></div>
+            <span id="jarvis-version">v3.0</span>
+        </div>
+
+        <div id="top-bar-right">
+            <button id="wake-btn" class="hud-btn" title="Wake Word" aria-label="Toggle wake word">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3Z"/><path d="M19 10v1a7 7 0 0 1-14 0v-1M12 19v3M8 22h8"/></svg>
+            </button>
+            <button id="vloop-btn" class="hud-btn" title="Voice Loop" aria-label="Toggle voice loop">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14M7 23l-4-4 4-4M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+            </button>
+            <button id="sidebar-open-btn" class="hud-btn" title="Refresh Status" aria-label="Refresh status">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+            </button>
+        </div>
+    </header>
+
+    <!-- ══ MAIN WORKSPACE ══ -->
+    <div id="main-workspace">
+
+        <!-- LEFT PANEL -->
+        <aside id="left-panel">
+            <div class="p-title">◈ SYSTEM CORE</div>
+            <div class="dr"><span class="dk">STATUS</span><span class="dv green" id="lp-status">ONLINE</span></div>
+            <div class="dr"><span class="dk">AGENT</span><span class="dv accent" id="lp-agent">FRIDAY</span></div>
+            <div class="dr"><span class="dk">MODE</span><span class="dv" id="lp-mode">LISTENING</span></div>
+            <div class="dr"><span class="dk">NEURAL</span><span class="dv green">ACTIVE</span></div>
+
+            <div class="p-sep"></div>
+            <div class="p-title">◈ SIGNAL TRACE</div>
+            <div id="signal-wrap">
+                <canvas id="signal-wave" width="164" height="50" aria-hidden="true"></canvas>
+            </div>
+
+            <div class="p-sep"></div>
+            <div class="p-title">◈ SYSTEMS</div>
+            <div class="mr"><span class="mdot ok"></span><span class="mlabel">NEURAL ENGINE</span></div>
+            <div class="mr"><span class="mdot ok"></span><span class="mlabel">WHISPER STT</span></div>
+            <div class="mr"><span class="mdot ok"></span><span class="mlabel">KOKORO TTS</span></div>
+            <div class="mr"><span class="mdot ok"></span><span class="mlabel">VECTOR MEMORY</span></div>
+            <div class="mr"><span class="mdot ok"></span><span class="mlabel">AGENTS ×10</span></div>
+
+            <div class="p-sep"></div>
+            <div class="p-title">◈ TELEMETRY</div>
+            <div class="tgrid">
+                <div class="tcell"><span class="tlbl">UPTIME</span><span class="tval" id="lp-uptime">00:00</span></div>
+                <div class="tcell"><span class="tlbl">MSGS</span><span class="tval" id="lp-msgs">0</span></div>
+            </div>
+        </aside>
+
+        <!-- CENTER COLUMN -->
+        <main id="center-column">
+
+            <!-- ARC REACTOR -->
+            <div id="orb-system">
+                <div class="hc c-tl"></div>
+                <div class="hc c-tr"></div>
+                <div class="hc c-bl"></div>
+                <div class="hc c-br"></div>
+                <div class="card-n">N</div>
+                <div class="card-e">E</div>
+                <div class="card-s">S</div>
+                <div class="card-w">W</div>
+                <div id="orb-glow"></div>
+                <div id="orb-core"><div id="orb-pulse"></div></div>
+                <canvas id="hud-ring" width="320" height="320" aria-hidden="true"></canvas>
+            </div>
+
+            <!-- COMMUNICATION LOG -->
+            <div id="chat-container">
+                <div id="chat-header">
+                    <div class="ch-tl"></div>
+                    <div class="ch-tr"></div>
+                    <span class="ch-title">◈ COMMUNICATION LOG</span>
+                    <button id="clear-history-btn" class="ch-clear" title="Clear history" aria-label="Clear chat history">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+                        CLEAR
+                    </button>
+                </div>
+                <div id="chat-messages"></div>
+            </div>
+
+        </main>
+
+        <!-- RIGHT PANEL — sidebar always visible -->
+        <aside id="sidebar">
+            <div id="sidebar-header">
+                <span class="p-title">◈ SYS STATUS</span>
+                <button id="sidebar-close-btn" style="display:none" aria-label="Close sidebar"></button>
+            </div>
+
+            <div class="sidebar-row"><span class="sidebar-label">OLLAMA</span><span id="sb-ollama" class="sidebar-value">---</span></div>
+            <div class="sidebar-row"><span class="sidebar-label">AGENT</span><span id="sb-agent" class="sidebar-value accent">FRIDAY</span></div>
+            <div class="sidebar-row"><span class="sidebar-label">TASKS</span><span id="sb-tasks" class="sidebar-value">0</span></div>
+            <div class="sidebar-row"><span class="sidebar-label">REMINDERS</span><span id="sb-reminders" class="sidebar-value">0</span></div>
+            <div class="sidebar-row"><span class="sidebar-label">EVENTS TODAY</span><span id="sb-events" class="sidebar-value">0</span></div>
+
+            <div class="sidebar-divider"></div>
+            <div class="p-title">◈ AGENT FLEET</div>
+            <div id="agent-fleet">
+                <div class="agent-chip" data-agent="friday">FRIDAY</div>
+                <div class="agent-chip" data-agent="athena">ATHENA</div>
+                <div class="agent-chip" data-agent="ultron">ULTRON</div>
+                <div class="agent-chip" data-agent="veronica">VERONICA</div>
+                <div class="agent-chip" data-agent="vision">VISION</div>
+                <div class="agent-chip" data-agent="edith">EDITH</div>
+                <div class="agent-chip" data-agent="file">FILE</div>
+            </div>
+
+            <div class="sidebar-divider"></div>
+            <div class="p-title">◈ INTEGRITY</div>
+            <div class="ibar"><span class="ibl">NEURAL</span><div class="itrack"><div class="ifill" style="width:94%"></div></div><span class="ipct">94%</span></div>
+            <div class="ibar"><span class="ibl">MEMORY</span><div class="itrack"><div class="ifill" style="width:81%"></div></div><span class="ipct">81%</span></div>
+            <div class="ibar"><span class="ibl">COMMS</span><div class="itrack"><div class="ifill" style="width:100%"></div></div><span class="ipct">100%</span></div>
+        </aside>
+
+    </div>
+
+    <!-- ══ INPUT HUD ══ -->
+    <div id="input-hud">
+        <div id="input-hud-inner">
+            <div id="status-badge">
+                <span id="status-indicator"></span>
+                <span id="status-text">LISTENING</span>
+            </div>
+            <div id="input-area">
+                <input id="user-input" type="text" placeholder="[ ENTER COMMAND ]" autocomplete="off" spellcheck="false" aria-label="Command input" />
+                <button id="mic-btn" class="control-btn" title="Voice input" aria-label="Voice input">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3Z"/><path d="M19 10v1a7 7 0 0 1-14 0v-1M12 19v3M8 22h8"/></svg>
+                </button>
+                <button id="send-btn" class="control-btn" title="Send" aria-label="Send command">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                </button>
+                <button id="stop-btn" class="control-btn" title="Stop (Alt+S)" aria-label="Stop speaking">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
+                </button>
+            </div>
+            <div id="input-hint">ENTER to send &bull; ALT+S to stop &bull; click mic to record</div>
+        </div>
+    </div>
+
+</div>
+
+<script src="https://unpkg.com/event-source-polyfill@1.0.26/src/eventsource.min.js"></script>
+<script src="/static/js/script.js"></script>
+</body>
+</html>

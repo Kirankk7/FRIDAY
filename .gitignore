@@ -1,0 +1,58 @@
+# ─── SECRETS — never commit ───────────────────────────────────────────────
+.env
+*.key
+*.pem
+
+# ─── Python ───────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# ─── Runtime state / user data (regenerated at runtime) ───────────────────
+data/
+memory.json
+vector_memory.json
+user_profile.json
+emotion_memory.json
+reflection_memory.json
+friday_data.json
+edith_memory.json
+personal_memory.json
+scheduled_tasks.json
+generated_tools.py
+
+# ─── Logs ─────────────────────────────────────────────────────────────────
+jarvis.log*
+*.log
+flask_err*.txt
+flask_out*.txt
+jarvis_err.txt
+jarvis_log.txt
+kw_err.txt
+kw_out.txt
+notes.txt
+
+# ─── TTS / audio artifacts ────────────────────────────────────────────────
+temp_*.mp3
+temp_*.wav
+voice_*.mp3
+voice_*.wav
+test_k.wav
+test_sub.wav
+*.nemo
+
+# ─── Test / build outputs ─────────────────────────────────────────────────
+test_report_*.html
+graphify-out/
+workspace/
+
+# ─── OS / editor / tooling ────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+.claude/
+*.swp

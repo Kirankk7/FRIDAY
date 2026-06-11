@@ -1,0 +1,318 @@
+from core.reflection import (
+    reflect_on_response,
+    save_reflection
+)
+from core.speech_cleaner import (
+    clean_response
+)
+from core.llm import ask_llm, ask_llm_stream
+from core.router import route
+from core.executor import (
+    execute_plan
+)
+from core.state import set_last_agent
+
+
+def run_cognitive_loop(
+    user_input: str,
+    max_iterations=1,
+    enriched_input: str = None
+):
+
+    """
+    FRIDAY Cognitive Loop
+    Supports:
+
+    - router
+    - veronica
+    - workflow
+    - multi-step actions
+    """
+
+    try:
+
+        # Default voice = FRIDAY for chat/general replies. Real tools override
+        # this via executor.set_last_agent(tool). Prevents a stale tool agent
+        # (e.g. a scheduled Ultron task) speaking Friday's lines.
+        set_last_agent("friday")
+
+        # ==========================
+        # ROUTER
+        # ==========================
+        decision = route(
+            user_input
+        )
+
+        print(
+            f"[cog] route: {decision.get('tool')}.{decision.get('action')} conf={decision.get('confidence')}"
+        )
+
+        # Clarification — speak the prompt directly, skip tool dispatch + LLM
+        if decision.get("clarify"):
+            msg = decision.get("parameters", {}).get(
+                "task", "Could you rephrase that, boss?"
+            )
+            return clean_response(msg)
+
+        tool = decision.get(
+            "tool",
+            "chat"
+        )
+
+        action = decision.get(
+            "action",
+            ""
+        )
+
+        parameters = decision.get(
+            "parameters",
+            {}
+        )
+
+        # ==========================
+        # WORKFLOW
+        # ==========================
+        if (
+            tool
+            == "workflow"
+        ):
+
+            steps = (
+                parameters.get(
+                    "steps",
+                    []
+                )
+            )
+
+            results = (
+                execute_plan(
+                    steps
+                )
+            )
+
+            # Multi-agent: label each result by agent
+            if len(steps) > 1:
+                labeled = []
+                for i, (step, res) in enumerate(zip(steps, results)):
+                    agent = step.get("tool", "").upper()
+                    labeled.append(f"[{agent}] {res}")
+                response = "\n\n".join(labeled)
+            else:
+                response = (
+                    "\n".join(
+                        results
+                    )
+                )
+
+        # ==========================
+        # NORMAL TOOL
+        # ==========================
+        else:
+
+            plan = [
+
+                {
+                    "tool":
+                    tool,
+
+                    "action":
+                    action,
+
+                    "parameters":
+                    parameters
+                }
+            ]
+
+            results = (
+                execute_plan(
+                    plan
+                )
+            )
+
+            response = (
+                results[0]
+                if results
+                else
+                "Done."
+            )
+
+        # ==========================
+        # NEWS CONTEXT → spoken LLM summary
+        # ==========================
+        if response and response.startswith("__NEWS_CONTEXT__"):
+            ctx = response.replace("__NEWS_CONTEXT__", "").strip()
+            news_prompt = (
+                f"{ctx}\n\n"
+                f"Using the headlines above, answer the query in 1-2 spoken sentences. "
+                f"If the query asks about next/upcoming events, pick the SOONEST date after Today. "
+                f"Be direct and specific (include opponent and date if available). "
+                f"No 'Based on the headlines'. No markdown. No lists.:"
+            )
+            response = ask_llm(news_prompt) or "Couldn't find anything on that, boss."
+
+        # ==========================
+        # FALLBACK CHAT — direct LLM, no re-routing
+        # ==========================
+        dead_responses = {
+            "done.", "done",
+            "okay.", "okay",
+            "ok.", "ok", ""
+        }
+
+        if (
+            not response
+            or
+            len(response.strip()) < 2
+            or
+            response.strip().lower()
+            in dead_responses
+        ):
+            # Use enriched_input (personality + context + user message) directly
+            llm_input = enriched_input if enriched_input else user_input
+            response = ask_llm(llm_input) or "Something went wrong, boss."
+
+        # ==========================
+        # REFLECTION
+        # ==========================
+        reflection = (
+            reflect_on_response(
+                user_input,
+                response
+            )
+        )
+
+        save_reflection(
+            reflection
+        )
+
+        return clean_response(
+            response
+        )
+
+    except Exception as e:
+
+        print(f"[cog] error: {e}")
+
+        return (
+            "Hey boss, "
+            "I hit a snag. "
+            "Try again?"
+        )
+
+
+def run_cognitive_loop_stream(
+    user_input: str,
+    enriched_input: str = None
+):
+    """
+    Streaming variant of run_cognitive_loop.
+    - Chat/LLM path: yields real tokens as Ollama generates them
+    - Tool path: executes normally, yields full result in one chunk
+    """
+    try:
+        # Default voice = FRIDAY; real tools override via executor.
+        set_last_agent("friday")
+
+        decision = route(user_input)
+
+        print(
+            f"[cog:stream] route: {decision.get('tool')}.{decision.get('action')}"
+        )
+
+        # Clarification — yield prompt directly, skip tool dispatch + LLM
+        if decision.get("clarify"):
+            msg = decision.get("parameters", {}).get(
+                "task", "Could you rephrase that, boss?"
+            )
+            yield clean_response(msg)
+            return
+
+        tool       = decision.get("tool", "chat")
+        action     = decision.get("action", "")
+        parameters = decision.get("parameters", {})
+
+        _dead = {"done.", "done", "okay.", "okay", "ok.", "ok", ""}
+
+        def _llm_stream(prompt):
+            """Yield cleaned tokens from Ollama stream."""
+            full = []
+            for token in ask_llm_stream(prompt):
+                full.append(token)
+                yield token
+            return "".join(full)
+
+        # ==========================
+        # CHAT — real token stream
+        # ==========================
+        if tool == "chat":
+            llm_input = enriched_input if enriched_input else user_input
+            full = []
+            for token in ask_llm_stream(llm_input):
+                full.append(token)
+                yield token
+            response = "".join(full)
+            reflection = reflect_on_response(user_input, response)
+            save_reflection(reflection)
+            return
+
+        # ==========================
+        # WORKFLOW
+        # ==========================
+        if tool == "workflow":
+            steps = parameters.get("steps", [])
+            results = execute_plan(steps)
+            if len(steps) > 1:
+                labeled = [
+                    f"[{s.get('tool','').upper()}] {r}"
+                    for s, r in zip(steps, results)
+                ]
+                response = "\n\n".join(labeled)
+            else:
+                response = "\n".join(results)
+
+        # ==========================
+        # NORMAL TOOL
+        # ==========================
+        else:
+            plan = [{"tool": tool, "action": action, "parameters": parameters}]
+            results = execute_plan(plan)
+            response = results[0] if results else "Done."
+
+        # ==========================
+        # NEWS CONTEXT → fast spoken LLM summary (streaming)
+        # ==========================
+        if response and response.startswith("__NEWS_CONTEXT__"):
+            # Parse headlines block, synthesize spoken answer via LLM stream
+            ctx = response.replace("__NEWS_CONTEXT__", "").strip()
+            news_prompt = (
+                f"{ctx}\n\n"
+                f"Using the headlines above, answer the query in 1-2 spoken sentences. "
+                f"If the query asks about next/upcoming events, pick the SOONEST date after Today. "
+                f"Be direct and specific (include opponent and date if available). "
+                f"No 'Based on the headlines'. No markdown. No lists.:"
+            )
+            full = []
+            for token in ask_llm_stream(news_prompt):
+                full.append(token)
+                yield token
+            response = "".join(full)
+
+        # ==========================
+        # DEAD RESPONSE → LLM stream
+        # ==========================
+        elif not response or len(response.strip()) < 2 or response.strip().lower() in _dead:
+            llm_input = enriched_input if enriched_input else user_input
+            full = []
+            for token in ask_llm_stream(llm_input):
+                full.append(token)
+                yield token
+            response = "".join(full)
+        else:
+            yield clean_response(response)
+
+        reflection = reflect_on_response(user_input, response)
+        save_reflection(reflection)
+
+    except Exception as e:
+        print(f"[cog:stream] error: {e}")
+        yield "Hey boss, I hit a snag. Try again?"
