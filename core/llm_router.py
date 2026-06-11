@@ -58,6 +58,10 @@ vision:
   - web_search(query: str)           — live web search via DuckDuckGo (general "search the web for X")
   - sports_query(query: str)         — football match dates, results, standings
   - hackernews(n: int)               — top N Hacker News stories
+  - crypto_price(coins: str)         — live crypto prices (bitcoin/eth/sol...)
+  - currency_convert(amount: float, from: str, to: str) — live FX conversion
+  - translate(text: str, target: str) — translate text to a language
+  - track_flight(flight: str)        — live flight tracking by flight number
 
 file:
   - list_files(path: str)            — list files in a folder
@@ -129,7 +133,7 @@ _VALID_TOOLS = {
     "ultron": {"nmap_scan", "full_recon", "subfinder", "httpx_probe", "nuclei_scan", "system_health", "file_scan", "log_check", "export_html", "full_pipeline", "katana_crawl", "take_screenshot", "find_exploits", "search_cve", "cve_track", "cve_list", "cve_check", "cve_untrack", "correlate", "dns_lookup", "hash_target", "vt_scan", "bug_bounty", "scan_localhost", "security_summary"},
     "athena": {"deep_research"},
     "veronica": {"open_url", "open_app", "summarize_page", "get_page_text", "research", "new_tab", "switch_tab", "list_tabs", "close_tab"},
-    "vision": {"search_news", "summarize_news", "quick_answer", "web_search", "sports_query", "hackernews"},
+    "vision": {"search_news", "summarize_news", "quick_answer", "web_search", "sports_query", "hackernews", "crypto_price", "currency_convert", "translate", "track_flight"},
     "file": {"list_files", "open_file", "create_file", "delete_file"},
     "edith": {"store_memory", "search_memory", "recall_memory", "get_by_label"},
     "personal": {"set_fact", "get_all"},
