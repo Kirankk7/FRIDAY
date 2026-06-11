@@ -18,6 +18,10 @@ markitdown>=0.1.6
 # Web search (DuckDuckGo, no API key)
 ddgs>=9.0.0
 
+# Phase 41 — translate / flight (crypto + FX use plain requests, no key)
+deep-translator>=1.11.4
+FlightRadarAPI>=1.5.1
+
 # STT
 faster-whisper>=1.0.0
 

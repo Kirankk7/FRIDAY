@@ -1089,6 +1089,12 @@ run_test("Router: 'speed test' → system",              _route("speed test", "s
 run_test("Router: 'generate password' → friday",       _route("generate password", "friday", "generate_password"))
 run_test("Router: 'hacker news' → vision",             _route("hacker news", "vision", "hackernews"))
 
+# Phase 41 — new caps routing
+run_test("Router: 'convert 500 usd to eur' → FX",   _route("convert 500 usd to eur", "vision", "currency_convert"))
+run_test("Router: 'translate good morning to french'", _route("translate good morning to french", "vision", "translate"))
+run_test("Router: 'bitcoin price' → crypto",        _route("bitcoin price", "vision", "crypto_price"))
+run_test("Router: 'track flight EK202' → flight",   _route("track flight ek202", "vision", "track_flight"))
+
 # Tool recall + sports disambiguation
 run_test("Router: 'what was the last result' → recall",_route("what was the last result", "system", "recall_result"))
 run_test("Router: 'what did that scan find' → recall", _route("what did that scan find", "system", "recall_result"))
@@ -1261,6 +1267,23 @@ run_test("Live: DuckDuckGo web_search",          _live(_ddgs_live))
 run_test("Live: Football standings",             _live(_football_live))
 run_test("Live: NVD search_cve",                 _live(_nvd_live))
 run_test("Live: DNS lookup",                     _live(_dns_live))
+
+def _crypto_live():
+    from agents.vision.vision_agent import vision_agent as _v
+    r = _v.run("", "crypto_price", {"coins": "bitcoin"})
+    return True if r.get("success") and "$" in r["message"] else f"crypto failed: {r.get('message','')[:60]}"
+def _fx_live():
+    from agents.vision.vision_agent import vision_agent as _v
+    r = _v.run("", "currency_convert", {"amount": 100, "from": "USD", "to": "EUR"})
+    return True if r.get("success") and "EUR" in r["message"] else f"fx failed: {r.get('message','')[:60]}"
+def _translate_live():
+    from agents.vision.vision_agent import vision_agent as _v
+    r = _v.run("", "translate", {"text": "hello", "target": "spanish"})
+    return True if r.get("success") and r["message"].strip() else f"translate failed: {r.get('message','')[:60]}"
+
+run_test("Live: crypto price (CoinGecko)",       _live(_crypto_live))
+run_test("Live: currency convert (er-api)",      _live(_fx_live))
+run_test("Live: translate (deep-translator)",    _live(_translate_live))
 
 
 # ══════════════════════════════════════════════════════════════════════════════

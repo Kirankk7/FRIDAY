@@ -384,6 +384,106 @@ Answer:"""
             "data": result.get("data", {})
         }
 
+    # =====================================
+    # PHASE 41 — NEW CAPABILITIES BATCH
+    # =====================================
+    def crypto_price(self, coins: str = "bitcoin") -> dict:
+        """Live crypto prices via CoinGecko (free, no key)."""
+        _alias = {
+            "btc": "bitcoin", "eth": "ethereum", "bnb": "binancecoin",
+            "sol": "solana", "xrp": "ripple", "ada": "cardano",
+            "doge": "dogecoin", "dot": "polkadot", "matic": "matic-network",
+            "ltc": "litecoin", "link": "chainlink", "avax": "avalanche-2",
+        }
+        ids = [_alias.get(c.strip().lower(), c.strip().lower())
+               for c in re.split(r"[,\s]+", coins) if c.strip()]
+        ids = ids[:8] or ["bitcoin"]
+        try:
+            r = requests.get(
+                "https://api.coingecko.com/api/v3/simple/price",
+                params={"ids": ",".join(ids), "vs_currencies": "usd",
+                        "include_24hr_change": "true"},
+                timeout=10,
+            )
+            data = r.json()
+            if not data:
+                return {"success": False, "message": f"No price data for {coins}.", "data": {}}
+            parts = []
+            for cid, vals in data.items():
+                price = vals.get("usd")
+                chg = vals.get("usd_24h_change")
+                chg_s = f" ({chg:+.1f}% 24h)" if isinstance(chg, (int, float)) else ""
+                parts.append(f"{cid.replace('-', ' ').title()}: ${price:,}{chg_s}")
+            return {"success": True, "message": " · ".join(parts), "data": data}
+        except Exception as e:
+            return {"success": False, "message": f"Crypto lookup failed: {e}", "data": {}}
+
+    def currency_convert(self, amount: float, frm: str, to: str) -> dict:
+        """Live FX conversion via open.er-api.com (free, no key)."""
+        frm, to = frm.upper().strip(), to.upper().strip()
+        try:
+            r = requests.get(f"https://open.er-api.com/v6/latest/{frm}", timeout=10)
+            data = r.json()
+            if data.get("result") != "success":
+                return {"success": False, "message": f"Unknown currency '{frm}'.", "data": {}}
+            rate = data.get("rates", {}).get(to)
+            if rate is None:
+                return {"success": False, "message": f"Unknown currency '{to}'.", "data": {}}
+            converted = amount * rate
+            return {
+                "success": True,
+                "message": f"{amount:,.2f} {frm} = {converted:,.2f} {to} (rate {rate:.4f})",
+                "data": {"amount": amount, "from": frm, "to": to, "rate": rate, "result": converted},
+            }
+        except Exception as e:
+            return {"success": False, "message": f"Currency conversion failed: {e}", "data": {}}
+
+    def translate(self, text: str, target: str = "en") -> dict:
+        """Translate text via deep-translator (Google backend, no key)."""
+        if not text:
+            return {"success": False, "message": "Nothing to translate.", "data": {}}
+        _lang = {
+            "french": "fr", "spanish": "es", "german": "de", "italian": "it",
+            "portuguese": "pt", "japanese": "ja", "chinese": "zh-CN", "korean": "ko",
+            "russian": "ru", "arabic": "ar", "hindi": "hi", "english": "en",
+            "dutch": "nl", "turkish": "tr", "tamil": "ta", "telugu": "te",
+        }
+        tgt = _lang.get(target.lower().strip(), target.lower().strip())
+        try:
+            from deep_translator import GoogleTranslator
+            out = GoogleTranslator(source="auto", target=tgt).translate(text)
+            return {"success": True, "message": out, "data": {"target": tgt, "original": text}}
+        except Exception as e:
+            return {"success": False, "message": f"Translation failed: {e}", "data": {}}
+
+    def track_flight(self, flight_no: str) -> dict:
+        """Live flight tracking via FlightRadar24 (no key)."""
+        if not flight_no:
+            return {"success": False, "message": "Flight number missing.", "data": {}}
+        flight_no = flight_no.upper().replace(" ", "")
+        try:
+            try:
+                from flightradar24 import FlightRadar24API   # FlightRadarAPI >=1.5
+            except ImportError:
+                from FlightRadar24 import FlightRadar24API    # older versions
+            api = FlightRadar24API()
+            flights = api.get_flights()
+            match = next((f for f in flights if getattr(f, "callsign", "") == flight_no
+                          or getattr(f, "number", "") == flight_no), None)
+            if not match:
+                return {"success": False,
+                        "message": f"Flight {flight_no} not currently airborne / not found.", "data": {}}
+            details = (
+                f"Flight {flight_no}: {getattr(match,'origin_airport_iata','?')} → "
+                f"{getattr(match,'destination_airport_iata','?')}, "
+                f"alt {getattr(match,'altitude','?')}ft, "
+                f"speed {getattr(match,'ground_speed','?')}kts, "
+                f"heading {getattr(match,'heading','?')}°"
+            )
+            return {"success": True, "message": details, "data": {"flight": flight_no}}
+        except Exception as e:
+            return {"success": False, "message": f"Flight tracking failed: {e}", "data": {}}
+
     def run(self, input_text: str, action: str = None, parameters: dict = None) -> dict:
         try:
             parameters = parameters or {}
@@ -401,6 +501,18 @@ Answer:"""
                 return self.web_search(parameters.get("query", input_text), parameters.get("n", 5))
             elif action == "hackernews":
                 return self.hackernews(parameters.get("n", 5))
+            elif action == "crypto_price":
+                return self.crypto_price(parameters.get("coins", parameters.get("coin", "bitcoin")))
+            elif action == "currency_convert":
+                return self.currency_convert(
+                    float(parameters.get("amount", 1)),
+                    parameters.get("from", "USD"),
+                    parameters.get("to", "EUR"),
+                )
+            elif action == "translate":
+                return self.translate(parameters.get("text", ""), parameters.get("target", "en"))
+            elif action == "track_flight":
+                return self.track_flight(parameters.get("flight", parameters.get("flight_no", "")))
             return {"success": False, "message": f"Unsupported vision action: {action}", "data": {}}
         except Exception as e:
             return {"success": False, "message": f"Vision agent error: {str(e)}", "data": {}}
