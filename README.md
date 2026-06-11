@@ -1,4 +1,4 @@
-# JARVIS — Local AI Personal Assistant
+# FRIDAY (JARVIS) — Local AI Personal Assistant
 
 A privacy-first, fully-local AI assistant with a multi-agent architecture, voice I/O, and a built-in cybersecurity toolkit. Runs entirely on your own machine — no cloud inference, no API keys for the core LLM.
 
