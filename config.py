@@ -104,6 +104,12 @@ N8N_API_KEY  = os.getenv("N8N_API_KEY", "")
 # Windows; tools degrade gracefully (status=no_backend) when neither is present.
 HT_BACKEND = os.getenv("HT_BACKEND", "auto")
 
+# ── Phase 52 #8 — optional access token (auth-ready) ──
+# JARVIS binds to 127.0.0.1 (localhost only), so this is OFF by default.
+# Set JARVIS_TOKEN to require it on every request (header X-JARVIS-Token or
+# ?token=…) — useful if you ever expose the app via a reverse proxy / 0.0.0.0.
+JARVIS_TOKEN = os.getenv("JARVIS_TOKEN", "")
+
 # NO CLOUD APIS
 # - No OpenAI
 # - No Gemini

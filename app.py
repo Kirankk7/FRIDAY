@@ -106,6 +106,17 @@ if VOICE_LOOP_AUTO_START:
     print("[voice_loop] Auto-started (VOICE_LOOP_AUTO_START=True)")
 
 
+@app.before_request
+def _token_guard():
+    """Phase 52 #8 — opt-in token gate. No-op unless config.JARVIS_TOKEN is set."""
+    from config import JARVIS_TOKEN
+    if not JARVIS_TOKEN:
+        return  # localhost default — no auth
+    supplied = request.headers.get("X-JARVIS-Token") or request.args.get("token", "")
+    if supplied != JARVIS_TOKEN:
+        return jsonify({"error": "unauthorized"}), 401
+
+
 @app.route("/")
 def home():
     return render_template("index.html")

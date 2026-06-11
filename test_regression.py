@@ -1617,6 +1617,50 @@ run_test("Critic: gates to high-stakes + len",  _critic_gating)
 run_test("Critic: PASS keeps draft",            _critic_pass_keeps_draft)
 run_test("Critic: revises when issues found",   _critic_revises_on_issues)
 
+# Phase 52 #6 — think() wired into Athena
+def _think_wired_into_athena():
+    import inspect
+    from agents.athena import athena_agent as _A
+    src = inspect.getsource(_A)
+    return True if ("from core.think import think" in src and "plan_block" in src) \
+        else "think() not wired into athena deep_research"
+
+def _think_returns_str_safe():
+    from core.think import think
+    return True if think("") == "" else "think('') should be ''"
+
+run_test("Think: wired into Athena synthesis", _think_wired_into_athena)
+run_test("Think: empty problem safe",          _think_returns_str_safe)
+
+# Phase 52 #8 — opt-in token guard
+def _token_guard_off_by_default():
+    import config, app as _app
+    saved = config.JARVIS_TOKEN
+    try:
+        config.JARVIS_TOKEN = ""
+        c = _app.app.test_client()
+        return True if c.get("/status").status_code == 200 else "localhost default should allow"
+    finally:
+        config.JARVIS_TOKEN = saved
+
+def _token_guard_blocks_without_token():
+    import config, app as _app
+    saved = config.JARVIS_TOKEN
+    try:
+        config.JARVIS_TOKEN = "secret123"
+        c = _app.app.test_client()
+        no = c.get("/status").status_code
+        bad = c.get("/status", headers={"X-JARVIS-Token": "wrong"}).status_code
+        ok = c.get("/status", headers={"X-JARVIS-Token": "secret123"}).status_code
+        if no != 401 or bad != 401:
+            return f"should 401 without/wrong token (got {no}/{bad})"
+        return True if ok == 200 else f"correct token should pass (got {ok})"
+    finally:
+        config.JARVIS_TOKEN = saved
+
+run_test("TokenGuard: off by default (localhost)",  _token_guard_off_by_default)
+run_test("TokenGuard: blocks wrong/missing token",  _token_guard_blocks_without_token)
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # 28. LIVE API INTEGRATIONS (network — skip if offline)
