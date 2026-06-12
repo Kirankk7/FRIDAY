@@ -1488,6 +1488,93 @@ run_test("RAG: ask with no index is graceful", _rag_ask_no_index)
 run_test("RAG: ask returns grounded + source", _rag_ask_grounded)
 run_test("RAG: router (index/ask/status)",     _rag_router)
 
+# Phase 59 — defensive / blue-team host monitor
+def _defense_baseline_then_clear():
+    from agents.ultron.ultron_agent import ultron_agent as U
+    import os as _os
+    bl = "data/defense_baseline.json"
+    saved = _os.path.exists(bl)
+    backup = open(bl, "rb").read() if saved else None
+    try:
+        if saved: _os.remove(bl)
+        r1 = U.defensive_scan()                 # no baseline → sets it
+        if "baseline" not in r1["message"].lower():
+            return f"first scan should set baseline: {r1['message']!r}"
+        r2 = U.defensive_scan()                 # now compares → all clear-ish
+        return True if r2["success"] and "since your baseline" in r2["message"].lower() \
+            or "all clear" in r2["message"].lower() else f"second scan odd: {r2['message']!r}"
+    finally:
+        if backup is not None:
+            open(bl, "wb").write(backup)
+        elif _os.path.exists(bl):
+            _os.remove(bl)
+
+def _defense_flags_suspicious():
+    from agents.ultron.ultron_agent import ultron_agent as U
+    import os as _os
+    bl = "data/defense_baseline.json"
+    saved = _os.path.exists(bl)
+    backup = open(bl, "rb").read() if saved else None
+    orig = U._defense_snapshot
+    try:
+        # baseline = clean; current = backdoor port 4444 + ncat running
+        clean = {"ports": [80, 443], "procs": ["chrome.exe"]}
+        import json as _json
+        _os.makedirs("data", exist_ok=True)
+        open(bl, "w", encoding="utf-8").write(_json.dumps(clean))
+        U._defense_snapshot = lambda: {"ports": [80, 443, 4444], "procs": ["chrome.exe", "ncat.exe"]}
+        r = U.defensive_scan()
+        m = r["message"].lower()
+        return True if ("red flag" in m and "4444" in r["message"] and "ncat" in m) \
+            else f"suspicious not flagged: {r['message']!r}"
+    finally:
+        U._defense_snapshot = orig
+        if backup is not None:
+            open(bl, "wb").write(backup)
+        elif _os.path.exists(bl):
+            _os.remove(bl)
+
+def _defense_router():
+    a = route_single_intent("defensive scan")
+    b = route_single_intent("check for threats")
+    c = route_single_intent("set security baseline")
+    return True if (a.get("action") == "defensive_scan" and b.get("action") == "defensive_scan"
+                    and c.get("action") == "set_security_baseline") else \
+        f"routing: {a.get('action')},{b.get('action')},{c.get('action')}"
+
+run_test("Defense: baseline then compare",     _defense_baseline_then_clear)
+run_test("Defense: flags backdoor port + tool",_defense_flags_suspicious)
+run_test("Defense: router (scan/baseline)",    _defense_router)
+
+# Phase 59 — multimodal vision (graceful without a model)
+def _vision_missing_file():
+    from core.vision_model import describe_image
+    r = describe_image("nope_not_here.png")
+    return True if not r["success"] and "find that image" in r["message"].lower() else f"wrong: {r}"
+
+def _vision_non_image():
+    from core.vision_model import describe_image
+    import tempfile, os as _os
+    p = _os.path.join(tempfile.gettempdir(), "vtest.txt")
+    open(p, "w").write("x")
+    try:
+        r = describe_image(p)
+        return True if not r["success"] and "image file" in r["message"].lower() else f"wrong: {r}"
+    finally:
+        try: _os.remove(p)
+        except Exception: pass
+
+def _vision_router():
+    a = route_single_intent("what's on my screen")
+    b = route_single_intent("describe this image vacation.png")
+    return True if (a.get("action") == "screenshot_describe"
+                    and b.get("action") == "describe_image") else \
+        f"routing: {a.get('action')},{b.get('action')}"
+
+run_test("Vision: missing image graceful",     _vision_missing_file)
+run_test("Vision: rejects non-image file",     _vision_non_image)
+run_test("Vision: router (screen/image)",      _vision_router)
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # 27. LOGGER + THINK + CONFIG KEYS

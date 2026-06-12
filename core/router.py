@@ -683,6 +683,29 @@ def route_single_intent(
     if _m:
         return {"tool": "ultron", "action": "bug_bounty", "parameters": {"target": _m.group(1).strip()}, "confidence": 0.98}
 
+    # Phase 59 — multimodal vision (image / screenshot understanding)
+    if text in ("what's on my screen", "whats on my screen", "what is on my screen",
+                "describe my screen", "look at my screen", "read my screen",
+                "what's on screen", "analyze my screen"):
+        return {"tool": "vision", "action": "screenshot_describe", "parameters": {}, "confidence": 0.96}
+
+    _img = re.match(
+        r"(?:describe|what'?s? (?:in|on)|look at|analy[sz]e|read|caption)\s+(?:this\s+|the\s+)?(?:image|picture|photo|screenshot|img)?\s*(.+\.(?:png|jpe?g|gif|bmp|webp))",
+        text, re.IGNORECASE)
+    if _img:
+        return {"tool": "vision", "action": "describe_image",
+                "parameters": {"path": _img.group(1).strip().strip('"\'')}, "confidence": 0.95}
+
+    # Phase 59 — defensive / blue-team host monitor
+    if text in ("defensive scan", "defense scan", "blue team scan", "check my system",
+                "check my system security", "scan my system", "monitor my system",
+                "am i compromised", "is my machine compromised", "check for threats",
+                "security check", "watch my system"):
+        return {"tool": "ultron", "action": "defensive_scan", "parameters": {}, "confidence": 0.97}
+    if text in ("set security baseline", "set baseline", "save security baseline",
+                "baseline my system", "this is normal", "remember my system state"):
+        return {"tool": "ultron", "action": "set_security_baseline", "parameters": {}, "confidence": 0.97}
+
     # Phase 36 — HackingTool fleet (scoped allowlist, native/WSL/Docker)
     if text in ("ht preflight", "hackingtool preflight", "pentest backend",
                 "check pentest backend", "tool backend"):

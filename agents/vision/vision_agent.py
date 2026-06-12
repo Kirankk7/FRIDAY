@@ -513,6 +513,13 @@ Answer:"""
                 return self.translate(parameters.get("text", ""), parameters.get("target", "en"))
             elif action == "track_flight":
                 return self.track_flight(parameters.get("flight", parameters.get("flight_no", "")))
+            elif action == "describe_image":
+                from core.vision_model import describe_image
+                return describe_image(parameters.get("path", input_text),
+                                      parameters.get("question", ""))
+            elif action == "screenshot_describe":
+                from core.vision_model import screenshot_describe
+                return screenshot_describe(parameters.get("question", ""))
             return {"success": False, "message": f"Unsupported vision action: {action}", "data": {}}
         except Exception as e:
             return {"success": False, "message": f"Vision agent error: {str(e)}", "data": {}}
