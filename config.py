@@ -110,6 +110,12 @@ HT_BACKEND = os.getenv("HT_BACKEND", "auto")
 # Features degrade gracefully (with install hint) when no vision model is present.
 VISION_MODEL = os.getenv("VISION_MODEL", "llava")
 
+# ── Phase 61 — proactive engine (JARVIS reaches out: digest + alerts) ──
+PROACTIVE_ENABLED     = os.getenv("PROACTIVE_ENABLED", "1") not in ("0", "false", "False")
+PROACTIVE_DIGEST_HOUR = int(os.getenv("PROACTIVE_DIGEST_HOUR", "8"))   # morning brief after this hour
+PROACTIVE_DEFENSE_MIN = int(os.getenv("PROACTIVE_DEFENSE_MIN", "0"))   # host re-scan interval (0=off)
+PROACTIVE_CVE_MIN     = int(os.getenv("PROACTIVE_CVE_MIN", "180"))     # CVE watchlist check interval
+
 # ── Phase 52 #8 — optional access token (auth-ready) ──
 # JARVIS binds to 127.0.0.1 (localhost only), so this is OFF by default.
 # Set JARVIS_TOKEN to require it on every request (header X-JARVIS-Token or
