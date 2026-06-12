@@ -1427,6 +1427,67 @@ run_test("Polish: 'read X' routes to summary",    _read_routes_to_summary)
 run_test("Polish: 'extract X' stays raw",         _extract_routes_to_raw)
 run_test("Polish: compound results folded clean", _fold_compound_results)
 
+# Phase 58 — RAG (chat with your documents)
+from core import rag as _rag
+
+def _rag_index_and_search():
+    import tempfile, os as _os
+    _rag.clear()
+    p = _os.path.join(tempfile.gettempdir(), "jarvis_rag_unit.txt")
+    open(p, "w", encoding="utf-8").write(
+        "The deployment runbook says restart the api service before the worker. "
+        "Backups run nightly at 2am to the offsite bucket.")
+    try:
+        r = _rag.index_file(p)
+        if not r.get("success") or r.get("added", 0) < 1:
+            return f"index failed: {r}"
+        hits = _rag.search("when do backups run")
+        if not hits or "nightly" not in hits[0]["chunk"].lower():
+            return f"search missed: {hits[:1]}"
+        st = _rag.stats()
+        return True if st["documents"] == 1 and st["passages"] >= 1 else f"bad stats: {st}"
+    finally:
+        try: _os.remove(p)
+        except Exception: pass
+        _rag.clear()
+
+def _rag_ask_no_index():
+    _rag.clear()
+    r = _rag.ask("anything?")
+    return True if not r["success"] and "indexed" in r["message"].lower() else f"empty-index wrong: {r}"
+
+def _rag_ask_grounded():
+    import tempfile, os as _os, core.llm as _L
+    _rag.clear()
+    saved = _L.ask_llm
+    p = _os.path.join(tempfile.gettempdir(), "jarvis_rag_unit2.txt")
+    open(p, "w", encoding="utf-8").write("The notice period is 90 days for senior staff.")
+    try:
+        _rag.index_file(p)
+        _L.ask_llm = lambda *a, **k: "The notice period is 90 days."
+        r = _rag.ask("notice period?")
+        # answer present + source citation appended
+        return True if r["success"] and "90 days" in r["message"] and "jarvis_rag_unit2" in r["message"] \
+            else f"ungrounded: {r['message']!r}"
+    finally:
+        _L.ask_llm = saved
+        try: _os.remove(p)
+        except Exception: pass
+        _rag.clear()
+
+def _rag_router():
+    a = route_single_intent("index my documents folder C:/docs")
+    b = route_single_intent("what do my documents say about leave")
+    c = route_single_intent("docs status")
+    ok = (a.get("action") == "index_docs" and b.get("action") == "ask_docs"
+          and c.get("action") == "docs_status")
+    return True if ok else f"routing: {a.get('action')},{b.get('action')},{c.get('action')}"
+
+run_test("RAG: index + TF-IDF search",         _rag_index_and_search)
+run_test("RAG: ask with no index is graceful", _rag_ask_no_index)
+run_test("RAG: ask returns grounded + source", _rag_ask_grounded)
+run_test("RAG: router (index/ask/status)",     _rag_router)
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # 27. LOGGER + THINK + CONFIG KEYS

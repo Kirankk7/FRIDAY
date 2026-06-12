@@ -23,9 +23,10 @@ A privacy-first, fully-local AI assistant with a multi-agent architecture, voice
 - **Voice in + out** — faster-whisper STT (CUDA) + Kokoro-82M neural TTS (per-agent voices + earcons), barge-in interrupt, edge-tts fallback
 - **AutoTune** — context-adaptive sampling (classifies each query → code/analytical/creative/conversational/chaotic → tunes temperature/top-p/etc) with 👍/👎 EMA online learning
 - **Cybersecurity agent (Ultron)** — native recon suite + a **180+ tool HackingTool fleet** (via WSL/Docker), NVD CVE search, VirusTotal, CVE→asset correlation, one-command bug-bounty workflow with PoC report
+- **Chat with your documents (RAG)** — index a file or folder, then ask questions and get grounded answers with source citations. Local TF-IDF retrieval + MarkItDown — no cloud, no embeddings model
 - **Unified memory + telemetry** — one facade across the vector/edith/tool/personal stores; SQLite-backed long-term memory; live per-agent telemetry feeding the HUD
 - **Gated critic pass** — optional self-review (critique → revise) on high-stakes Ultron/Athena reports
-- **Reliability engineering** — circuit breaker, LRU routing cache, shared API rate-throttle, startup config validator, structured rotating logs, **254-test regression suite**
+- **Reliability engineering** — circuit breaker, LRU routing cache, shared API rate-throttle, startup config validator, structured rotating logs, **268-test regression suite**
 - **Streaming** — token-by-token SSE responses with sentence-chunked TTS
 
 ---
@@ -64,7 +65,7 @@ A privacy-first, fully-local AI assistant with a multi-agent architecture, voice
 | **Echo** | ECHO | Dynamic tool generation |
 | **Personal** | JOCASTA | User facts & profile |
 | **System** | SENTRY | OS/CPU/RAM, battery, speed test, tool-result recall |
-| **File** | ARCHIVE | Read/summarize documents (PDF/DOCX/audio via MarkItDown), apply patches |
+| **File** | ARCHIVE | Read/summarize documents (PDF/DOCX/audio via MarkItDown), **RAG (chat with your docs)**, apply patches |
 | **Scheduler** | CHRONOS | Recurring background tasks |
 | **Self-Improvement** | PHOENIX | Response-quality analysis |
 | **Terminator** | TERMINATOR | Windows desktop control (pywinauto) — focus/type/click/launch apps |
@@ -119,7 +120,7 @@ On boot, a **config validator** prints a readiness summary (Ollama reachable, mo
 ## Testing
 
 ```bash
-python test_regression.py     # 30 sections, 254 tests, HTML report
+python test_regression.py     # 30 sections, 268 tests, HTML report
 ```
 
 Covers all 15 agents, router patterns, security helpers + HackingTool gates, SSRF guard, circuit breaker, AutoTune + model routing, API throttle, config validator, memory, TTS, and live-API integrations (skipped when offline).
@@ -128,6 +129,6 @@ Covers all 15 agents, router patterns, security helpers + HackingTool gates, SSR
 
 ## Status
 
-Feature-complete core. Local assistant + voice + 3-mode HUD + cybersecurity toolkit, all functional and tested (254 tests green).
+Feature-complete core. Local assistant + voice + 3-mode HUD + cybersecurity toolkit, all functional and tested (268 tests green).
 
 *Built as a learning project exploring local LLM orchestration, multi-agent design, adaptive cognition, and AI-assisted security workflows.*

@@ -992,6 +992,25 @@ def route_single_intent(
     # =====================================
     # FILE — READ / SUMMARIZE DOCUMENT (Phase 31 — MarkItDown)
     # =====================================
+    # Phase 58 — RAG: chat with your documents
+    if text in ("docs status", "document status", "what docs are indexed",
+                "what documents are indexed", "indexed documents"):
+        return {"tool": "file", "action": "docs_status", "parameters": {}, "confidence": 0.97}
+    if text in ("clear docs", "clear documents", "clear document index", "forget my documents"):
+        return {"tool": "file", "action": "clear_docs", "parameters": {}, "confidence": 0.97}
+
+    _idx = re.match(r"(?:index|ingest|load|learn)\s+(?:my\s+|the\s+)?(?:docs?|documents?|folder|files?|directory)?\s*(.+)", text)
+    if _idx and ("index" in text or "ingest" in text) and not text.startswith("indexed"):
+        return {"tool": "file", "action": "index_docs",
+                "parameters": {"path": _idx.group(1).strip().strip('"\'')}, "confidence": 0.95}
+
+    # "ask my docs <q>" / "what do my documents/files/notes say about X"
+    _ask = re.match(r"(?:ask\s+(?:my\s+)?(?:docs?|documents?|files?|notes?)\s+|"
+                    r"(?:what|which|when|who|where|how|does|do|is)\b.*\b(?:docs?|documents?|files?|notes?|papers?)\b)\s*(.*)", text)
+    if _ask and any(w in text for w in ("doc", "document", "file", "note", "paper")):
+        q = _ask.group(1).strip() or text
+        return {"tool": "file", "action": "ask_docs", "parameters": {"query": text}, "confidence": 0.9}
+
     # "summarize [file]" / "read [file]" / "what's in [file]"
     _doc_m = re.match(
         r"(?:summarize|summarise|read|extract|what(?:'s|\s+is)\s+in|read\s+and\s+summarize)\s+(.+\.(?:pdf|docx?|pptx?|xlsx?|csv|png|jpe?g|mp3|wav|txt|md|html?))",
