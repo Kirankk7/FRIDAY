@@ -1298,6 +1298,104 @@ Report:"""
             return {"success": False, "message": str(e), "data": {}}
 
     # =====================================
+    # DEFENSIVE / BLUE-TEAM MODE (host monitor)
+    # =====================================
+    _DEFENSE_BASELINE = "data/defense_baseline.json"
+    # ports & process-name fragments that are classic backdoor / attacker tooling
+    _SUSPECT_PORTS = {4444, 4445, 1337, 31337, 5555, 6666, 12345, 9001, 1080}
+    _SUSPECT_PROCS = {"nc", "ncat", "netcat", "mimikatz", "psexec", "meterpreter",
+                      "powercat", "chisel", "ligolo", "socat", "responder"}
+
+    def _defense_snapshot(self) -> dict:
+        """Current listening ports + running process names."""
+        ports, procs = set(), set()
+        try:
+            for c in psutil.net_connections(kind="inet"):
+                if c.status == psutil.CONN_LISTEN and c.laddr:
+                    ports.add(c.laddr.port)
+        except Exception:
+            pass
+        try:
+            for p in psutil.process_iter(["name"]):
+                n = (p.info.get("name") or "").lower()
+                if n:
+                    procs.add(n)
+        except Exception:
+            pass
+        return {"ports": sorted(ports), "procs": sorted(procs)}
+
+    def set_security_baseline(self) -> dict:
+        """Snapshot the current host state as known-good."""
+        snap = self._defense_snapshot()
+        try:
+            os.makedirs(os.path.dirname(self._DEFENSE_BASELINE), exist_ok=True)
+            with open(self._DEFENSE_BASELINE, "w", encoding="utf-8") as f:
+                json.dump(snap, f)
+        except Exception as e:
+            return {"success": False, "message": f"Couldn't save baseline: {e}", "data": {}}
+        return {"success": True,
+                "message": f"Security baseline set, boss — {len(snap['ports'])} listening ports and "
+                           f"{len(snap['procs'])} processes noted. I'll flag anything new.",
+                "data": snap}
+
+    def defensive_scan(self) -> dict:
+        """Compare the host against its baseline; flag new ports/processes + known-bad."""
+        snap = self._defense_snapshot()
+
+        baseline = None
+        try:
+            if os.path.exists(self._DEFENSE_BASELINE):
+                with open(self._DEFENSE_BASELINE, "r", encoding="utf-8") as f:
+                    baseline = json.load(f)
+        except Exception:
+            baseline = None
+
+        # always call out known-bad ports/procs, baseline or not
+        bad_ports = sorted(p for p in snap["ports"] if p in self._SUSPECT_PORTS)
+        bad_procs = sorted(n for n in snap["procs"]
+                           if any(s == n or s == os.path.splitext(n)[0] for s in self._SUSPECT_PROCS))
+
+        if baseline is None:
+            self.set_security_baseline()
+            extra = ""
+            if bad_ports or bad_procs:
+                extra = " Heads up though — " + self._defense_flags(bad_ports, bad_procs)
+            return {"success": True,
+                    "message": f"No baseline yet, so I just set one from your current system.{extra}",
+                    "data": {"snapshot": snap, "suspicious": {"ports": bad_ports, "procs": bad_procs}}}
+
+        new_ports = sorted(set(snap["ports"]) - set(baseline.get("ports", [])))
+        new_procs = sorted(set(snap["procs"]) - set(baseline.get("procs", [])))
+
+        # build a spoken report
+        if not new_ports and not new_procs and not bad_ports and not bad_procs:
+            msg = "All clear, boss. Nothing new listening and no suspicious processes since your baseline."
+        else:
+            bits = []
+            if bad_ports or bad_procs:
+                bits.append("RED FLAG — " + self._defense_flags(bad_ports, bad_procs))
+            if new_ports:
+                bits.append(f"{len(new_ports)} new listening port"
+                            f"{'s' if len(new_ports) != 1 else ''}: {', '.join(map(str, new_ports[:8]))}")
+            if new_procs:
+                bits.append(f"{len(new_procs)} new process"
+                            f"{'es' if len(new_procs) != 1 else ''}: {', '.join(new_procs[:6])}")
+            msg = "Since your baseline: " + "; ".join(bits) + "."
+
+        return {"success": True, "message": msg,
+                "data": {"new_ports": new_ports, "new_procs": new_procs,
+                         "suspicious": {"ports": bad_ports, "procs": bad_procs},
+                         "snapshot": snap}}
+
+    def _defense_flags(self, bad_ports, bad_procs) -> str:
+        parts = []
+        if bad_ports:
+            parts.append(f"known backdoor port(s) open: {', '.join(map(str, bad_ports))}")
+        if bad_procs:
+            parts.append(f"attacker-tool process(es) running: {', '.join(bad_procs)}")
+        return " and ".join(parts)
+
+    # =====================================
     # FILE SCAN
     # =====================================
     def file_scan(self, path: str) -> dict:
@@ -1949,6 +2047,12 @@ Report:"""
 
             elif action == "system_health":
                 return self.system_health()
+
+            elif action == "defensive_scan":
+                return self.defensive_scan()
+
+            elif action == "set_security_baseline":
+                return self.set_security_baseline()
 
             elif action == "file_scan":
                 return self.file_scan(parameters.get("path", ""))
