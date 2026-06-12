@@ -652,6 +652,30 @@ class FileAgent:
                     parameters.get("diff", parameters.get("diff_text", ""))
                 )
 
+            # Phase 58 — RAG (chat with your documents)
+            elif action == "index_docs":
+                from core import rag
+                p = parameters.get("path", "")
+                p_exp = os.path.expanduser(p)
+                return rag.index_folder(p) if os.path.isdir(p_exp) else rag.index_file(p)
+
+            elif action == "ask_docs":
+                from core import rag
+                return rag.ask(parameters.get("query", input_text))
+
+            elif action == "docs_status":
+                from core import rag
+                s = rag.stats()
+                if not s["passages"]:
+                    return {"success": True, "message": "No documents indexed yet, boss.", "data": s}
+                return {"success": True,
+                        "message": f"{s['documents']} document(s) indexed, {s['passages']} passages ready.",
+                        "data": s}
+
+            elif action == "clear_docs":
+                from core import rag
+                return rag.clear()
+
             return {
 
                 "success": False,
