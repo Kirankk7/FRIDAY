@@ -998,16 +998,62 @@ def _bb_nuclei_parser():
     return True
 
 def _bb_report_formatter():
-    f = [{"template": "CVE-2021-44228", "severity": "critical", "url": "https://t.com", "cve": "CVE-2021-44228"}]
-    rpt = _ult.ultron_agent._format_bb_report(
-        "x.com", f, {"CVE-2021-44228": "poc-url"},
-        {"sections": {}, "urls": []}, validated=True)
+    U = _ult.ultron_agent
+    ex = {"CVE-2021-44228": "poc-url"}
+    f = [{"template": "CVE-2021-44228", "severity": "critical", "url": "https://t.com",
+          "cve": "CVE-2021-44228", "validated": True}]
+    for x in f:
+        x["_gate"] = U._validate_finding(x, ex)
+    rpt = U._format_bb_report("x.com", f, ex, {"sections": {}, "urls": []}, validated=True)
     ok = ("# Bug Bounty Report" in rpt and "CRITICAL" in rpt
-          and "CVE-2021-44228" in rpt and "Remediation" in rpt)
+          and "CVE-2021-44228" in rpt and "Remediation" in rpt
+          and "Steps to reproduce" in rpt and "P1 (Critical)" in rpt)
     return True if ok else "report missing expected sections"
+
+# Phase 60 — validation gate (adapted from shuvonsec/claude-bug-bounty)
+def _gate_keeps_real_finding():
+    U = _ult.ultron_agent
+    f = {"template": "CVE-2021-44228", "severity": "critical",
+         "url": "https://t.com/api", "cve": "CVE-2021-44228", "validated": True}
+    g = U._validate_finding(f, {"CVE-2021-44228": "poc"})
+    return True if g["report"] and g["score"] == 7 and g["tier"].startswith("P1") \
+        else f"real finding not kept: {g}"
+
+def _gate_drops_never_submit():
+    U = _ult.ultron_agent
+    for tmpl in ("tls-version", "missing-security-header", "tech-detect-nginx", "waf-detect"):
+        g = U._validate_finding({"template": tmpl, "severity": "low", "url": "https://t.com",
+                                 "cve": "", "validated": False}, {})
+        if g["report"]:
+            return f"never-submit class kept: {tmpl}"
+    return True
+
+def _gate_drops_weak_low_score():
+    U = _ult.ultron_agent
+    # info-only, no url, no cve, unconfirmed → should fail the bar
+    g = U._validate_finding({"template": "some-panel", "severity": "info",
+                             "url": "", "cve": "", "validated": False}, {})
+    return True if not g["report"] else f"weak finding kept: {g}"
+
+def _gate_report_filters_noise():
+    U = _ult.ultron_agent
+    ex = {}
+    findings = [
+        {"template": "sqli-error", "severity": "high", "url": "https://t.com/p?id=1", "cve": "", "validated": True},
+        {"template": "tls-version", "severity": "low", "url": "https://t.com", "cve": "", "validated": False},
+    ]
+    for f in findings:
+        f["_gate"] = U._validate_finding(f, ex)
+    rpt = U._format_bb_report("t.com", findings, ex, {"urls": []}, True)
+    return True if "Filtered by Validation Gate" in rpt and "tls-version" in rpt \
+        and "Reportable findings: **1**" in rpt else "noise not filtered in report"
 
 run_test("Ultron: bug-bounty nuclei parser",   _bb_nuclei_parser)
 run_test("Ultron: bug-bounty report formatter", _bb_report_formatter)
+run_test("Gate: keeps confirmed critical+CVE",  _gate_keeps_real_finding)
+run_test("Gate: drops never-submit noise",      _gate_drops_never_submit)
+run_test("Gate: drops weak low-score finding",  _gate_drops_weak_low_score)
+run_test("Gate: report separates noise",        _gate_report_filters_noise)
 
 # Phase 36 — HackingTool wrapper gates (offline; no backend needed)
 from agents.ultron.hackingtool import ht_wrapper as _htw

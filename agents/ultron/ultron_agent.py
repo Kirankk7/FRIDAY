@@ -1015,71 +1015,160 @@ Report:"""
     # =====================================
     # BUG-BOUNTY WORKFLOW (Phase 54)
     # =====================================
-    def _format_bb_report(self, target, findings, exploits_map, pipeline_data, validated):
-        """Build a clean PoC bug-bounty report.md from structured findings."""
-        date_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
-        by_sev = {}
-        for f in findings:
-            by_sev.setdefault(f["severity"], []).append(f)
+    # =====================================
+    # VALIDATION GATE (Phase 60 — adapted from shuvonsec/claude-bug-bounty)
+    # =====================================
+    # Never-submit blacklist: template-id fragments that are noise / informational
+    # and get auto-closed as N/A on bug-bounty platforms. Findings matching these
+    # are dropped from the report regardless of severity.
+    _NEVER_SUBMIT = (
+        "ssl", "tls-version", "tech-detect", "tech-stack", "fingerprint",
+        "missing-header", "security-header", "http-missing", "x-frame",
+        "version-disclosure", "version-detect", "waf-detect", "wafw00f",
+        "favicon", "robots-txt", "sitemap", "default-page", "dns-",
+        "dmarc", "spf-", "cookie-without", "cors-misconfig-detect",
+        "metatag", "openapi", "swagger-api", "weak-cipher",
+    )
+    # severity -> bug-bounty payout/priority tier (HackerOne-style)
+    _PAYOUT_TIER = {
+        "critical": "P1 (Critical)", "high": "P2 (High)", "medium": "P3 (Medium)",
+        "low": "P4 (Low)", "info": "P5 (Informational)",
+    }
 
-        crit = len(by_sev.get("critical", []))
-        high = len(by_sev.get("high", []))
-        med = len(by_sev.get("medium", []))
-        low = len(by_sev.get("low", []))
-        info = len(by_sev.get("info", []))
+    def _validate_finding(self, f: dict, exploits_map: dict) -> dict:
+        """
+        7-question quality gate. Returns {report, score, tier, reasons, drop}.
+        Kills weak/noise findings before they reach the report.
+        """
+        tmpl = (f.get("template") or "").lower()
+        sev = (f.get("severity") or "info").lower()
+        url = f.get("url") or ""
+        cve = f.get("cve") or ""
+
+        # hard blacklist → never submit
+        if any(bad in tmpl for bad in self._NEVER_SUBMIT):
+            return {"report": False, "score": 0, "tier": self._PAYOUT_TIER.get(sev, "P5"),
+                    "reasons": [], "drop": "informational/noise class (never-submit list)"}
+
+        reasons, score = [], 0
+        # Q1 — meaningful severity (info-only alone is not worth a report)
+        if sev in ("critical", "high", "medium", "low"):
+            score += 1; reasons.append("has actionable severity")
+        # Q2 — concrete location
+        if url:
+            score += 1; reasons.append("has a concrete URL/location")
+        # Q3 — confirmed reachable (re-probe in validate stage)
+        if f.get("validated") is True:
+            score += 1; reasons.append("confirmed live on re-probe")
+        # Q4 — exploitability (CVE with a known PoC/exploit)
+        if cve and exploits_map.get(cve):
+            score += 1; reasons.append("known public exploit/PoC exists")
+        elif cve:
+            score += 1; reasons.append("maps to a tracked CVE")
+        # Q5 — real impact (not purely informational template)
+        if sev in ("critical", "high", "medium"):
+            score += 1; reasons.append("impact is more than informational")
+        # Q6 — specificity (template names a real class, not a generic probe)
+        if tmpl and "detect" not in tmpl and "panel" not in tmpl:
+            score += 1; reasons.append("specific vulnerability, not a generic probe")
+        # Q7 — severity-weighted confidence
+        if sev in ("critical", "high") and (f.get("validated") is True or cve):
+            score += 1; reasons.append("high severity AND corroborated")
+
+        # report only if it clears the bar (>=3 of 7), or any confirmed crit/high
+        report = score >= 3 or (sev in ("critical", "high") and f.get("validated") is True)
+        return {"report": report, "score": score, "tier": self._PAYOUT_TIER.get(sev, "P5"),
+                "reasons": reasons,
+                "drop": None if report else f"failed quality gate ({score}/7)"}
+
+    def _format_bb_report(self, target, findings, exploits_map, pipeline_data, validated):
+        """Build a platform-ready PoC report.md — only gate-passed findings get
+        a full write-up; filtered ones are listed transparently. Each finding
+        carries a `_gate` dict from _validate_finding()."""
+        date_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+        _order = {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}
+
+        reportable = [f for f in findings if f.get("_gate", {}).get("report")]
+        dropped = [f for f in findings if not f.get("_gate", {}).get("report")]
+        reportable.sort(key=lambda f: _order.get(f.get("severity"), 9))
+
+        tier_counts = {}
+        for f in reportable:
+            t = f["_gate"]["tier"]
+            tier_counts[t] = tier_counts.get(t, 0) + 1
+        tier_line = "  ·  ".join(f"{t}: {n}" for t, n in sorted(tier_counts.items())) or "none"
 
         lines = [
             f"# Bug Bounty Report — {target}",
             "",
             f"**Target:** {target}",
             f"**Generated:** {date_str}",
-            f"**Workflow:** Recon → Hunt → Validate → Report (JARVIS Ultron)",
+            "**Workflow:** Recon → Hunt → Validate → Quality Gate → Report (JARVIS Ultron)",
             "",
             "## Executive Summary",
-            f"- Critical: {crit}  ·  High: {high}  ·  Medium: {med}  ·  Low: {low}  ·  Info: {info}",
-            f"- Findings validated: {'yes' if validated else 'no'}",
+            f"- Reportable findings: **{len(reportable)}** ({tier_line})",
+            f"- Filtered by validation gate: {len(dropped)} (noise / unconfirmed / informational)",
+            f"- Re-probe validation run: {'yes' if validated else 'no'}",
             "",
             "## Findings",
         ]
 
-        if not findings:
-            lines.append("_No vulnerabilities detected by Nuclei. Surface mapped — manual review recommended._")
+        if not reportable:
+            lines.append("_No findings cleared the validation gate. Attack surface mapped below — "
+                         "manual review recommended before submitting anything._")
         else:
-            for sev in ("critical", "high", "medium", "low", "info"):
-                group = by_sev.get(sev, [])
-                if not group:
-                    continue
-                lines.append(f"\n### {sev.upper()} ({len(group)})")
-                for f in group:
-                    lines.append(f"\n**{f['template']}**")
-                    if f["url"]:
-                        lines.append(f"- URL: {f['url']}")
-                    if f.get("validated") is not None:
-                        lines.append(f"- Validated: {'confirmed' if f['validated'] else 'unconfirmed'}")
-                    if f["cve"]:
-                        lines.append(f"- CVE: {f['cve']}")
-                        ex = exploits_map.get(f["cve"])
-                        if ex:
-                            lines.append(f"- Exploits/PoC: {ex}")
+            for i, f in enumerate(reportable, 1):
+                g = f["_gate"]
+                lines.append(f"\n### {i}. {f['template']}  —  {g['tier']}")
+                lines.append(f"- **Severity:** {f['severity'].upper()}")
+                if f.get("url"):
+                    lines.append(f"- **Location:** {f['url']}")
+                lines.append(f"- **Status:** {'Confirmed live' if f.get('validated') else 'Reported by scanner (unconfirmed)'}")
+                lines.append(f"- **Confidence:** {g['score']}/7 quality checks passed")
+                if f.get("cve"):
+                    lines.append(f"- **CVE:** {f['cve']}")
+                    ex = exploits_map.get(f["cve"])
+                    if ex:
+                        lines.append(f"- **Public exploit/PoC:** {ex}")
+                lines.append("- **Steps to reproduce:**")
+                lines.append(f"  1. Probe the endpoint: `httpx -u {f.get('url') or target}`")
+                lines.append(f"  2. Re-run the detection: `nuclei -u {f.get('url') or target} -id {f['template']}`")
+                lines.append("  3. Confirm the response matches the signature above.")
+                lines.append(f"- **Impact:** {self._impact_line(f)}")
+                lines.append("- **Remediation:** "
+                             + ("Patch to a fixed version per the CVE advisory." if f.get("cve")
+                                else "Apply the vendor fix / config hardening for this vulnerability class."))
 
-        # Attack surface from pipeline
-        subs = pipeline_data.get("sections", {}).get("subfinder", "")
+        if dropped:
+            lines += ["", "## Filtered by Validation Gate",
+                      "_Surfaced by the scanner but withheld — would be closed as N/A / informational._"]
+            for f in dropped[:25]:
+                why = f.get("_gate", {}).get("drop", "low confidence")
+                lines.append(f"- `{f['template']}` ({f['severity']}) — {why}")
+
         urls = pipeline_data.get("urls", [])
         lines += [
             "",
             "## Attack Surface",
-            f"- Subdomains: see recon output",
+            "- Subdomains: see recon output",
             f"- Crawled endpoints: {len(urls)}",
             "",
-            "## Remediation",
-            "- Patch software matching any CVE above to fixed versions.",
-            "- Review and restrict exposed services/ports.",
-            "- Re-scan after remediation to confirm closure.",
-            "",
             "---",
-            "*Generated by JARVIS Ultron — Bug Bounty Workflow (Phase 54). Authorized targets only.*",
+            "*Generated by JARVIS Ultron — Bug Bounty Workflow w/ validation gate. Authorized targets only.*",
         ]
         return "\n".join(lines)
+
+    def _impact_line(self, f: dict) -> str:
+        sev = (f.get("severity") or "").lower()
+        if f.get("cve"):
+            return ("Exploitable known vulnerability — potential remote compromise; "
+                    "prioritise immediately." if sev in ("critical", "high")
+                    else "Known vulnerability present; exploitation feasible under conditions.")
+        return {"critical": "Critical — likely full compromise of the affected component.",
+                "high": "High — significant unauthorized access or data exposure likely.",
+                "medium": "Medium — meaningful weakness, exploitation needs some conditions.",
+                "low": "Low — limited direct impact; defence-in-depth concern.",
+                }.get(sev, "Informational — minimal direct security impact.")
 
     def bug_bounty(self, target: str, validate: bool = True) -> dict:
         """Full bug-bounty hunt: recon pipeline → parse findings → CVE/exploit
@@ -1127,16 +1216,23 @@ Report:"""
                 except Exception as e:
                     print(f"[ULTRON] validate stage skipped: {e}")
 
+        # ── Stage 4.5: Quality gate — score each finding, drop noise/weak ones ──
+        for f in findings:
+            f["_gate"] = self._validate_finding(f, exploits_map)
+        reportable = [f for f in findings if f["_gate"]["report"]]
+        filtered = len(findings) - len(reportable)
+
         # ── Stage 5: Structured PoC report ──
         report = self._format_bb_report(target, findings, exploits_map, pdata, validated)
         saved = self.save_report(f"bugbounty_{target}", report)
 
-        crit = sum(1 for f in findings if f["severity"] == "critical")
-        high = sum(1 for f in findings if f["severity"] == "high")
+        crit = sum(1 for f in reportable if f["severity"] == "critical")
+        high = sum(1 for f in reportable if f["severity"] == "high")
         voice = (
             f"Bug bounty hunt complete on {target}. "
-            f"{len(findings)} finding{'s' if len(findings) != 1 else ''} "
-            f"({crit} critical, {high} high). "
+            f"{len(reportable)} report-worthy finding{'s' if len(reportable) != 1 else ''} "
+            f"({crit} critical, {high} high) after the quality gate filtered "
+            f"{filtered} noise/unconfirmed item{'s' if filtered != 1 else ''}. "
             f"{len(exploits_map)} with known exploits. "
             f"{'Report saved to Desktop.' if saved else 'Report generation failed.'}"
         )
