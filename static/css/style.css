@@ -222,6 +222,22 @@ body::after {
 }
 .notification::before { content: 'REMINDER  '; font-weight: bold; letter-spacing: 3px; }
 .notification.fade-out { animation: notif-out 0.5s ease forwards; }
+
+/* Phase 61 — proactive notification kinds */
+.notification.n-security {
+    background: rgba(255,40,60,0.12); border-color: rgba(255,40,60,0.5);
+    color: #ff5c6c; box-shadow: 0 0 22px rgba(255,40,60,0.2);
+}
+.notification.n-security::before { content: 'SECURITY  '; }
+.notification.n-digest {
+    background: rgba(0,200,255,0.1); border-color: rgba(0,200,255,0.4);
+    color: #38d6ff; box-shadow: 0 0 20px rgba(0,200,255,0.15);
+}
+.notification.n-digest::before { content: 'JARVIS  '; }
+.notification.n-info {
+    background: rgba(0,255,136,0.08); border-color: rgba(0,255,136,0.35); color: #5cff9a;
+}
+.notification.n-info::before { content: 'NOTE  '; }
 @keyframes notif-in  { from { opacity:0; transform:translateY(-8px); } to { opacity:1; transform:translateY(0); } }
 @keyframes notif-out { from { opacity:1; } to { opacity:0; transform:translateY(-8px); } }
 

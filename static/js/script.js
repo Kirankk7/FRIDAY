@@ -114,14 +114,36 @@ clearHistoryBtn.addEventListener('click', () => {
 });
 
 // ===== NOTIFICATIONS =====
-function showNotification(text) {
+function showNotification(text, kind) {
     const el = document.createElement('div');
-    el.className    = 'notification';
+    el.className    = 'notification' + (kind ? ' n-' + kind : '');
     el.textContent  = text;
     notifArea.appendChild(el);
-    setTimeout(() => el.classList.add('fade-out'), 5000);
-    setTimeout(() => el.remove(), 5600);
+    const hold = (kind === 'security') ? 9000 : 6000;
+    setTimeout(() => el.classList.add('fade-out'), hold);
+    setTimeout(() => el.remove(), hold + 600);
 }
+
+// ===== PROACTIVE PUSH — poll /notifications (digest, security, reminders) =====
+let _lastNotifId = -1;   // -1 = prime on first poll (skip backlog)
+async function pollNotifications() {
+    try {
+        const since = _lastNotifId < 0 ? 999999999 : _lastNotifId;
+        const r = await fetch('/notifications?since=' + since);
+        const data = await r.json();
+        if (_lastNotifId < 0) {                 // first run: don't replay old items
+            const all = await (await fetch('/notifications?since=0')).json();
+            _lastNotifId = all.items.length ? all.items[all.items.length - 1].id : 0;
+            return;
+        }
+        for (const n of (data.items || [])) {
+            showNotification(n.text, n.kind);
+            _lastNotifId = Math.max(_lastNotifId, n.id);
+        }
+    } catch (e) { /* offline */ }
+}
+pollNotifications();
+setInterval(pollNotifications, 20000);
 
 // ===== HUD RING — Canvas =====
 const hudCanvas = document.getElementById('hud-ring');

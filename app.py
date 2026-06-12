@@ -360,6 +360,17 @@ def feedback():
     return jsonify(autotune.record_feedback(rating))
 
 
+@app.route("/notifications")
+def notifications():
+    """Phase 61 — proactive alerts the HUD polls (morning digest, security, reminders)."""
+    from core.notify import poll
+    try:
+        since = int(request.args.get("since", 0))
+    except Exception:
+        since = 0
+    return jsonify({"items": poll(since)})
+
+
 @app.route("/metrics")
 def metrics():
     """Phase 52 #5 — per-agent telemetry (calls/latency/errors) for the HUD."""

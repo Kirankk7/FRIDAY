@@ -1621,6 +1621,63 @@ run_test("Vision: missing image graceful",     _vision_missing_file)
 run_test("Vision: rejects non-image file",     _vision_non_image)
 run_test("Vision: router (screen/image)",      _vision_router)
 
+# Phase 61 — proactive engine + notification hub
+from core import notify as _notify
+
+def _notify_push_poll():
+    base = _notify.latest_id()
+    _notify.push("alpha test alert", "security")
+    _notify.push("beta test alert", "digest")
+    got = _notify.poll(base)
+    return True if len(got) >= 2 and got[-1]["kind"] == "digest" else f"poll wrong: {got}"
+
+def _notify_since_filter():
+    a = _notify.push("since-marker", "info")
+    after = _notify.poll(a["id"])
+    return True if all(i["id"] > a["id"] for i in after) else "since filter leaked older items"
+
+def _notify_sink_fires():
+    seen = []
+    _notify.register_sink(lambda item: seen.append(item["text"]))
+    _notify.push("sink-probe", "info")
+    return True if "sink-probe" in seen else "registered sink not called"
+
+def _proactive_digest():
+    from core import proactive_engine as pe
+    base = _notify.latest_id()
+    saved_hour, saved_date = pe.PROACTIVE_DIGEST_HOUR, pe._last["digest_date"]
+    try:
+        pe.PROACTIVE_DIGEST_HOUR = 0          # allow it to fire now
+        pe._last["digest_date"] = None
+        pe._morning_digest()
+        msgs = [i["text"] for i in _notify.poll(base)]
+        return True if any("Morning" in m for m in msgs) else f"no digest pushed: {msgs}"
+    finally:
+        pe.PROACTIVE_DIGEST_HOUR = saved_hour
+        pe._last["digest_date"] = datetime.date.today().isoformat()  # don't refire
+
+def _proactive_digest_once_per_day():
+    from core import proactive_engine as pe
+    pe._last["digest_date"] = datetime.date.today().isoformat()
+    base = _notify.latest_id()
+    pe._morning_digest()                       # already ran today → no-op
+    return True if _notify.latest_id() == base else "digest fired twice in a day"
+
+def _proactive_tick_safe():
+    from core import proactive_engine as pe
+    try:
+        pe.tick()
+        return True
+    except Exception as e:
+        return f"tick raised: {e}"
+
+run_test("Proactive: notify push + poll",        _notify_push_poll)
+run_test("Proactive: poll since-id filter",      _notify_since_filter)
+run_test("Proactive: extra sink fires",          _notify_sink_fires)
+run_test("Proactive: morning digest pushes",     _proactive_digest)
+run_test("Proactive: digest once per day",       _proactive_digest_once_per_day)
+run_test("Proactive: tick never raises",         _proactive_tick_safe)
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # 27. LOGGER + THINK + CONFIG KEYS

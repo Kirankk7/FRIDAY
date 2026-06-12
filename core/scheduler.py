@@ -170,6 +170,12 @@ class Scheduler:
                 self._check_due()
             except Exception as e:
                 print(f"[scheduler] Loop error: {e}")
+            # Phase 61 — proactive engine (reminders/digest/alerts), self-paced
+            try:
+                from core.proactive_engine import tick
+                tick()
+            except Exception as e:
+                print(f"[scheduler] proactive tick error: {e}")
             time.sleep(30)  # Check every 30 seconds
 
     def _check_due(self):
