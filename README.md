@@ -22,13 +22,13 @@ A privacy-first, fully-local AI assistant with a multi-agent architecture, voice
 - **Multi-agent architecture** — 15 specialized agents behind a dual-path intent router
 - **Voice in + out** — faster-whisper STT (CUDA) + Kokoro-82M neural TTS (per-agent voices + earcons), barge-in interrupt, edge-tts fallback
 - **AutoTune** — context-adaptive sampling (classifies each query → code/analytical/creative/conversational/chaotic → tunes temperature/top-p/etc) with 👍/👎 EMA online learning
-- **Cybersecurity agent (Ultron)** — native recon suite + a **180+ tool HackingTool fleet** (via WSL/Docker), NVD CVE search, VirusTotal, CVE→asset correlation, one-command bug-bounty workflow with PoC report
+- **Cybersecurity agent (Ultron)** — native recon suite + a **180+ tool HackingTool fleet** (via WSL/Docker), NVD CVE search, VirusTotal, CVE→asset correlation, one-command bug-bounty workflow with a 7-question validation gate (kills noise/unconfirmed findings) + platform-ready PoC report
 - **Blue-team defensive mode** — host monitor: baselines listening ports + processes, flags new/suspicious ones (known backdoor ports + attacker tooling) — offense *and* defense
 - **Local multimodal vision** — "what's on my screen" / describe any image via an Ollama vision model (llava etc), all on-device
 - **Chat with your documents (RAG)** — index a file or folder, then ask questions and get grounded answers with source citations. Local TF-IDF retrieval + MarkItDown — no cloud, no embeddings model
 - **Unified memory + telemetry** — one facade across the vector/edith/tool/personal stores; SQLite-backed long-term memory; live per-agent telemetry feeding the HUD
 - **Gated critic pass** — optional self-review (critique → revise) on high-stakes Ultron/Athena reports
-- **Reliability engineering** — circuit breaker, LRU routing cache, shared API rate-throttle, startup config validator, structured rotating logs, **274-test regression suite**
+- **Reliability engineering** — circuit breaker, LRU routing cache, shared API rate-throttle, startup config validator, structured rotating logs, **278-test regression suite**
 - **Streaming** — token-by-token SSE responses with sentence-chunked TTS
 
 ---
@@ -81,7 +81,7 @@ A privacy-first, fully-local AI assistant with a multi-agent architecture, voice
 - **Vuln scanning**: Nuclei (severity-filtered)
 - **Threat intel**: NVD CVE search, CVE tracking/watchlist, VirusTotal (file/hash/URL/domain/IP)
 - **Correlation**: cross-links tracked CVEs against scanned host services ("am I exposed?")
-- **Bug-bounty workflow**: `bug bounty <target>` → recon → parse findings → exploit lookup → validate → clean PoC report
+- **Bug-bounty workflow**: `bug bounty <target>` → recon → parse → exploit lookup → validate → **quality gate** (7-question + never-submit blacklist + P1-P5 payout tiers) → platform-ready PoC report
 - **Hardening built-in**: SSRF guard (blocks internal/metadata IPs), shell-command allowlist + injection sanitizer, shared API rate-throttle
 - *Authorized targets only.*
 
@@ -122,7 +122,7 @@ On boot, a **config validator** prints a readiness summary (Ollama reachable, mo
 ## Testing
 
 ```bash
-python test_regression.py     # 30 sections, 274 tests, HTML report
+python test_regression.py     # 30 sections, 278 tests, HTML report
 ```
 
 Covers all 15 agents, router patterns, security helpers + HackingTool gates, SSRF guard, circuit breaker, AutoTune + model routing, API throttle, config validator, memory, TTS, and live-API integrations (skipped when offline).
@@ -131,6 +131,6 @@ Covers all 15 agents, router patterns, security helpers + HackingTool gates, SSR
 
 ## Status
 
-Feature-complete core. Local assistant + voice + 3-mode HUD + cybersecurity toolkit, all functional and tested (274 tests green).
+Feature-complete core. Local assistant + voice + 3-mode HUD + cybersecurity toolkit, all functional and tested (278 tests green).
 
 *Built as a learning project exploring local LLM orchestration, multi-agent design, adaptive cognition, and AI-assisted security workflows.*
