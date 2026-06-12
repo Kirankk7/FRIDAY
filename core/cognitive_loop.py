@@ -13,6 +13,33 @@ from core.executor import (
 from core.state import set_last_agent
 
 
+def _fold_results(user_input: str, results: list) -> str:
+    """
+    Turn multi-step compound results into ONE natural spoken reply instead of
+    a "[ULTRON] raw  [EDITH] raw" dump. Short/clean results pass through; long
+    or raw-looking ones get LLM-folded into 2-3 conversational sentences.
+    """
+    parts = [clean_response(str(r)) for r in results if r and str(r).strip()]
+    parts = [p for p in parts if p]
+    if not parts:
+        return "All done, boss."
+    joined = "  ".join(parts)
+    if len(joined) <= 320:
+        return joined
+    try:
+        prompt = (
+            "You are JARVIS replying by voice. Combine these task results into ONE "
+            "short, natural spoken reply (2-3 sentences max). No lists, no markdown, "
+            "no file paths, no raw output. Be conversational.\n\n"
+            f"User asked: {user_input}\n\nResults:\n{joined[:2000]}\n\nReply:"
+        )
+        out = ask_llm(prompt, autotune_on=False,
+                      params={"temperature": 0.4, "num_predict": 160})
+        return clean_response(out) if out and out.strip() else joined[:400]
+    except Exception:
+        return joined[:400]
+
+
 def run_cognitive_loop(
     user_input: str,
     max_iterations=1,
@@ -90,13 +117,9 @@ def run_cognitive_loop(
                 )
             )
 
-            # Multi-agent: label each result by agent
+            # Multi-agent: fold into one natural reply (no [AGENT] dumps)
             if len(steps) > 1:
-                labeled = []
-                for i, (step, res) in enumerate(zip(steps, results)):
-                    agent = step.get("tool", "").upper()
-                    labeled.append(f"[{agent}] {res}")
-                response = "\n\n".join(labeled)
+                response = _fold_results(user_input, results)
             else:
                 response = (
                     "\n".join(
@@ -262,11 +285,7 @@ def run_cognitive_loop_stream(
             steps = parameters.get("steps", [])
             results = execute_plan(steps)
             if len(steps) > 1:
-                labeled = [
-                    f"[{s.get('tool','').upper()}] {r}"
-                    for s, r in zip(steps, results)
-                ]
-                response = "\n\n".join(labeled)
+                response = _fold_results(user_input, results)
             else:
                 response = "\n".join(results)
 

@@ -1365,6 +1365,68 @@ def _voice_exports():
 run_test("TTS: sentence splitter correctness",  _sentence_split)
 run_test("TTS: voice queue exports callable",   _voice_exports)
 
+# Response polish — clean_response strips ANSI + [AGENT] dump tags (Layer 1)
+def _clean_strips_ansi():
+    from core.speech_cleaner import clean_response
+    out = clean_response("status \x1b[33m301\x1b[0m moved")
+    return True if "\x1b" not in out and "[33m" not in out else f"ANSI survived: {out!r}"
+
+def _clean_strips_agent_tags():
+    from core.speech_cleaner import clean_response
+    out = clean_response("[ULTRON] scan done [EDITH] saved")
+    return True if "[ULTRON]" not in out and "[EDITH]" not in out else f"tags survived: {out!r}"
+
+def _clean_keeps_legit_text():
+    from core.speech_cleaner import clean_response
+    out = clean_response("Found 3 open ports. See [link] for details.")
+    return True if "Found 3 open ports" in out and "[link]" in out else f"clobbered: {out!r}"
+
+run_test("Polish: clean_response strips ANSI",      _clean_strips_ansi)
+run_test("Polish: clean_response strips [AGENT] tags", _clean_strips_agent_tags)
+run_test("Polish: clean_response keeps legit text", _clean_keeps_legit_text)
+
+# Layer 2 — assistant-grade phrasing
+def _governor_caps_walls():
+    from core.speech_cleaner import clean_response
+    out = clean_response("This is a sentence. " * 120)
+    return True if len(out) <= 1260 and "details?" in out else f"governor failed: len {len(out)}"
+
+def _governor_leaves_short():
+    from core.speech_cleaner import clean_response
+    s = "Found 3 open ports, boss."
+    return True if clean_response(s) == s else "short reply altered"
+
+def _friendly_hides_hash_name():
+    from agents.file.file_agent import _friendly_name
+    out = _friendly_name("C:/docs/4567353982-423.pdf")
+    return True if "4567353982" not in out and "PDF" in out else f"hash leaked: {out}"
+
+def _friendly_keeps_human_name():
+    from agents.file.file_agent import _friendly_name
+    out = _friendly_name("quarterly_report.pdf")
+    return True if "quarterly report" in out else f"human name lost: {out}"
+
+def _read_routes_to_summary():
+    r = route_single_intent("read report.pdf")
+    return True if r.get("action") == "summarize_document" else f"read should summarize, got {r.get('action')}"
+
+def _extract_routes_to_raw():
+    r = route_single_intent("extract data.csv")
+    return True if r.get("action") == "read_document" else f"extract should be raw, got {r.get('action')}"
+
+def _fold_compound_results():
+    from core.cognitive_loop import _fold_results
+    out = _fold_results("scan and save", ["Nmap found 3 ports", "Saved to memory"])
+    return True if out and "[" not in out and len(out) < 320 else f"fold leaked: {out!r}"
+
+run_test("Polish: governor caps walls of text",   _governor_caps_walls)
+run_test("Polish: governor leaves short replies", _governor_leaves_short)
+run_test("Polish: friendly name hides hash file", _friendly_hides_hash_name)
+run_test("Polish: friendly name keeps human name",_friendly_keeps_human_name)
+run_test("Polish: 'read X' routes to summary",    _read_routes_to_summary)
+run_test("Polish: 'extract X' stays raw",         _extract_routes_to_raw)
+run_test("Polish: compound results folded clean", _fold_compound_results)
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # 27. LOGGER + THINK + CONFIG KEYS

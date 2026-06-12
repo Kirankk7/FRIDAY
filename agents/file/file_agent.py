@@ -11,6 +11,33 @@ def _get_md():
         _markitdown = MarkItDown()
     return _markitdown
 
+# Friendly, spoken names per file type — so we say "your PDF", not "4567353982-423.pdf"
+_TYPE_WORDS = {
+    ".pdf": "PDF", ".docx": "Word document", ".doc": "Word document",
+    ".pptx": "presentation", ".ppt": "presentation",
+    ".xlsx": "spreadsheet", ".xls": "spreadsheet", ".csv": "spreadsheet",
+    ".png": "image", ".jpg": "image", ".jpeg": "image", ".gif": "image",
+    ".bmp": "image", ".webp": "image",
+    ".mp3": "audio file", ".wav": "audio file", ".m4a": "audio file",
+    ".txt": "text file", ".md": "note", ".html": "web page", ".htm": "web page",
+    ".json": "file", ".xml": "file", ".zip": "archive",
+}
+
+
+def _friendly_name(path: str) -> str:
+    """Speak a clean name. Hash/number-blob filenames -> generic 'that <type>'."""
+    base = os.path.basename(path or "")
+    stem, ext = os.path.splitext(base)
+    word = _TYPE_WORDS.get(ext.lower(), "file")
+    # ugly stem = mostly digits/hex/separators (e.g. 4567353982-423) -> hide it
+    letters = re.sub(r"[^A-Za-z]", "", stem)
+    if len(stem) >= 6 and len(letters) <= max(2, len(stem) // 4):
+        return f"that {word}"
+    # human-ish name -> say "the <name> <type>"
+    nice = stem.replace("_", " ").replace("-", " ").strip()
+    return f'the "{nice}" {word}' if nice else f"that {word}"
+
+
 # Supported extensions for read_document
 _READABLE_EXTS = {
     ".pdf", ".docx", ".doc", ".pptx", ".ppt",
@@ -314,8 +341,7 @@ class FileAgent:
                 "success": True,
 
                 "message":
-                f"Opening "
-                f"{os.path.basename(path)}",
+                f"Opening {_friendly_name(path)} for you.",
 
                 "data": {
                     "path":
@@ -369,13 +395,13 @@ class FileAgent:
         path = os.path.expanduser(path)
 
         if not os.path.exists(path):
-            return {"success": False, "message": f"File not found: {path}", "data": {}}
+            return {"success": False, "message": "I couldn't find that file, boss.", "data": {}}
 
         ext = os.path.splitext(path)[1].lower()
         if ext not in _READABLE_EXTS:
             return {
                 "success": False,
-                "message": f"Unsupported file type: {ext}. Supported: {', '.join(sorted(_READABLE_EXTS))}",
+                "message": "I can't read that kind of file, boss.",
                 "data": {}
             }
 
@@ -385,7 +411,7 @@ class FileAgent:
             text = result.text_content or ""
 
             if not text.strip():
-                return {"success": False, "message": f"No text extracted from {os.path.basename(path)}.", "data": {}}
+                return {"success": False, "message": f"There's no readable text in {_friendly_name(path)}.", "data": {}}
 
             # Truncate if too long (LLM context limit)
             truncated = len(text) > max_chars
@@ -403,7 +429,8 @@ class FileAgent:
                 }
             }
         except Exception as e:
-            return {"success": False, "message": f"Failed to read {os.path.basename(path)}: {e}", "data": {}}
+            print(f"[file] read error for {path}: {e}")
+            return {"success": False, "message": f"I had trouble reading {_friendly_name(path)}, boss.", "data": {}}
 
     def summarize_document(self, path: str) -> dict:
         """

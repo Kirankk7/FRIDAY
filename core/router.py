@@ -1004,7 +1004,9 @@ def route_single_intent(
             r'^(?:the\s+)?(?:file|document|doc|presentation|spreadsheet|pdf)\s+(?:at\s+)?',
             '', path, flags=re.IGNORECASE
         ).strip()
-        action = "summarize_document" if re.search(r"\b(?:summarize|summarise|summary)\b", text, re.IGNORECASE) else "read_document"
+        # Assistant-grade: read/what's-in also SUMMARIZE (never dump raw text).
+        # Only "extract" returns the raw content.
+        action = "read_document" if re.search(r"\bextract\b", text, re.IGNORECASE) else "summarize_document"
         return {"tool": "file", "action": action, "parameters": {"path": path}, "confidence": 0.95}
 
     # "summarize the file at <path>" / "read document <path>"
@@ -1014,7 +1016,7 @@ def route_single_intent(
     )
     if _doc_m2:
         path = _doc_m2.group(1).strip().strip('"\'')
-        action = "summarize_document" if re.search(r"\b(?:summarize|summarise)\b", text, re.IGNORECASE) else "read_document"
+        action = "read_document" if re.search(r"\bextract\b", text, re.IGNORECASE) else "summarize_document"
         return {"tool": "file", "action": action, "parameters": {"path": path}, "confidence": 0.95}
 
     # =====================================
