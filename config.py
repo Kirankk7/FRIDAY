@@ -110,6 +110,11 @@ HT_BACKEND = os.getenv("HT_BACKEND", "auto")
 # Features degrade gracefully (with install hint) when no vision model is present.
 VISION_MODEL = os.getenv("VISION_MODEL", "llava")
 
+# ── Phase 63 — Burp traffic ingestion (Community edition; no Pro/API key needed) ──
+# Primary path is file export (ingest_burp <export.xml>). Optionally set this to the
+# Burp MCP server's HTTP endpoint for a best-effort live pull. Empty = file-only.
+BURP_MCP_URL = os.getenv("BURP_MCP_URL", "")
+
 # ── Phase 61 — proactive engine (JARVIS reaches out: digest + alerts) ──
 PROACTIVE_ENABLED     = os.getenv("PROACTIVE_ENABLED", "1") not in ("0", "false", "False")
 PROACTIVE_DIGEST_HOUR = int(os.getenv("PROACTIVE_DIGEST_HOUR", "8"))   # morning brief after this hour

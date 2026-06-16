@@ -1016,6 +1016,27 @@ Report:"""
     # BUG-BOUNTY WORKFLOW (Phase 54)
     # =====================================
     # =====================================
+    # BURP INGEST (Phase 63 — Community-friendly)
+    # =====================================
+    def ingest_burp(self, path: str) -> dict:
+        """Parse a Burp HTTP-history XML export → endpoint inventory → target profile."""
+        from core import burp_ingest, target_profiles
+        if not path:
+            return {"success": False, "message": "Point me at a Burp export: 'ingest burp <file.xml>'.", "data": {}}
+        res = burp_ingest.parse_export(path)
+        if not res.get("success"):
+            return res
+        inv = res["data"]
+        # attach endpoints to each host's profile
+        for host in inv.get("hosts", []):
+            host_urls = [u for u in inv.get("urls", []) if host in u]
+            target_profiles.record_endpoints(host, host_urls)
+            target_profiles.record_scan(host, "burp-ingest",
+                                        f"{len(host_urls)} endpoints from Burp traffic")
+        res["message"] += " Saved to target profile(s). Next: nuclei/httpx on these endpoints."
+        return res
+
+    # =====================================
     # VALIDATION GATE (Phase 60 — adapted from shuvonsec/claude-bug-bounty)
     # =====================================
     # Never-submit blacklist: template-id fragments that are noise / informational
@@ -1225,6 +1246,17 @@ Report:"""
         # ── Stage 5: Structured PoC report ──
         report = self._format_bb_report(target, findings, exploits_map, pdata, validated)
         saved = self.save_report(f"bugbounty_{target}", report)
+
+        # Phase 63 — remember this target across hunts
+        try:
+            from core import target_profiles
+            target_profiles.record_scan(target, "bug_bounty",
+                                        f"{len(reportable)} reportable, {filtered} filtered")
+            target_profiles.record_findings(target, reportable)
+            if pdata.get("urls"):
+                target_profiles.record_endpoints(target, pdata["urls"])
+        except Exception as e:
+            print(f"[ULTRON] profile update skipped: {e}")
 
         crit = sum(1 for f in reportable if f["severity"] == "critical")
         high = sum(1 for f in reportable if f["severity"] == "high")
@@ -2143,6 +2175,26 @@ Report:"""
 
             elif action == "system_health":
                 return self.system_health()
+
+            elif action == "target_profile":
+                from core import target_profiles
+                return target_profiles.summary(parameters.get("target", target))
+
+            elif action == "list_targets":
+                from core import target_profiles
+                return target_profiles.list_targets()
+
+            elif action == "profile_note":
+                from core import target_profiles
+                return target_profiles.add_note(parameters.get("target", target),
+                                                parameters.get("note", ""))
+
+            elif action == "ingest_burp":
+                return self.ingest_burp(parameters.get("path", target))
+
+            elif action == "github_hunt":
+                from core import github_hunt
+                return github_hunt.hunt(parameters.get("org", target))
 
             elif action == "kb_methodology":
                 from core import security_kb
