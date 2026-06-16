@@ -25,10 +25,11 @@ A privacy-first, fully-local AI assistant with a multi-agent architecture, voice
 - **Cybersecurity agent (Ultron)** — native recon suite + a **180+ tool HackingTool fleet** (via WSL/Docker), NVD CVE search, VirusTotal, CVE→asset correlation, one-command bug-bounty workflow with a 7-question validation gate (kills noise/unconfirmed findings) + platform-ready PoC report
 - **Blue-team defensive mode** — host monitor: baselines listening ports + processes, flags new/suspicious ones (known backdoor ports + attacker tooling) — offense *and* defense
 - **Local multimodal vision** — "what's on my screen" / describe any image via an Ollama vision model (llava etc), all on-device
+- **Bug-bounty knowledge pack** — Ultron RAG-indexes real methodology notes (recon, takeover, SQLi/XSS/SSRF/IDOR playbooks, OSINT) + bundled wordlists; ask "how do I test for subdomain takeover" and get a grounded, sourced answer, all local
 - **Chat with your documents (RAG)** — index a file or folder, then ask questions and get grounded answers with source citations. Local TF-IDF retrieval + MarkItDown — no cloud, no embeddings model
 - **Unified memory + telemetry** — one facade across the vector/edith/tool/personal stores; SQLite-backed long-term memory; live per-agent telemetry feeding the HUD
 - **Gated critic pass** — optional self-review (critique → revise) on high-stakes Ultron/Athena reports
-- **Reliability engineering** — circuit breaker, LRU routing cache, shared API rate-throttle, startup config validator, structured rotating logs, **284-test regression suite**
+- **Reliability engineering** — circuit breaker, LRU routing cache, shared API rate-throttle, startup config validator, structured rotating logs, **289-test regression suite**
 - **Proactive engine** — JARVIS reaches out: morning digest, security alerts (new ports / suspicious processes), CVE-watchlist hits, and reminders pushed to the HUD (Telegram/email sinks pluggable)
 - **Streaming** — token-by-token SSE responses with sentence-chunked TTS
 
@@ -123,7 +124,7 @@ On boot, a **config validator** prints a readiness summary (Ollama reachable, mo
 ## Testing
 
 ```bash
-python test_regression.py     # 30 sections, 284 tests, HTML report
+python test_regression.py     # 30 sections, 289 tests, HTML report
 ```
 
 Covers all 15 agents, router patterns, security helpers + HackingTool gates, SSRF guard, circuit breaker, AutoTune + model routing, API throttle, config validator, memory, TTS, and live-API integrations (skipped when offline).
@@ -132,6 +133,6 @@ Covers all 15 agents, router patterns, security helpers + HackingTool gates, SSR
 
 ## Status
 
-Feature-complete core. Local assistant + voice + 3-mode HUD + cybersecurity toolkit, all functional and tested (284 tests green).
+Feature-complete core. Local assistant + voice + 3-mode HUD + cybersecurity toolkit, all functional and tested (289 tests green).
 
 *Built as a learning project exploring local LLM orchestration, multi-agent design, adaptive cognition, and AI-assisted security workflows.*

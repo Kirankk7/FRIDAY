@@ -679,7 +679,7 @@ def route_single_intent(
         return {"tool": "ultron", "action": "full_pipeline", "parameters": {"target": _m.group(1).strip()}, "confidence": 0.99}
 
     # Phase 54 — bug-bounty workflow (recon → hunt → validate → report)
-    _m = re.match(r"(?:bug bounty|bugbounty|full hunt(?: on)?|hunt|bug hunt(?: on)?|run bug bounty on?)\s+(.+)", text)
+    _m = re.match(r"(?:bug bounty|bugbounty|full hunt(?: on)?|hunt|bug hunt(?: on)?|run bug bounty on?)\s+(?!notes?\b|methodology\b|playbook\b)(.+)", text)
     if _m:
         return {"tool": "ultron", "action": "bug_bounty", "parameters": {"target": _m.group(1).strip()}, "confidence": 0.98}
 
@@ -695,6 +695,23 @@ def route_single_intent(
     if _img:
         return {"tool": "vision", "action": "describe_image",
                 "parameters": {"path": _img.group(1).strip().strip('"\'')}, "confidence": 0.95}
+
+    # Phase 62 — Ultron Knowledge Pack (bug-bounty methodology + wordlists)
+    _m = re.match(r"(?:list )?(?:bundled )?wordlists?$|wordlists? for\s+(.+)", text)
+    if text in ("wordlists", "list wordlists", "bundled wordlists"):
+        return {"tool": "ultron", "action": "kb_wordlist", "parameters": {"kind": ""}, "confidence": 0.96}
+    _m = re.match(r"(?:wordlist|payload list|payloads?) (?:for |of )?(.+)", text)
+    if _m:
+        return {"tool": "ultron", "action": "kb_wordlist", "parameters": {"kind": _m.group(1).strip()}, "confidence": 0.95}
+
+    _m = re.match(r"(?:methodology|playbook|how (?:do i|to)|how can i|steps to|guide to|approach for|"
+                  r"bug bounty notes? (?:on|for|about)|notes? (?:on|for|about))\s+(.+)", text)
+    if _m and any(w in text for w in (
+            "test", "find", "exploit", "hunt", "bypass", "takeover", "recon", "enumerate",
+            "ssrf", "xss", "sqli", "idor", "lfi", "rce", "injection", "redirect", "csrf",
+            "subdomain", "dork", "methodology", "playbook", "notes")):
+        return {"tool": "ultron", "action": "kb_methodology",
+                "parameters": {"query": text}, "confidence": 0.9}
 
     # Phase 59 — defensive / blue-team host monitor
     if text in ("defensive scan", "defense scan", "blue team scan", "check my system",
