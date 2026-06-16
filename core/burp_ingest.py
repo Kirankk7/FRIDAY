@@ -62,6 +62,7 @@ def parse_export(path: str) -> dict:
         return {"success": False, "message": f"That doesn't look like a Burp XML export: {str(e)[:60]}", "data": {}}
 
     endpoints, params, hosts, methods = {}, set(), set(), {}
+    tags = {"apis": set(), "jwt": set(), "auth": set(), "graphql": set(), "tech": set()}
     items = root.findall(".//item")
     for it in items:
         url = (it.findtext("url") or "").strip()
@@ -71,15 +72,18 @@ def parse_export(path: str) -> dict:
             continue
         sp = urlsplit(url)
         hosts.add(sp.netloc)
-        key = f"{method} {sp.scheme}://{sp.netloc}{sp.path}"
-        endpoints[key] = {"url": f"{sp.scheme}://{sp.netloc}{sp.path}", "method": method,
-                          "status": status}
+        base = f"{sp.scheme}://{sp.netloc}{sp.path}"
+        endpoints[f"{method} {base}"] = {"url": base, "method": method, "status": status}
         methods[method] = methods.get(method, 0) + 1
-        params.update(_params_from_request(_decode(it.find("request")), url))
+        req = _decode(it.find("request"))
+        resp = _decode(it.find("response"))
+        params.update(_params_from_request(req, url))
+        _tag(base, sp.path, status, req, resp, tags)
 
     if not endpoints:
         return {"success": False, "message": "No HTTP items found in that export.", "data": {}}
 
+    tags = {k: sorted(v) for k, v in tags.items() if v}
     inv = {
         "items": len(items),
         "hosts": sorted(hosts),
@@ -87,11 +91,43 @@ def parse_export(path: str) -> dict:
         "urls": sorted({e["url"] for e in endpoints.values()}),
         "params": sorted(params),
         "methods": methods,
+        "tags": tags,
     }
+    tagbits = [f"{len(v)} {k}" for k, v in tags.items() if v]
     msg = (f"Ingested {len(items)} Burp items: {len(inv['endpoints'])} unique endpoints "
            f"across {len(hosts)} host(s), {len(params)} parameters. "
-           f"Methods: {', '.join(f'{m} x{c}' for m, c in sorted(methods.items()))}.")
+           f"Methods: {', '.join(f'{m} x{c}' for m, c in sorted(methods.items()))}."
+           + (f" Tagged: {', '.join(tagbits)}." if tagbits else ""))
     return {"success": True, "message": msg, "data": inv}
+
+
+def _tag(url: str, path: str, status: str, req: str, resp: str, tags: dict) -> None:
+    """Heuristic tagging of traffic — engineering, no model needed."""
+    low_path = path.lower()
+    blob = f"{req}\n{resp}"
+    # API endpoints
+    if re.search(r"/(api|rest|v\d+|graphql|wp-json)(/|$)", low_path) or '"application/json"' in resp.lower() or "application/json" in resp.lower():
+        if re.search(r"/(api|rest|v\d+|wp-json)(/|$)", low_path):
+            tags["apis"].add(url)
+    # GraphQL
+    if "graphql" in low_path or re.search(r'"(query|mutation)"\s*:', req) or "/graphql" in url.lower():
+        tags["graphql"].add(url)
+    # JWT (Bearer eyJ...) in request or response
+    if re.search(r"eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.", blob):
+        tags["jwt"].add(url)
+    elif re.search(r"authorization:\s*bearer", blob, re.I):
+        tags["jwt"].add(url)
+    # Auth boundaries: login/token/oauth paths, or 401/403 responses
+    if re.search(r"/(login|signin|auth|oauth|token|session|sso|logout|register|saml)(/|$|\?)", low_path):
+        tags["auth"].add(url)
+    if status in ("401", "403"):
+        tags["auth"].add(f"{url} [{status}]")
+    if re.search(r"set-cookie:\s*\S*(session|sid|token|jwt|auth)", blob, re.I):
+        tags["auth"].add(f"{url} [cookie-auth]")
+    # Tech fingerprint from Server/X-Powered-By headers
+    m = re.search(r"(?:^|\n)(?:server|x-powered-by):\s*([^\r\n]+)", resp, re.I)
+    if m:
+        tags["tech"].add(m.group(1).strip()[:50])
 
 
 def live_pull() -> dict:

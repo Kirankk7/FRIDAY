@@ -1027,14 +1027,42 @@ Report:"""
         if not res.get("success"):
             return res
         inv = res["data"]
-        # attach endpoints to each host's profile
+        tags = inv.get("tags", {})
+        # attach endpoints + typed intel to each host's profile
         for host in inv.get("hosts", []):
             host_urls = [u for u in inv.get("urls", []) if host in u]
             target_profiles.record_endpoints(host, host_urls)
             target_profiles.record_scan(host, "burp-ingest",
                                         f"{len(host_urls)} endpoints from Burp traffic")
+            # Phase 64 — typed buckets (URL buckets filtered to host; tech is host-agnostic)
+            host_tags = {b: [v for v in vals if host in v or b == "tech"]
+                         for b, vals in tags.items()}
+            target_profiles.record_tags(host, host_tags)
         res["message"] += " Saved to target profile(s). Next: nuclei/httpx on these endpoints."
         return res
+
+    # =====================================
+    # EVIDENCE / RETEST (Phase 64) — finding -> retest -> evidence -> report
+    # =====================================
+    def collect_evidence(self, url: str, label: str = "") -> dict:
+        """Re-probe a finding URL and capture request/response evidence for the report."""
+        from core import target_profiles
+        if not url:
+            return {"success": False, "message": "Give me a URL to validate, boss.", "data": {}}
+        url = url.strip()
+        probe = self.httpx_probe(url)          # live re-probe (httpx, already allowlisted)
+        live = probe.get("message", "").strip()
+        confirmed = probe.get("success") and bool(live) and "0 live" not in live.lower()
+        evidence = (f"Retest of {url}\n"
+                    f"Status: {'CONFIRMED live' if confirmed else 'no response / not reproduced'}\n"
+                    f"Probe: {live[:400] or '(no output)'}")
+        host = url.split("//")[-1].split("/")[0]
+        target_profiles.record_evidence(host, label or url, evidence)
+        return {"success": True,
+                "message": (f"Evidence captured for {url} — "
+                            f"{'confirmed live' if confirmed else 'could not reproduce'}. "
+                            f"Saved to {host}'s profile."),
+                "data": {"url": url, "confirmed": confirmed, "evidence": evidence}}
 
     # =====================================
     # VALIDATION GATE (Phase 60 — adapted from shuvonsec/claude-bug-bounty)
@@ -1255,6 +1283,13 @@ Report:"""
             target_profiles.record_findings(target, reportable)
             if pdata.get("urls"):
                 target_profiles.record_endpoints(target, pdata["urls"])
+            # Phase 64 — auto-capture evidence for top reportable findings (retest)
+            for f in reportable[:3]:
+                if f.get("url"):
+                    try:
+                        self.collect_evidence(f["url"], f.get("template", ""))
+                    except Exception:
+                        pass
         except Exception as e:
             print(f"[ULTRON] profile update skipped: {e}")
 
@@ -2195,6 +2230,10 @@ Report:"""
             elif action == "github_hunt":
                 from core import github_hunt
                 return github_hunt.hunt(parameters.get("org", target))
+
+            elif action == "collect_evidence":
+                return self.collect_evidence(parameters.get("url", target),
+                                             parameters.get("label", ""))
 
             elif action == "kb_methodology":
                 from core import security_kb
