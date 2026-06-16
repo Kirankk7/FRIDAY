@@ -45,14 +45,51 @@ def _now() -> str:
     return datetime.datetime.now().isoformat(timespec="seconds")
 
 
+# typed intelligence buckets (Phase 64) — the "memory graph" per target
+_TAG_BUCKETS = ("apis", "jwt", "auth", "graphql", "tech", "evidence")
+
+
 def _get(data: dict, host: str) -> dict:
     p = data.setdefault(host, {})
     p.setdefault("host", host)
     p.setdefault("first_seen", _now())
     p["last_seen"] = _now()
-    for k in ("scans", "findings", "endpoints", "notes"):
+    for k in ("scans", "findings", "endpoints", "notes", *_TAG_BUCKETS):
         p.setdefault(k, [])
     return p
+
+
+def record_tags(host: str, tags: dict) -> None:
+    """Merge typed intel into a target's buckets. tags = {bucket: [values]}."""
+    host = _norm(host)
+    if not host or not tags:
+        return
+    with _lock:
+        data = _load()
+        p = _get(data, host)
+        for bucket, vals in tags.items():
+            if bucket not in _TAG_BUCKETS or not vals:
+                continue
+            existing = set(p[bucket])
+            for v in vals:
+                if v and v not in existing:
+                    p[bucket].append(v); existing.add(v)
+            p[bucket] = p[bucket][-200:]
+        _save(data)
+
+
+def record_evidence(host: str, finding: str, evidence: str) -> None:
+    """Attach captured request/response evidence for a finding."""
+    host = _norm(host)
+    if not host or not evidence:
+        return
+    with _lock:
+        data = _load()
+        p = _get(data, host)
+        p["evidence"].append({"finding": (finding or "")[:120],
+                              "evidence": evidence[:1200], "ts": _now()})
+        p["evidence"] = p["evidence"][-50:]
+        _save(data)
 
 
 def record_scan(host: str, kind: str, summary: str) -> None:
@@ -134,6 +171,14 @@ def summary(host: str) -> dict:
         f"{len(p['scans'])} scan(s), {len(p['findings'])} finding(s) ({crit} critical, {high} high), "
         f"{len(p['endpoints'])} endpoint(s).",
     ]
+    # typed intel buckets (Phase 64)
+    for bucket, label in (("apis", "APIs"), ("jwt", "JWT/tokens"), ("auth", "Auth"),
+                          ("graphql", "GraphQL"), ("tech", "Tech")):
+        vals = p.get(bucket, [])
+        if vals:
+            lines.append(f"{label}: " + ", ".join(vals[:6]) + (" …" if len(vals) > 6 else ""))
+    if p.get("evidence"):
+        lines.append(f"Evidence captured: {len(p['evidence'])} item(s).")
     if p["scans"]:
         lines.append("Recent scans: " + ", ".join(s["kind"] for s in p["scans"][-5:]))
     if p["notes"]:

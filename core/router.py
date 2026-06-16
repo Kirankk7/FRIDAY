@@ -717,6 +717,10 @@ def route_single_intent(
     if _m:
         return {"tool": "ultron", "action": "github_hunt", "parameters": {"org": _m.group(1).strip()}, "confidence": 0.95}
 
+    _m = re.match(r"(?:collect evidence|capture evidence|get evidence|retest|re-?test|validate (?:finding|url))\s+(?:for |on )?(.+)", text)
+    if _m:
+        return {"tool": "ultron", "action": "collect_evidence", "parameters": {"url": _m.group(1).strip()}, "confidence": 0.94}
+
     # Phase 62 — Ultron Knowledge Pack (bug-bounty methodology + wordlists)
     _m = re.match(r"(?:list )?(?:bundled )?wordlists?$|wordlists? for\s+(.+)", text)
     if text in ("wordlists", "list wordlists", "bundled wordlists"):

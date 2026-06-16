@@ -1809,6 +1809,78 @@ run_test("GitHubHunt: secret-file regex",        _ghh_secret_regex)
 run_test("GitHubHunt: empty org graceful",       _ghh_empty_graceful)
 run_test("Phase63: router (profile/burp/hunt)",  _phase63_router)
 
+# Phase 64 — typed memory buckets · Burp tagging · evidence loop
+def _profile_typed_buckets():
+    import core.target_profiles as t, os as _os
+    saved = t._FILE
+    t._FILE = _os.path.join("data", "tp_typed_test.json")
+    try:
+        if _os.path.exists(t._FILE): _os.remove(t._FILE)
+        t.record_tags("t.com", {"jwt": ["https://t.com/api"], "graphql": ["https://t.com/graphql"],
+                                "tech": ["nginx/1.21"], "bogus": ["x"]})
+        t.record_evidence("t.com", "CVE-1", "Status: CONFIRMED live")
+        s = t.summary("t.com")
+        ok = ("GraphQL" in s["message"] and "JWT" in s["message"] and "nginx" in s["message"]
+              and "Evidence captured: 1" in s["message"])
+        # bogus bucket must be ignored
+        return True if ok and "x" not in s["data"].get("bogus", []) else f"typed buckets wrong: {s['message']!r}"
+    finally:
+        try: _os.remove(t._FILE)
+        except Exception: pass
+        t._FILE = saved
+
+def _burp_tagging():
+    import base64, tempfile, os as _os
+    def itm(url, method, status, req, resp):
+        return (f'<item><url>{url}</url><method>{method}</method><status>{status}</status>'
+                f'<request base64="true">{base64.b64encode(req.encode()).decode()}</request>'
+                f'<response base64="true">{base64.b64encode(resp.encode()).decode()}</response></item>')
+    xml = ('<?xml version="1.0"?><items>'
+           + itm("https://t.com/api/v1/x", "GET", "200",
+                 "GET /api/v1/x HTTP/1.1\r\nAuthorization: Bearer eyJabc.eyJdef.sig\r\n\r\n",
+                 "HTTP/1.1 200 OK\r\nServer: nginx\r\n\r\n")
+           + itm("https://t.com/graphql", "POST", "200",
+                 'POST /graphql HTTP/1.1\r\n\r\n{"query":"{me}"}', "HTTP/1.1 200 OK\r\n\r\n")
+           + itm("https://t.com/login", "POST", "401", "POST /login HTTP/1.1\r\n\r\n", "HTTP/1.1 401\r\n\r\n")
+           + '</items>')
+    p = _os.path.join(tempfile.gettempdir(), "burp_tag_unit.xml")
+    open(p, "w", encoding="utf-8").write(xml)
+    try:
+        from core import burp_ingest
+        t = burp_ingest.parse_export(p).get("data", {}).get("tags", {})
+        return True if t.get("jwt") and t.get("graphql") and t.get("auth") and t.get("apis") and t.get("tech") \
+            else f"tagging incomplete: {t}"
+    finally:
+        try: _os.remove(p)
+        except Exception: pass
+
+def _evidence_structure():
+    from agents.ultron.ultron_agent import ultron_agent as U
+    import core.target_profiles as t, os as _os
+    saved = t._FILE
+    t._FILE = _os.path.join("data", "tp_ev_test.json")
+    try:
+        if _os.path.exists(t._FILE): _os.remove(t._FILE)
+        # bad/unreachable url → still returns structured evidence, never raises
+        r = U.collect_evidence("http://127.0.0.1:9/definitely-down", "test-finding")
+        return True if r["success"] and "evidence" in r["data"] and "Retest of" in r["data"]["evidence"] \
+            else f"evidence shape wrong: {r}"
+    finally:
+        try: _os.remove(t._FILE)
+        except Exception: pass
+        t._FILE = saved
+
+def _phase64_router():
+    R = route_single_intent
+    return True if (R("collect evidence https://t.com/x").get("action") == "collect_evidence"
+                    and R("retest https://t.com/y").get("action") == "collect_evidence") \
+        else "evidence routing wrong"
+
+run_test("Profiles: typed buckets + evidence",   _profile_typed_buckets)
+run_test("Burp: JWT/GraphQL/auth/api tagging",   _burp_tagging)
+run_test("Evidence: structured + never raises",  _evidence_structure)
+run_test("Phase64: router (evidence/retest)",    _phase64_router)
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # 27. LOGGER + THINK + CONFIG KEYS

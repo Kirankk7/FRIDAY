@@ -29,7 +29,7 @@ A privacy-first, fully-local AI assistant with a multi-agent architecture, voice
 - **Chat with your documents (RAG)** — index a file or folder, then ask questions and get grounded answers with source citations. Local TF-IDF retrieval + MarkItDown — no cloud, no embeddings model
 - **Unified memory + telemetry** — one facade across the vector/edith/tool/personal stores; SQLite-backed long-term memory; live per-agent telemetry feeding the HUD
 - **Gated critic pass** — optional self-review (critique → revise) on high-stakes Ultron/Athena reports
-- **Reliability engineering** — circuit breaker, LRU routing cache, shared API rate-throttle, startup config validator, structured rotating logs, **296-test regression suite**
+- **Reliability engineering** — circuit breaker, LRU routing cache, shared API rate-throttle, startup config validator, structured rotating logs, **300-test regression suite**
 - **Proactive engine** — JARVIS reaches out: morning digest, security alerts (new ports / suspicious processes), CVE-watchlist hits, and reminders pushed to the HUD (Telegram/email sinks pluggable)
 - **Streaming** — token-by-token SSE responses with sentence-chunked TTS
 
@@ -84,8 +84,9 @@ A privacy-first, fully-local AI assistant with a multi-agent architecture, voice
 - **Threat intel**: NVD CVE search, CVE tracking/watchlist, VirusTotal (file/hash/URL/domain/IP)
 - **Correlation**: cross-links tracked CVEs against scanned host services ("am I exposed?")
 - **Bug-bounty workflow**: `bug bounty <target>` → recon → parse → exploit lookup → validate → **quality gate** (7-question + never-submit blacklist + P1-P5 payout tiers) → platform-ready PoC report
-- **Target memory**: per-host profiles — remembers scans, findings, endpoints, and notes across hunts
-- **Burp ingestion** (Community-friendly): parse a Burp HTTP-history export into an endpoint/param inventory → feeds nuclei/httpx + the target profile (no Burp Pro / API key)
+- **Target memory graph**: per-host profiles — scans, findings, endpoints, notes + typed intel buckets (APIs / JWT / auth / GraphQL / tech) across hunts
+- **Burp ingestion + tagging** (Community-friendly): parse a Burp HTTP-history export → endpoint/param inventory, auto-tagging JWT/GraphQL/API/auth-boundary/tech → typed target profile → nuclei/httpx (no Burp Pro / API key)
+- **Evidence/retest loop**: re-probe a finding, capture confirmed request/response evidence into the profile + report (bug-bounty value is in the evidence)
 - **GitHub org secret hunt**: enumerate an org/user's repos + flag secret-prone files, recommend a TruffleHog deep-scan
 - **Hardening built-in**: SSRF guard (blocks internal/metadata IPs), shell-command allowlist + injection sanitizer, shared API rate-throttle
 - *Authorized targets only.*
@@ -127,7 +128,7 @@ On boot, a **config validator** prints a readiness summary (Ollama reachable, mo
 ## Testing
 
 ```bash
-python test_regression.py     # 30 sections, 296 tests, HTML report
+python test_regression.py     # 30 sections, 300 tests, HTML report
 ```
 
 Covers all 15 agents, router patterns, security helpers + HackingTool gates, SSRF guard, circuit breaker, AutoTune + model routing, API throttle, config validator, memory, TTS, and live-API integrations (skipped when offline).
@@ -136,6 +137,6 @@ Covers all 15 agents, router patterns, security helpers + HackingTool gates, SSR
 
 ## Status
 
-Feature-complete core. Local assistant + voice + 3-mode HUD + cybersecurity toolkit, all functional and tested (296 tests green).
+Feature-complete core. Local assistant + voice + 3-mode HUD + cybersecurity toolkit, all functional and tested (300 tests green).
 
 *Built as a learning project exploring local LLM orchestration, multi-agent design, adaptive cognition, and AI-assisted security workflows.*
