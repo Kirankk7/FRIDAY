@@ -1678,6 +1678,55 @@ run_test("Proactive: morning digest pushes",     _proactive_digest)
 run_test("Proactive: digest once per day",       _proactive_digest_once_per_day)
 run_test("Proactive: tick never raises",         _proactive_tick_safe)
 
+# Phase 62 — Ultron Knowledge Pack (bug-bounty methodology + wordlists)
+from core import security_kb as _kb
+
+def _kb_index_and_search():
+    st = _kb.stats()
+    if st["passages"] < 1:                       # fresh clone — build it
+        _kb.build_index()
+        st = _kb.stats()
+    if st["notes"] < 3:
+        return f"too few notes indexed: {st}"
+    hits = _kb.search("subdomain takeover")
+    return True if hits and hits[0]["score"] > 0.1 else f"search weak: {hits[:1]}"
+
+def _kb_methodology_grounded():
+    import core.llm as _L
+    saved = _L.ask_llm
+    try:
+        _L.ask_llm = lambda *a, **k: "Enumerate subdomains, check dangling CNAMEs, claim the service."
+        r = _kb.methodology("how do I test for subdomain takeover")
+        return True if r["success"] and "subdomain" in r["message"].lower() and r["data"]["sources"] \
+            else f"ungrounded: {r}"
+    finally:
+        _L.ask_llm = saved
+
+def _kb_methodology_miss_graceful():
+    r = _kb.methodology("zzqq nonsense topic that is not in notes wxyz")
+    return True if r["success"] else "miss should still succeed gracefully"
+
+def _kb_wordlist_resolve():
+    one = _kb.wordlist_path("ssrf")
+    allw = _kb.wordlist_path("")
+    return True if one["success"] and "ssrf" in one["message"].lower() \
+        and allw["data"].get("files") else f"wordlist resolve failed: {one}"
+
+def _kb_router():
+    a = route_single_intent("how do i test for subdomain takeover")
+    b = route_single_intent("wordlist for lfi")
+    c = route_single_intent("bug bounty notes on xss")
+    d = route_single_intent("bug bounty example.com")   # must still hit the workflow
+    ok = (a.get("action") == "kb_methodology" and b.get("action") == "kb_wordlist"
+          and c.get("action") == "kb_methodology" and d.get("action") == "bug_bounty")
+    return True if ok else f"routing: {a.get('action')},{b.get('action')},{c.get('action')},{d.get('action')}"
+
+run_test("KB: index + methodology search",     _kb_index_and_search)
+run_test("KB: methodology grounded + sources", _kb_methodology_grounded)
+run_test("KB: missing topic graceful",         _kb_methodology_miss_graceful)
+run_test("KB: wordlist resolver",              _kb_wordlist_resolve)
+run_test("KB: router (methodology/wordlist)",  _kb_router)
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # 27. LOGGER + THINK + CONFIG KEYS

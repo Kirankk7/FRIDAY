@@ -2144,6 +2144,14 @@ Report:"""
             elif action == "system_health":
                 return self.system_health()
 
+            elif action == "kb_methodology":
+                from core import security_kb
+                return security_kb.methodology(parameters.get("query", target) or input_text)
+
+            elif action == "kb_wordlist":
+                from core import security_kb
+                return security_kb.wordlist_path(parameters.get("kind", target))
+
             elif action == "defensive_scan":
                 return self.defensive_scan()
 
