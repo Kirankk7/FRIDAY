@@ -1727,6 +1727,88 @@ run_test("KB: missing topic graceful",         _kb_methodology_miss_graceful)
 run_test("KB: wordlist resolver",              _kb_wordlist_resolve)
 run_test("KB: router (methodology/wordlist)",  _kb_router)
 
+# Phase 63 — target profiles · burp ingest · github hunt
+from core import target_profiles as _tp, burp_ingest as _burp, github_hunt as _ghh
+
+def _profile_record_and_summary():
+    import core.target_profiles as t
+    saved_file = t._FILE
+    t._FILE = os.path.join("data", "target_profiles_test.json")
+    try:
+        if os.path.exists(t._FILE): os.remove(t._FILE)
+        t.record_scan("https://Acme.com/", "nmap", "3 ports")
+        t.record_findings("acme.com", [{"template": "CVE-1", "severity": "critical", "url": "https://acme.com/x"}])
+        t.add_note("acme.com", "review the api")
+        s = t.summary("acme.com")
+        ok = (s["success"] and "acme.com" in s["message"] and "1 scan" in s["message"]
+              and "1 finding" in s["message"])
+        lst = t.list_targets()
+        return True if ok and "acme.com" in lst["message"] else f"profile wrong: {s['message']!r}"
+    finally:
+        try: os.remove(t._FILE)
+        except Exception: pass
+        t._FILE = saved_file
+
+def _profile_normalizes_host():
+    import core.target_profiles as t
+    return True if t._norm("HTTPS://Sub.Example.com/path") == "sub.example.com" else "norm failed"
+
+def _burp_parse_inventory():
+    import base64, tempfile, os as _os
+    req = base64.b64encode(b"GET /api/v1/users?id=1&role=admin HTTP/1.1\r\nHost: t.com\r\n\r\n").decode()
+    xml = (f'<?xml version="1.0"?><items>'
+           f'<item><url>https://t.com/api/v1/users?id=1&amp;role=admin</url><method>GET</method>'
+           f'<status>200</status><request base64="true">{req}</request></item>'
+           f'<item><url>https://t.com/login</url><method>POST</method><status>200</status>'
+           f'<request base64="true">{base64.b64encode(chr(10).join(["POST /login HTTP/1.1","Host: t.com","","u=a&p=b"]).encode()).decode()}</request></item>'
+           f'</items>')
+    p = _os.path.join(tempfile.gettempdir(), "burp_unit.xml")
+    open(p, "w", encoding="utf-8").write(xml)
+    try:
+        r = _burp.parse_export(p)
+        d = r.get("data", {})
+        return True if r["success"] and d.get("items") == 2 and len(d.get("endpoints", [])) == 2 \
+            and "id" in d.get("params", []) else f"burp parse wrong: {r.get('message')}"
+    finally:
+        try: _os.remove(p)
+        except Exception: pass
+
+def _burp_bad_file_graceful():
+    r = _burp.parse_export("nonexistent_burp_xyz.xml")
+    return True if not r["success"] and "find" in r["message"].lower() else "bad burp file not graceful"
+
+def _ghh_secret_regex():
+    pat = _ghh._SECRET_FILES
+    hits = [".env", "config/credentials.json", "deploy/id_rsa", "backup.sql", "keys/private.pem"]
+    misses = ["README.md", "src/app.py", "index.html"]
+    return True if all(pat.search(h) for h in hits) and not any(pat.search(m) for m in misses) \
+        else "secret-file regex wrong"
+
+def _ghh_empty_graceful():
+    r = _ghh.hunt("")
+    return True if not r["success"] else "empty org should fail gracefully"
+
+def _phase63_router():
+    R = route_single_intent
+    checks = {
+        "ingest burp C:/h.xml": "ingest_burp",
+        "target profile acme.com": "target_profile",
+        "list targets": "list_targets",
+        "github hunt acme": "github_hunt",
+    }
+    for txt, exp in checks.items():
+        if R(txt).get("action") != exp:
+            return f"{txt!r} -> {R(txt).get('action')} (want {exp})"
+    return True
+
+run_test("Profiles: record + summary + list",   _profile_record_and_summary)
+run_test("Profiles: host normalization",        _profile_normalizes_host)
+run_test("Burp: parse export → inventory",       _burp_parse_inventory)
+run_test("Burp: bad file graceful",              _burp_bad_file_graceful)
+run_test("GitHubHunt: secret-file regex",        _ghh_secret_regex)
+run_test("GitHubHunt: empty org graceful",       _ghh_empty_graceful)
+run_test("Phase63: router (profile/burp/hunt)",  _phase63_router)
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # 27. LOGGER + THINK + CONFIG KEYS

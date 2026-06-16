@@ -696,6 +696,27 @@ def route_single_intent(
         return {"tool": "vision", "action": "describe_image",
                 "parameters": {"path": _img.group(1).strip().strip('"\'')}, "confidence": 0.95}
 
+    # Phase 63 — target profiles · burp ingest · github hunt
+    if text in ("list targets", "profiled targets", "show targets", "my targets"):
+        return {"tool": "ultron", "action": "list_targets", "parameters": {}, "confidence": 0.97}
+
+    _m = re.match(r"(?:target profile|profile (?:for|of)?|what do (?:we|i) know about|recall target)\s+(.+)", text)
+    if _m:
+        return {"tool": "ultron", "action": "target_profile", "parameters": {"target": _m.group(1).strip()}, "confidence": 0.95}
+
+    _m = re.match(r"(?:note (?:on|for|about)|add note (?:on|to)?)\s+(\S+)\s*[:,-]?\s*(.+)", text)
+    if _m and "routine" not in text:
+        return {"tool": "ultron", "action": "profile_note",
+                "parameters": {"target": _m.group(1).strip(), "note": _m.group(2).strip()}, "confidence": 0.9}
+
+    _m = re.match(r"(?:ingest burp|burp ingest|import burp|load burp(?: history| export)?)\s+(.+)", text)
+    if _m:
+        return {"tool": "ultron", "action": "ingest_burp", "parameters": {"path": _m.group(1).strip().strip('"\'')}, "confidence": 0.96}
+
+    _m = re.match(r"(?:github hunt|gh hunt|hunt github|secret hunt|github secret hunt)\s+(.+)", text)
+    if _m:
+        return {"tool": "ultron", "action": "github_hunt", "parameters": {"org": _m.group(1).strip()}, "confidence": 0.95}
+
     # Phase 62 — Ultron Knowledge Pack (bug-bounty methodology + wordlists)
     _m = re.match(r"(?:list )?(?:bundled )?wordlists?$|wordlists? for\s+(.+)", text)
     if text in ("wordlists", "list wordlists", "bundled wordlists"):
