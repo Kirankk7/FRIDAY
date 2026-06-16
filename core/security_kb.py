@@ -44,8 +44,12 @@ def _chunk(text: str) -> list:
     return chunks
 
 
+_CACHE = None   # in-memory index (built/loaded once; KB is read-only at runtime)
+
+
 def build_index() -> dict:
     """(Re)build the KB index from notes/. Run after adding/editing notes."""
+    global _CACHE
     chunks = []
     if not os.path.isdir(_NOTES_DIR):
         return {"success": False, "message": "knowledge/notes dir missing", "passages": 0}
@@ -58,33 +62,44 @@ def build_index() -> dict:
                 text = f.read()
         except Exception:
             continue
-        topic = os.path.splitext(name)[0].replace("_", " ")
+        topic = os.path.splitext(name)[0]
+        if topic.startswith("claudered_"):     # claudered_web_offensive-ssrf -> web / ssrf
+            topic = topic[len("claudered_"):].replace("offensive-", "").replace("_", " / ")
+        topic = topic.replace("_", " ")
         for piece in _chunk(text):
             chunks.append({"name": name, "topic": topic,
                            "chunk": piece, "tokens": _tokenize(topic + " " + piece)})
+    _CACHE = chunks                     # use in-memory copy directly (avoid read race)
     os.makedirs(os.path.dirname(_INDEX_FILE), exist_ok=True)
-    with open(_INDEX_FILE, "w", encoding="utf-8") as f:
-        json.dump(chunks, f)
+    try:
+        with open(_INDEX_FILE, "w", encoding="utf-8") as f:
+            json.dump(chunks, f)
+    except Exception as e:
+        print(f"[security_kb] index write failed (using in-memory): {e}")
     return {"success": True, "passages": len(chunks),
             "docs": len({c["name"] for c in chunks}),
             "message": f"Indexed {len({c['name'] for c in chunks})} notes, {len(chunks)} passages."}
 
 
 def _load() -> list:
+    global _CACHE
+    if _CACHE is not None:
+        return _CACHE
     try:
         if os.path.exists(_INDEX_FILE):
             with open(_INDEX_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
-    except Exception:
-        pass
+                _CACHE = json.load(f)
+                return _CACHE
+    except Exception as e:
+        print(f"[security_kb] index read failed, rebuilding: {e}")
     return []
 
 
 def _ensure_index() -> list:
     chunks = _load()
     if not chunks:                      # first run on a fresh clone
-        build_index()
-        chunks = _load()
+        build_index()                   # populates _CACHE in-memory
+        chunks = _CACHE or []
     return chunks
 
 

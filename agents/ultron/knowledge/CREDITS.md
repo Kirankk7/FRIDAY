@@ -5,6 +5,8 @@ public repositories for local, offline reference (RAG-indexed by `core/security_
 All credit to the original authors.
 
 **Notes (`notes/`)**
+- 58 expert methodology skills (`claudered_*.md`, 13 domains: web/auth/cloud/AD/
+  recon/mobile/wireless/iot/exploit-dev/fuzzing/infra/ai/utility) — github.com/SnailSploit/Claude-Red
 - Bug bounty playbooks/notes — github.com/hack-with-rohit/Bug_bounty_Notes
 - OSINT resource list (`awesome_osint.md`) — github.com/jivoi/awesome-osint
 - Tool catalog (`hacking_tools_catalog.md`) — (hacking-tools learning catalog)
