@@ -4,6 +4,7 @@
 # sounddevice/pyaudio) are lazy-imported and NOT exercised by the CI subset, so
 # they're omitted here to keep CI fast and reliable. Full deps: requirements.txt.
 requests
+python-dotenv
 psutil
 beautifulsoup4
 lxml
