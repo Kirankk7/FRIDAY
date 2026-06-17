@@ -144,16 +144,23 @@ class TerminatorAgent:
             "vs code": "code", "vscode": "code", "code": "code", "chrome": "chrome",
             "edge": "msedge", "word": "winword", "excel": "excel",
         }
-        cmd = shortcuts.get(name.lower().strip(), name.strip())
+        # Security (W2): launch ONLY from the static allowlist. Never shell out on
+        # an LLM/user-controlled string — no os.system, no shell=True. Unknown
+        # names are refused, not executed.
+        cmd = shortcuts.get(name.lower().strip())
+        if not cmd:
+            return {"success": False,
+                    "message": f"'{name}' isn't an allowed app. Allowed: "
+                               + ", ".join(sorted(set(shortcuts))),
+                    "data": {}}
         try:
-            os.startfile(cmd) if not cmd.endswith(":") else os.system(f"start {cmd}")
+            if cmd.endswith(":"):           # URI verb (e.g. ms-settings:)
+                os.startfile(cmd)           # noqa: S606 — fixed allowlisted URI, not user input
+            else:
+                subprocess.Popen([cmd])     # argv list, no shell — PATH resolves argv[0]
             return {"success": True, "message": f"Launching {name}.", "data": {"app": name}}
-        except Exception:
-            try:
-                subprocess.Popen(cmd, shell=True)
-                return {"success": True, "message": f"Launching {name}.", "data": {"app": name}}
-            except Exception as e:
-                return {"success": False, "message": f"Couldn't launch '{name}': {e}", "data": {}}
+        except Exception as e:
+            return {"success": False, "message": f"Couldn't launch '{name}': {e}", "data": {}}
 
     # ── Click a named button within a window ───────────────────────────────
     def click_element(self, window: str, element: str) -> dict:

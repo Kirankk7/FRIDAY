@@ -222,15 +222,21 @@ class VeronicaAgent:
             # ==============================
             # NORMAL APP
             # ==============================
+            # Security (W2): no shell=True. `command` is an allowlisted dict value;
+            # launch via argv list, and route URIs / .msc consoles through startfile.
             if (
                 platform.system()
                 == "Windows"
             ):
 
-                subprocess.Popen(
-                    command,
-                    shell=True
-                )
+                parts = command.split()
+                if parts and parts[0] == "start":   # "start cmd" -> drop cmd.exe builtin
+                    parts = parts[1:]
+                target = parts[0] if parts else command
+                if target.endswith(":") or target.endswith(".msc"):
+                    os.startfile(target)            # noqa: S606 — fixed allowlisted URI/console
+                else:
+                    subprocess.Popen(parts or [target])
 
             else:
 
