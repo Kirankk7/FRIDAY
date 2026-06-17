@@ -1881,6 +1881,52 @@ run_test("Burp: JWT/GraphQL/auth/api tagging",   _burp_tagging)
 run_test("Evidence: structured + never raises",  _evidence_structure)
 run_test("Phase64: router (evidence/retest)",    _phase64_router)
 
+# Batch 1 — security hardening (injection sinks killed, dead code removed)
+def _code_lines(path):
+    """Source lines with comments stripped (so doc/comments don't trip greps)."""
+    import io as _io
+    out = []
+    for ln in _io.open(path, encoding="utf-8"):
+        code = ln.split("#", 1)[0]
+        out.append(code)
+    return "\n".join(out)
+
+def _no_shell_true_in_agents():
+    hits = []
+    for f in ("agents/terminator/terminator_agent.py", "agents/veronica/veronica_agent.py"):
+        code = _code_lines(f)
+        if "shell=True" in code or "os.system(" in code:
+            hits.append(f)
+    return True if not hits else f"shell sink still present in: {hits}"
+
+def _ht_run_no_bash_lc():
+    code = _code_lines("agents/ultron/hackingtool/scripts/ht_run.py")
+    return True if '"-lc"' not in code and "'-lc'" not in code else "ht_run still uses bash -lc"
+
+def _terminator_launch_allowlist():
+    from agents.terminator.terminator_agent import terminator_agent as T
+    # arbitrary/injection name must be refused, not executed
+    r = T.launch_app("evil; calc & whoami")
+    return True if not r.get("success") and "allowed" in r.get("message", "").lower() \
+        else f"launch_app didn't refuse injection: {r}"
+
+def _ht_args_injection_blocked():
+    from agents.ultron.hackingtool import ht_wrapper as w
+    r = w.ht_run("information_gathering.Amass", "example.com; rm -rf /")
+    return True if r.get("status") == "refused" else f"injected args not refused: {r.get('status')}"
+
+def _dead_files_removed():
+    import os as _os
+    dead = ["core/safety.py", "core/agent_loop.py", "core/tmpl6bfy_2y.py", "core/tmppopv4oit.py"]
+    still = [f for f in dead if _os.path.exists(f)]
+    return True if not still else f"dead files still present: {still}"
+
+run_test("Sec: no shell=True/os.system in agents", _no_shell_true_in_agents)
+run_test("Sec: ht_run uses argv, no bash -lc",     _ht_run_no_bash_lc)
+run_test("Sec: terminator launch is allowlisted",  _terminator_launch_allowlist)
+run_test("Sec: ht args injection refused",         _ht_args_injection_blocked)
+run_test("Sec: dead code files removed",            _dead_files_removed)
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # 27. LOGGER + THINK + CONFIG KEYS

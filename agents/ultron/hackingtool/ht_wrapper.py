@@ -9,8 +9,9 @@ Hard gates enforced here — NOT in ht_run.py:
      (ddos, phishing payloads, wifi-jam, post-exploitation C2, payload creators,
      android attack, remote admin shells) are NEVER runnable through this wrapper.
   2. No --command / --force / --privileged ever passed (no arbitrary shell).
-  3. Args sanitized for shell metacharacters (ht_run.py runs `bash -lc`, so
-     injection is real — sanitize before it gets there).
+  3. Primary defense (W1 fix): ht_run.py execs argv via shlex.split with NO shell
+     (`bash -lc` removed), so shell metacharacters can't inject commands. The
+     metachar reject below is kept as defense-in-depth.
   4. Backend forced from config (default "auto"; "docker" for isolation).
 
 Source: github.com/AKCodez/hackingtool-plugin (wraps Z4nzu/hackingtool).
@@ -31,7 +32,8 @@ try:
 except Exception:
     HT_BACKEND = os.environ.get("HT_BACKEND", "auto")
 
-# Reject shell-injection chars. ht_run.py runs `bash -lc <cmd>` → metachars are live.
+# Defense-in-depth: reject shell-injection chars. (Primary defense is now argv-exec
+# in ht_run.py — no shell — but we still drop obviously-hostile args at the gate.)
 _SHELL_META = re.compile(r"[;&|`$<>\n\r\\(){}]")
 
 # ── Allowlist: SAFE recon / OSINT / discovery / audit (router-exposed) ──────────

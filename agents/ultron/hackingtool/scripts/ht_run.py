@@ -17,6 +17,7 @@ import argparse
 import json
 import os
 import re
+import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -201,21 +202,19 @@ def _run(argv: list[str], timeout: int, label: str, extra: dict | None = None,
 
 
 def run_native(command: str, timeout: int, use_sudo: bool = False) -> dict:
-    prefix = "sudo -n " if use_sudo else ""
-    full = f"{prefix}{command}" if use_sudo else command
-    return _run(["bash", "-lc", full], timeout, "native",
-                {"command": full, "sudo": use_sudo})
+    # Security (W1): no `bash -lc <string>`. Split to argv and exec without a shell,
+    # so shell metacharacters in args can't inject commands.
+    argv = (["sudo", "-n"] if use_sudo else []) + shlex.split(command)
+    return _run(argv, timeout, "native", {"command": command, "sudo": use_sudo})
 
 
 def run_wsl(command: str, timeout: int, distro: str | None, use_sudo: bool = False) -> dict:
-    prefix = "sudo -n " if use_sudo else ""
-    full = f"{prefix}{command}" if use_sudo else command
     argv = ["wsl"]
     if distro:
         argv += ["-d", distro]
-    argv += ["--", "bash", "-lc", full]
+    argv += ["--"] + (["sudo", "-n"] if use_sudo else []) + shlex.split(command)
     return _run(argv, timeout, "wsl",
-                {"command": full, "distro": distro, "sudo": use_sudo})
+                {"command": command, "distro": distro, "sudo": use_sudo})
 
 
 def run_docker(command: str, timeout: int, image: str,
@@ -224,8 +223,8 @@ def run_docker(command: str, timeout: int, image: str,
     """Run inside a docker container.
 
     If use_entrypoint is True (default for override images), we append the
-    command as args to the image's ENTRYPOINT. Otherwise we run via bash -lc
-    (required for the generic kali-rolling image).
+    command as args to the image's ENTRYPOINT. Otherwise we exec the argv inside
+    the image (no shell — W1).
     """
     cwd = os.getcwd().replace("\\", "/")
     if len(cwd) > 1 and cwd[1] == ":":
@@ -238,16 +237,17 @@ def run_docker(command: str, timeout: int, image: str,
         argv += ["--privileged"]
     argv += ["-v", f"{cwd}:/work", "-w", "/work"]
 
+    tokens = shlex.split(command)
     if use_entrypoint:
         # Image has a proper ENTRYPOINT (e.g. instrumentisto/nmap → nmap).
         # Strip the binary name if it's the first token — entrypoint adds it.
-        tokens = command.split()
         image_binary = image.split("/")[-1].split(":")[0]
         if tokens and tokens[0] == image_binary:
             tokens = tokens[1:]
         argv += [image] + tokens
     else:
-        argv += [image, "bash", "-lc", command]
+        # generic image: exec argv directly, no shell (W1)
+        argv += [image] + tokens
 
     return _run(argv, timeout, "docker",
                 {"command": command, "image": image,
