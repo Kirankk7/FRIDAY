@@ -5,7 +5,9 @@ python-dotenv>=1.0.0
 psutil>=5.9.0
 
 # LLM / AI
-torch>=2.1.0
+# Pinned to avoid a surprise large/incompatible pull. Developed against the CUDA
+# (cu121) build; for CPU-only or a different CUDA, see pytorch.org/get-started.
+torch==2.5.1
 # (sentence-transformers removed — vector memory now uses local TF-IDF, no neural embeddings)
 
 # Local neural TTS (Kokoro-82M)

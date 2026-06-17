@@ -1,5 +1,7 @@
 # FRIDAY (JARVIS) — Local AI Personal Assistant
 
+![tests](https://github.com/Kirankk7/FRIDAY/actions/workflows/test.yml/badge.svg)
+
 A privacy-first, fully-local AI assistant with a multi-agent architecture, voice I/O, a 3-mode Iron-Man HUD, and a built-in cybersecurity toolkit. Runs entirely on your own machine — no cloud inference, no API keys for the core LLM.
 
 > *FRIDAY is the default conversational agent; the system as a whole is JARVIS.*
@@ -19,10 +21,10 @@ A privacy-first, fully-local AI assistant with a multi-agent architecture, voice
 
 - **100% local LLM inference** via [Ollama](https://ollama.com) (`qwen2.5:7b`) — no OpenAI/Gemini/cloud
 - **3-mode HUD** (Command / Operations / Cyber) — arc-reactor orb, live `/health` telemetry, 15-agent fleet, all vanilla JS + Canvas
-- **Multi-agent architecture** — 15 specialized agents behind a dual-path intent router
+- **Multi-agent architecture** — 13 agents (≈8 substantial + a few thin adapters) behind a dual-path intent router
 - **Voice in + out** — faster-whisper STT (CUDA) + Kokoro-82M neural TTS (per-agent voices + earcons), barge-in interrupt, edge-tts fallback
 - **AutoTune** — context-adaptive sampling (classifies each query → code/analytical/creative/conversational/chaotic → tunes temperature/top-p/etc) with 👍/👎 EMA online learning
-- **Cybersecurity agent (Ultron)** — native recon suite + a **180+ tool HackingTool fleet** (via WSL/Docker), NVD CVE search, VirusTotal, CVE→asset correlation, one-command bug-bounty workflow with a 7-question validation gate (kills noise/unconfirmed findings) + platform-ready PoC report
+- **Cybersecurity agent (Ultron)** — native recon suite + a HackingTool index of 180+ tools **gated down to ~25 runnable** (capability allowlist, offensive categories blocked), NVD CVE search, VirusTotal, CVE→asset correlation, one-command bug-bounty workflow with a 7-question validation gate (kills noise/unconfirmed findings) + platform-ready PoC report
 - **Blue-team defensive mode** — host monitor: baselines listening ports + processes, flags new/suspicious ones (known backdoor ports + attacker tooling) — offense *and* defense
 - **Local multimodal vision** — "what's on my screen" / describe any image via an Ollama vision model (llava etc), all on-device
 - **Bug-bounty knowledge pack** — Ultron RAG-indexes real methodology notes (recon, takeover, SQLi/XSS/SSRF/IDOR playbooks, OSINT) + bundled wordlists; ask "how do I test for subdomain takeover" and get a grounded, sourced answer, all local
@@ -88,8 +90,17 @@ A privacy-first, fully-local AI assistant with a multi-agent architecture, voice
 - **Burp ingestion + tagging** (Community-friendly): parse a Burp HTTP-history export → endpoint/param inventory, auto-tagging JWT/GraphQL/API/auth-boundary/tech → typed target profile → nuclei/httpx (no Burp Pro / API key)
 - **Evidence/retest loop**: re-probe a finding, capture confirmed request/response evidence into the profile + report (bug-bounty value is in the evidence)
 - **GitHub org secret hunt**: enumerate an org/user's repos + flag secret-prone files, recommend a TruffleHog deep-scan
-- **Hardening built-in**: SSRF guard (blocks internal/metadata IPs), shell-command allowlist + injection sanitizer, shared API rate-throttle
+- **Hardening built-in**: SSRF guard (redirect- + encoding-aware), tool execution via argv arrays (no shell), capability allowlist, shared API rate-throttle
 - *Authorized targets only.*
+
+## Security & threat model
+
+This is an offensive-security tool, so its own attack surface is documented openly in
+**[THREAT_MODEL.md](THREAT_MODEL.md)** — 7 trust boundaries, the attacker model (indirect
+prompt injection is primary), controls in place, and known weaknesses (W1–W7) with their fixes.
+The command-injection and SSRF weaknesses (W1–W4) are closed; remaining items (prompt-injection
+isolation, scan-authorization enforcement) are tracked there. Single-user, localhost-only by
+design — do not bind `app.py` to an untrusted network.
 
 ---
 

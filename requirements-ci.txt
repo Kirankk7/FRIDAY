@@ -1,0 +1,15 @@
+# Slim dependency set for CI — just what the regression suite needs to IMPORT
+# and run its offline/unit tests on a headless Linux runner. The heavy/native or
+# platform-specific deps (torch, faster-whisper, kokoro, playwright, pywinauto,
+# sounddevice/pyaudio) are lazy-imported and NOT exercised by the CI subset, so
+# they're omitted here to keep CI fast and reliable. Full deps: requirements.txt.
+requests
+psutil
+beautifulsoup4
+lxml
+numpy
+feedparser
+edge-tts
+pygame
+markitdown
+ddgs
