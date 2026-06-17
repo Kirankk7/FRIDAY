@@ -794,6 +794,41 @@ run_test("SSRF: block non-http scheme (ftp)",   _ssrf_block("ftp://example.com")
 run_test("SSRF: block file:// scheme",          _ssrf_block("file:///etc/passwd"))
 run_test("SSRF: block empty url",               _ssrf_block(""))
 
+# Batch 2 — W3: encoded-IP bypass + redirect re-validation
+run_test("SSRF: block decimal-encoded IP",      _ssrf_block("http://2130706433/"))      # 127.0.0.1
+run_test("SSRF: block hex-encoded IP",          _ssrf_block("http://0x7f000001/"))       # 127.0.0.1
+run_test("SSRF: block octal-encoded IP",        _ssrf_block("http://017700000001/"))     # 127.0.0.1
+
+def _ssrf_safe_get_blocks_redirect_to_internal():
+    """A public URL that 302s to cloud-metadata must be blocked at the hop."""
+    import core.url_guard as ug
+    import sys, types
+    real_requests = sys.modules.get("requests")
+    fake = types.SimpleNamespace()
+    class _Resp:
+        def __init__(s, code, loc=None):
+            s.status_code = code
+            s.headers = {"location": loc} if loc else {}
+            s.content = b""
+    calls = {"n": 0}
+    def fake_get(url, **kw):
+        calls["n"] += 1
+        # first hop (public) redirects to metadata; guard must stop before fetching it
+        return _Resp(302, "http://169.254.169.254/latest/")
+    fake.get = fake_get
+    sys.modules["requests"] = fake
+    try:
+        try:
+            ug.safe_get("https://example.com/redir")
+            return "safe_get followed redirect to internal — NOT blocked"
+        except ValueError:
+            return True
+    finally:
+        if real_requests is not None:
+            sys.modules["requests"] = real_requests
+
+run_test("SSRF: safe_get blocks redirect→internal", _ssrf_safe_get_blocks_redirect_to_internal)
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # 20. OLLAMA CIRCUIT BREAKER (Phase 51 #3)
