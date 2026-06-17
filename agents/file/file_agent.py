@@ -374,22 +374,37 @@ class FileAgent:
         if not path:
             return {"success": False, "message": "File path missing.", "data": {}}
 
-        # URL input → SSRF guard (Phase 40b), then let MarkItDown fetch it
+        # URL input → SSRF guard with redirect re-validation (W3). We fetch via
+        # safe_get (validates every hop) then hand the bytes to MarkItDown, so the
+        # library never follows a redirect to an internal host behind our back.
         if re.match(r"https?://", path, re.IGNORECASE):
-            from core.url_guard import is_safe_url
-            safe, reason = is_safe_url(path)
-            if not safe:
-                return {"success": False, "message": f"Refused to fetch URL — {reason}.", "data": {}}
+            from core.url_guard import safe_get
+            import tempfile as _tf
             try:
-                md = _get_md()
-                result = md.convert(path)
-                text = (result.text_content or "")[:max_chars]
+                resp = safe_get(path)
+            except ValueError as e:
+                return {"success": False, "message": f"Refused to fetch URL — {e}.", "data": {}}
+            except Exception as e:
+                return {"success": False, "message": f"Failed to fetch URL: {e}", "data": {}}
+            try:
+                from urllib.parse import urlsplit as _usplit
+                ext = os.path.splitext(_usplit(path).path)[1] or ".html"
+                with _tf.NamedTemporaryFile(delete=False, suffix=ext) as tmp:
+                    tmp.write(resp.content)
+                    tmp_path = tmp.name
+                try:
+                    md = _get_md()
+                    result = md.convert(tmp_path)
+                    text = (result.text_content or "")[:max_chars]
+                finally:
+                    try: os.remove(tmp_path)
+                    except Exception: pass
                 if not text.strip():
                     return {"success": False, "message": "No text extracted from URL.", "data": {}}
                 return {"success": True, "message": text,
                         "data": {"url": path, "chars": len(text)}}
             except Exception as e:
-                return {"success": False, "message": f"Failed to fetch URL: {e}", "data": {}}
+                return {"success": False, "message": f"Failed to read URL content: {e}", "data": {}}
 
         # Expand ~
         path = os.path.expanduser(path)
