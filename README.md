@@ -21,7 +21,7 @@ A privacy-first, fully-local AI assistant with a multi-agent architecture, voice
 
 - **100% local LLM inference** via [Ollama](https://ollama.com) (`qwen2.5:7b`) — no OpenAI/Gemini/cloud
 - **3-mode HUD** (Command / Operations / Cyber) — arc-reactor orb, live `/health` telemetry, 15-agent fleet, all vanilla JS + Canvas
-- **Multi-agent architecture** — 13 agents (≈8 substantial + a few thin adapters) behind a dual-path intent router
+- **Multi-agent architecture** — 15 agents behind a dual-path intent router: **6 substantial** (Ultron, FRIDAY, Veronica, File, Vision, Athena), 5 support modules, and 4 thin adapters — honestly tiered in the [Agents](#agents) table, not all equal
 - **Voice in + out** — faster-whisper STT (CUDA) + Kokoro-82M neural TTS (per-agent voices + earcons), barge-in interrupt, edge-tts fallback
 - **AutoTune** — context-adaptive sampling (classifies each query → code/analytical/creative/conversational/chaotic → tunes temperature/top-p/etc) with 👍/👎 EMA online learning
 - **Cybersecurity agent (Ultron)** — native recon suite + a HackingTool index of 180+ tools **gated down to ~25 runnable** (capability allowlist, offensive categories blocked), NVD CVE search, VirusTotal, CVE→asset correlation, one-command bug-bounty workflow with a 7-question validation gate (kills noise/unconfirmed findings) + platform-ready PoC report
@@ -60,23 +60,26 @@ A privacy-first, fully-local AI assistant with a multi-agent architecture, voice
 
 ## Agents
 
-| Agent | Codename | Role |
-|-------|----------|------|
-| **FRIDAY** | FRIDAY | Conversational assistant — tasks, goals, notes, habits, health, calendar, reminders |
-| **Ultron** | ULTRON | Cybersecurity — recon, vuln scanning, CVE tracking/correlation, VirusTotal, HackingTool fleet, bug-bounty workflow |
-| **Athena** | ATHENA | Deep research — multi-source aggregation, GitHub repo/code search |
-| **Vision** | VISION | News, web search, sports, crypto/FX, translation, flight tracking, Hacker News, **image/screenshot understanding** |
-| **Veronica** | VERONICA | Browser automation (Playwright) — search, navigate, extract |
-| **Edith** | EDITH | Project/long-term memory |
-| **Echo** | ECHO | Dynamic tool generation |
-| **Personal** | JOCASTA | User facts & profile |
-| **System** | SENTRY | OS/CPU/RAM, battery, speed test, tool-result recall |
-| **File** | ARCHIVE | Read/summarize documents (PDF/DOCX/audio via MarkItDown), **RAG (chat with your docs)**, apply patches |
-| **Scheduler** | CHRONOS | Recurring background tasks |
-| **Self-Improvement** | PHOENIX | Response-quality analysis |
-| **Terminator** | TERMINATOR | Windows desktop control (pywinauto) — focus/type/click/launch apps |
-| **n8n** | RELAY | Trigger self-hosted n8n automation workflows |
-| **Routines** | MACRO | Record & replay command-sequence macros |
+Not all 15 are equal — they're tiered by how much real logic each carries (**Core** = substantial,
+**Support** = moderate, **Adapter** = thin wrapper over a library/endpoint). Honest by design.
+
+| Agent | Codename | Tier | Role |
+|-------|----------|------|------|
+| **Ultron** | ULTRON | Core | Cybersecurity — recon, vuln scanning, CVE tracking/correlation, VirusTotal, HackingTool fleet, bug-bounty workflow |
+| **FRIDAY** | FRIDAY | Core | Conversational assistant — tasks, goals, notes, habits, health, calendar, reminders |
+| **Veronica** | VERONICA | Core | Browser automation (Playwright) — search, navigate, extract |
+| **File** | ARCHIVE | Core | Read/summarize documents (PDF/DOCX/audio via MarkItDown), **RAG (chat with your docs)**, apply patches |
+| **Vision** | VISION | Core | News, web search, sports, crypto/FX, translation, flight tracking, Hacker News, **image/screenshot understanding** |
+| **Athena** | ATHENA | Core | Deep research — multi-source aggregation, GitHub repo/code search |
+| **Echo** | ECHO | Support | Dynamic tool generation |
+| **System** | SENTRY | Support | OS/CPU/RAM, battery, speed test, tool-result recall |
+| **Terminator** | TERMINATOR | Support | Windows desktop control (pywinauto) — focus/type/click/launch apps |
+| **Edith** | EDITH | Support | Project/long-term memory (SQLite-backed) |
+| **Scheduler** | CHRONOS | Support | Recurring background tasks + proactive engine |
+| **n8n** | RELAY | Adapter | Trigger self-hosted n8n automation workflows (webhook POST) |
+| **Personal** | JOCASTA | Adapter | User facts & profile store |
+| **Routines** | MACRO | Adapter | Record & replay command-sequence macros |
+| **Self-Improvement** | PHOENIX | Adapter | Response-quality analysis |
 
 ## Cybersecurity capabilities (Ultron)
 
@@ -100,7 +103,16 @@ This is an offensive-security tool, so its own attack surface is documented open
 prompt injection is primary), controls in place, and known weaknesses (W1–W7) with their fixes.
 The command-injection and SSRF weaknesses (W1–W4) are closed; remaining items (prompt-injection
 isolation, scan-authorization enforcement) are tracked there. Single-user, localhost-only by
-design — do not bind `app.py` to an untrusted network.
+design — do not bind `app.py` to an untrusted network (an optional `JARVIS_TOKEN` header gate
+exists for reverse-proxy setups).
+
+## Companion repo — friday-recon
+
+The Ultron offensive-security core is also extracted into **[friday-recon](https://github.com/Kirankk7/friday-recon)**:
+the same engine (recon · bug-bounty · validation gate · Burp ingest · methodology KB) as a
+focused, dependency-light **CLI** — no Flask / HUD / voice, ~30 MB, runs fully local against
+Ollama. Use JARVIS for the full assistant; use friday-recon when you just want the security
+toolkit on the command line.
 
 ---
 

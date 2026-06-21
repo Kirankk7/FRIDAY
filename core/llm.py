@@ -1,9 +1,26 @@
+import re
 import requests
 import json
 import time
 import threading
 from config import OLLAMA_HOST, OLLAMA_MODEL, AUTOTUNE_ENABLED, model_for
 from core import autotune
+
+
+def _strip_think(text: str) -> str:
+    """Strip reasoning-model scratchpad (<think>...</think>) — deepseek-r1 etc.
+
+    The real answer follows the LAST </think>. Also drops any leftover/unclosed
+    <think> opener. No-op for normal models (qwen) that emit no such tags.
+    """
+    if not text or "think>" not in text.lower():
+        return text
+    low = text.lower()
+    i = low.rfind("</think>")
+    if i != -1:
+        text = text[i + len("</think>"):]
+    text = re.sub(r"(?is)<think>.*", "", text)   # unclosed leftover, if any
+    return text.strip()
 
 
 def _resolve_options(prompt, agent, autotune_on, params, base):
@@ -150,7 +167,7 @@ def ask_llm(prompt: str, agent: str = None, autotune_on: bool = True,
 
         if response.status_code == 200:
             data = response.json()
-            answer = data.get("response", "").strip()
+            answer = _strip_think(data.get("response", "").strip())
 
             if answer and len(answer) > 0:
                 _cb_record_success()
