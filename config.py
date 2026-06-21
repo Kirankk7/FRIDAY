@@ -22,6 +22,10 @@ OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:7b")
 # unpulled models degrade gracefully to OLLAMA_MODEL.
 # Example once you pull a coder model:
 #   AGENT_MODELS = {"ultron": "deepseek-coder:6.7b", "echo": "deepseek-coder:6.7b"}
+# TRIED 2026-06-22: AGENT_MODELS = {"athena": "deepseek-r1:8b"} — REVERTED. On this
+# 8GB-VRAM/16GB box r1's reasoning KV-cache OOM-CRASHED Ollama at num_predict>=1024
+# (500 then server down) + ~40s latency even when it answered. _strip_think (core.llm)
+# kept for any future reasoning model, but r1 is not viable here. Stay all-qwen.
 AGENT_MODELS = {}
 
 def model_for(agent: str | None) -> str:

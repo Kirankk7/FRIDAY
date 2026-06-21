@@ -55,6 +55,10 @@ workspace/
 # ─── Internal handoff doc (not for public repo) ───────────────────────────
 JARVIS_STATE.md
 
+# ─── Private KB notes (3rd-party personal-use-only licensed content; local only,
+#     never redistribute — e.g. PentestingChecklist by m14r41) ────────────────
+agents/ultron/knowledge/notes_private/
+
 # ─── OS / editor / tooling ────────────────────────────────────────────────
 .DS_Store
 Thumbs.db
