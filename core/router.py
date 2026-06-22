@@ -700,6 +700,9 @@ def route_single_intent(
     if text in ("list targets", "profiled targets", "show targets", "my targets"):
         return {"tool": "ultron", "action": "list_targets", "parameters": {}, "confidence": 0.97}
 
+    if text in ("scope", "show scope", "scope status", "what is my scope", "whats my scope", "current scope"):
+        return {"tool": "ultron", "action": "scope_status", "parameters": {}, "confidence": 0.98}
+
     _m = re.match(r"(?:target profile|profile (?:for|of)?|what do (?:we|i) know about|recall target)\s+(.+)", text)
     if _m:
         return {"tool": "ultron", "action": "target_profile", "parameters": {"target": _m.group(1).strip()}, "confidence": 0.95}

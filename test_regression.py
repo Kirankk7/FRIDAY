@@ -1197,6 +1197,41 @@ def _content_discovery_parsers():
     finally:
         _sh.which, _ult.run_cmd = saved_which, saved_run
 
+def _scope_most_specific_wins():
+    saved = _ult._load_scope
+    _ult._load_scope = lambda: {"in_scope": ["*.acme.com", "api.acme.io"],
+                                "out_of_scope": ["admin.acme.com", "*.staging.acme.com"]}
+    try:
+        want = {"app.acme.com": "in", "admin.acme.com": "out", "x.staging.acme.com": "out",
+                "api.acme.io": "in", "evil.com": "unknown"}
+        for h, exp in want.items():
+            got = _ult._in_scope(h)
+            if got != exp:
+                return f"{h}: got '{got}' want '{exp}'"
+        keep, drop = _ult.scope_filter(["app.acme.com", "admin.acme.com", "blog.acme.com"])
+        if "admin.acme.com" not in drop or "app.acme.com" not in keep:
+            return f"filter wrong: keep={keep} drop={drop}"
+        return True
+    finally:
+        _ult._load_scope = saved
+
+def _bugbounty_refuses_out_of_scope():
+    saved = _ult._load_scope
+    _ult._load_scope = lambda: {"in_scope": ["*.acme.com"], "out_of_scope": ["admin.acme.com"]}
+    try:
+        r = _ult.ultron_agent.bug_bounty("admin.acme.com")
+        return True if (not r["success"] and "OUT OF SCOPE" in r["message"]) else f"did not refuse: {r['message'][:60]}"
+    finally:
+        _ult._load_scope = saved
+
+def _route_scope():
+    from core.router import fast_route
+    r = fast_route("show scope")
+    return True if r and r.get("action") == "scope_status" else f"misroute: {r}"
+
+run_test("Ultron: scope most-specific-wins",    _scope_most_specific_wins)
+run_test("Ultron: bug_bounty refuses OOS",      _bugbounty_refuses_out_of_scope)
+run_test("Router: scope_status route",          _route_scope)
 run_test("Ultron: scope guard flags SaaS",      _scope_flags_saas)
 run_test("Ultron: content discovery parsers",   _content_discovery_parsers)
 
