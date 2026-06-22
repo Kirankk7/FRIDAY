@@ -975,6 +975,8 @@ def route_single_intent(
         if _lead in algo_map:
             algo = algo_map[_lead]
             target = target[len(target.split()[0]):].strip()
+        if target.lower().startswith("of "):   # "hash sha256 OF mypassword" → drop the "of"
+            target = target[3:].strip()
         return {"tool": "ultron", "action": "hash_target", "parameters": {"target": target, "algorithm": algo}, "confidence": 0.95}
 
     # Password generator
