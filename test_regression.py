@@ -1232,6 +1232,32 @@ def _route_scope():
 run_test("Ultron: scope most-specific-wins",    _scope_most_specific_wins)
 run_test("Ultron: bug_bounty refuses OOS",      _bugbounty_refuses_out_of_scope)
 run_test("Router: scope_status route",          _route_scope)
+
+def _setup_scope_and_roe_filter():
+    import os, json
+    saved = _ult.parse_scope
+    _ult.parse_scope = lambda t: {"in_scope_domains":["*.acme.com"],"out_of_scope_domains":[],
+        "in_scope_types":["sqli"],"out_of_scope_types":["self-xss","open-ports"],
+        "rate_limit_rps":5,"max_concurrent":5,"rules":["use own accounts"]}
+    bak={}
+    for fn in ("data/scope.json","data/roe.json"):
+        if os.path.isfile(fn): bak[fn]=open(fn).read(); os.remove(fn)
+    try:
+        r=_ult.ultron_agent.setup_scope("a long enough policy text to pass the length guard here")
+        if not r["success"]: return f"setup failed: {r['message']}"
+        roe=json.load(open("data/roe.json"))
+        if roe.get("rate_limit_rps")!=5: return f"roe rate not saved: {roe}"
+        g1=_ult.ultron_agent._validate_finding({"template":"self-xss-x","severity":"high","url":"http://x/p?id=1","validated":True,"cve":""},{})
+        g2=_ult.ultron_agent._validate_finding({"template":"sqli-error-based","severity":"high","url":"http://x/p?id=1","validated":True,"cve":""},{})
+        if g1["report"]: return "self-xss not dropped by roe"
+        if not g2["report"]: return "sqli wrongly dropped"
+        return True
+    finally:
+        _ult.parse_scope = saved
+        for fn in ("data/scope.json","data/roe.json"):
+            if os.path.isfile(fn): os.remove(fn)
+            if fn in bak: open(fn,"w").write(bak[fn])
+run_test("Ultron: setup_scope + RoE finding-filter", _setup_scope_and_roe_filter)
 run_test("Ultron: scope guard flags SaaS",      _scope_flags_saas)
 run_test("Ultron: content discovery parsers",   _content_discovery_parsers)
 
