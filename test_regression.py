@@ -1180,15 +1180,17 @@ def _content_discovery_parsers():
     U = _ult.ultron_agent
     saved_which, saved_run = _sh.which, _ult.run_cmd
     try:
-        _sh.which = lambda t: "/x/ffuf" if t == "ffuf" else None
-        _ult.run_cmd = lambda *a, **k: "admin\nlogin\nbackup\n"
-        r = U.content_discovery("http://t.com")
-        if r["data"]["count"] != 3: return f"ffuf parse: {r['data']}"
+        # gobuster text parser (ffuf path uses JSON-file output, integration-verified)
         _sh.which = lambda t: "/x/gobuster" if t == "gobuster" else None
         _ult.run_cmd = lambda *a, **k: "/admin (Status: 200)\n/secret (Status: 301)\nnoise\n"
         r = U.content_discovery("http://t.com")
         if r["data"]["count"] != 2: return f"gobuster parse: {r['data']}"
-        _sh.which = lambda t: None                 # no tool -> graceful
+        # run_cmd error sentinel must NOT be counted as a path
+        _ult.run_cmd = lambda *a, **k: "Timed out."
+        r = U.content_discovery("http://t.com")
+        if r.get("data", {}).get("count"): return f"error-return mis-parsed: {r['data']}"
+        # no tool -> graceful failure
+        _sh.which = lambda t: None
         r = U.content_discovery("http://t.com")
         if r["success"]: return "should be graceful when no tool"
         return True
