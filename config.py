@@ -80,6 +80,11 @@ VOICE_LOOP_AUTO_START = False   # Set True to start autonomous voice pipeline on
 # Free tier: 10 req/min | competitions: PL, BL1, SA, PD, FL1, CL, EC + national teams
 FOOTBALL_API_KEY = os.getenv("FOOTBALL_API_KEY", "")
 
+# ── Telegram bridge (optional) — proactive pushes also go to your Telegram chat ──
+# Bot token from @BotFather; chat id from /getUpdates. Empty = bridge stays dormant.
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
+
 # ── Phase 30a — NVD NIST API ──
 # Free key: https://nvd.nist.gov/developers/request-an-api-key
 # Rate limit: 50 req/30s with key, 5 req/30s without

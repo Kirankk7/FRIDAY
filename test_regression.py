@@ -1167,6 +1167,37 @@ def _test_plan_skips_irrelevant():
 run_test("Ultron: test plan sqli subtypes",     _test_plan_sqli_subtypes)
 run_test("Ultron: test plan skips irrelevant",  _test_plan_skips_irrelevant)
 
+# Scope guard (advisory) + content discovery (parsers)
+def _scope_flags_saas():
+    if not _ult._scope_check("foo.herokuapp.com"):
+        return "SaaS host not flagged"
+    if _ult._scope_check("example.com"):           # no scope.json -> clear
+        return "normal host wrongly flagged"
+    return True
+
+def _content_discovery_parsers():
+    import shutil as _sh
+    U = _ult.ultron_agent
+    saved_which, saved_run = _sh.which, _ult.run_cmd
+    try:
+        _sh.which = lambda t: "/x/ffuf" if t == "ffuf" else None
+        _ult.run_cmd = lambda *a, **k: "admin\nlogin\nbackup\n"
+        r = U.content_discovery("http://t.com")
+        if r["data"]["count"] != 3: return f"ffuf parse: {r['data']}"
+        _sh.which = lambda t: "/x/gobuster" if t == "gobuster" else None
+        _ult.run_cmd = lambda *a, **k: "/admin (Status: 200)\n/secret (Status: 301)\nnoise\n"
+        r = U.content_discovery("http://t.com")
+        if r["data"]["count"] != 2: return f"gobuster parse: {r['data']}"
+        _sh.which = lambda t: None                 # no tool -> graceful
+        r = U.content_discovery("http://t.com")
+        if r["success"]: return "should be graceful when no tool"
+        return True
+    finally:
+        _sh.which, _ult.run_cmd = saved_which, saved_run
+
+run_test("Ultron: scope guard flags SaaS",      _scope_flags_saas)
+run_test("Ultron: content discovery parsers",   _content_discovery_parsers)
+
 # Phase 36 — HackingTool wrapper gates (offline; no backend needed)
 from agents.ultron.hackingtool import ht_wrapper as _htw
 

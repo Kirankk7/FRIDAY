@@ -65,6 +65,13 @@ def startup_cleanup():
 startup_cleanup()
 _scheduler.start()  # Phase 26 — autonomous background task runner
 
+# Optional Telegram bridge — no-op unless TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID are set
+try:
+    from core import telegram_sink
+    telegram_sink.enable()
+except Exception as _e:
+    print(f"[telegram] bridge init skipped: {_e}")
+
 
 # =====================================
 # WHISPER MODEL — GPU (Phase 17)
