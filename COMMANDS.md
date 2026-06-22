@@ -38,6 +38,7 @@ Everything you can say (or type) to FRIDAY. Commands below were **live-fired end
 | `wordlist for ssrf` / `list wordlists` | Resolve / list bundled wordlists |
 | `target profile example.com` | What we know about a target across hunts |
 | `list targets` | All profiled targets |
+| `scope` / `show scope` | Show in/out-of-scope rules from `data/scope.json` (bug-bounty scope guard) |
 | `ingest burp export.xml` | Parse Burp history → endpoints + auto-tags (JWT/GraphQL/API/auth/tech) |
 | `github hunt acme` | Enumerate an org's repos → flag secret-prone files |
 | `collect evidence https://t.com/finding` | Re-probe a finding → capture confirmed evidence |
