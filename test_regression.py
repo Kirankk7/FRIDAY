@@ -1094,6 +1094,52 @@ run_test("Gate: drops never-submit noise",      _gate_drops_never_submit)
 run_test("Gate: drops weak low-score finding",  _gate_drops_weak_low_score)
 run_test("Gate: report separates noise",        _gate_report_filters_noise)
 
+
+# Feature A — active injection smell-test on crawled params (_probe_injection).
+# Patches the module-level _http_get seam (no global sys.modules games → order-safe).
+class _FakeResp:
+    def __init__(self, text, code=200): self.text = text; self.status_code = code
+
+def _with_fake_http(getter, fn):
+    saved = _ult._http_get
+    _ult._http_get = getter
+    try:
+        return fn()
+    finally:
+        _ult._http_get = saved
+
+def _probe_sqli_and_xss():
+    U = _ult.ultron_agent
+    def _get(url, timeout=8):
+        if "id=" in url and "%27" in url:                 # error-based SQLi signal
+            return _FakeResp("Microsoft OLE DB Provider error: Unclosed quotation mark")
+        if "jvz9xqk7z" in url:                            # reflected XSS marker
+            return _FakeResp("echo jvz9xqk7z<x> back to you")
+        return _FakeResp("normal body " * 50)
+    res = _with_fake_http(_get, lambda: U._probe_injection(
+        ["http://t.com/n.aspx?id=1", "http://t.com/s.aspx?q=x", "http://t.com/flat.html"]))
+    tmpls = {r["template"] for r in res}
+    if "sqli-error-based" not in tmpls: return f"sqli not flagged: {tmpls}"
+    if "xss-reflected" not in tmpls:    return f"xss not flagged: {tmpls}"
+    if any("flat.html" in r["url"] for r in res): return "param-less URL was probed"
+    if not all(r.get("validated") and r.get("evidence") and r.get("repro") for r in res):
+        return "finding missing validated/evidence/repro"
+    return True
+
+def _probe_sqli_anomaly():
+    U = _ult.ultron_agent
+    def _get(url, timeout=8):
+        if "%27" in url: return _FakeResp("", 500)        # quote -> empty 500 (anomaly, no error string)
+        return _FakeResp("healthy page " * 100, 200)      # baseline 200 with body
+    res = _with_fake_http(_get, lambda: U._probe_injection(["http://t.com/n.aspx?id=1"]))
+    sqli = [r for r in res if r["template"] == "sqli-error-based"]
+    if not sqli:                         return "anomaly SQLi not flagged"
+    if "500" not in sqli[0]["evidence"]: return f"anomaly evidence missing status: {sqli[0]['evidence']}"
+    return True
+
+run_test("Ultron: injection probe sqli+xss",    _probe_sqli_and_xss)
+run_test("Ultron: injection probe anomaly sqli", _probe_sqli_anomaly)
+
 # Phase 36 — HackingTool wrapper gates (offline; no backend needed)
 from agents.ultron.hackingtool import ht_wrapper as _htw
 
