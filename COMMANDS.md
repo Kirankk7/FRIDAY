@@ -16,6 +16,7 @@ deterministically** (instant, no LLM lag). Replace `example.com` / placeholders 
 | `bug bounty example.com` | Full hunt → injection probe → validation gate → **tailored test plan + PoC report** |
 | `content discovery example.com` | Brute-force hidden paths/dirs (ffuf/gobuster) |
 | `crawl example.com` | Katana web crawl (endpoint inventory) |
+| `spa crawl example.com` | Headless-render a JS/SPA app → capture its API surface (the endpoints katana can't see) |
 | `search cve for log4j` | NVD CVE lookup by keyword |
 | `check log4j on virustotal` | VirusTotal scan (file/hash/URL/domain/IP) |
 | `correlate cves with scans` | Cross-link tracked CVEs ↔ scanned host services ("am I exposed?") |
