@@ -1140,6 +1140,33 @@ def _probe_sqli_anomaly():
 run_test("Ultron: injection probe sqli+xss",    _probe_sqli_and_xss)
 run_test("Ultron: injection probe anomaly sqli", _probe_sqli_anomaly)
 
+# Feature B — tailored test plan (DB fingerprint + subtype payloads + manual checklist)
+def _test_plan_sqli_subtypes():
+    U = _ult.ultron_agent
+    findings = [{"template": "sqli-error-based", "severity": "high",
+                 "url": "http://t.com/Comments.aspx?id=0%27", "validated": True,
+                 "evidence": "OLE DB error", "_gate": {"report": True, "tier": "P2", "score": 6}}]
+    pdata = {"sections": {"httpx": "[200] [Microsoft-IIS, ASP.NET]"},
+             "urls": ["http://t.com/login.aspx", "http://t.com/Comments.aspx?id=0"]}
+    txt = "\n".join(U._build_test_plan("t.com", findings, pdata))
+    need = ["DB ~ **mssql**", "WAITFOR DELAY", "sqlmap -u", "id=0\" --batch",
+            "Access control / IDOR", "Authentication", "portswigger.net/web-security/sql-injection"]
+    miss = [n for n in need if n not in txt]
+    if miss: return f"plan missing: {miss}"
+    if "%27" in txt.split("sqlmap")[1].split("\n")[0]:   # sqlmap URL must be the clean baseline
+        return "sqlmap URL still carries the probe quote"
+    return True
+
+def _test_plan_skips_irrelevant():
+    U = _ult.ultron_agent
+    txt = "\n".join(U._build_test_plan("t.com", [], {"sections": {}, "urls": []}))
+    if "GraphQL" in txt or "file upload" in txt.lower(): return "emitted irrelevant section"
+    if "No auto-findings" not in txt: return "missing the empty-plan note"
+    return True
+
+run_test("Ultron: test plan sqli subtypes",     _test_plan_sqli_subtypes)
+run_test("Ultron: test plan skips irrelevant",  _test_plan_skips_irrelevant)
+
 # Phase 36 — HackingTool wrapper gates (offline; no backend needed)
 from agents.ultron.hackingtool import ht_wrapper as _htw
 
