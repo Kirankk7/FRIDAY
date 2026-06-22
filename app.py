@@ -385,6 +385,20 @@ def metrics():
     return jsonify(snapshot())
 
 
+@app.route("/ultron_scope", methods=["POST"])
+def ultron_scope():
+    """Cyber-HUD bug-bounty scope panel: parse a pasted program policy into scope + Rules of
+    Engagement (action='setup'), or show the current scope (action='status')."""
+    from agents.ultron.ultron_agent import ultron_agent
+    data = request.get_json(silent=True) or {}
+    if data.get("action") == "setup":
+        r = ultron_agent.setup_scope(data.get("text", ""))
+    else:
+        r = ultron_agent.scope_status()
+    return jsonify({"success": r.get("success", True),
+                    "message": r.get("message", ""), "data": r.get("data", {})})
+
+
 @app.route("/cyber_status")
 def cyber_status():
     """Phase 45 Cyber mode — CVE watchlist size + last nmap scan target."""

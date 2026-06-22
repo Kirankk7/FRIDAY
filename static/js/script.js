@@ -941,3 +941,36 @@ function setMode(mode){
 }
 document.querySelectorAll('.mode-tab').forEach(t =>
     t.addEventListener('click', () => setMode(t.dataset.mode)));
+
+// ── Cyber-mode Bug Bounty: paste scope → parse/enforce → start hunt ──
+(function () {
+  const txt = document.getElementById('bb-scope-text');
+  const tgt = document.getElementById('bb-target');
+  const out = document.getElementById('bb-scope-out');
+  const parseBtn = document.getElementById('bb-parse');
+  const huntBtn = document.getElementById('bb-hunt');
+  if (!parseBtn) return;
+  parseBtn.addEventListener('click', async () => {
+    const t = (txt.value || '').trim();
+    if (t.length < 20) { out.textContent = 'Paste the program policy first.'; return; }
+    out.textContent = 'Parsing scope with the local model…'; parseBtn.disabled = true;
+    try {
+      const r = await fetch('/ultron_scope', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'setup', text: t })
+      });
+      const j = await r.json();
+      out.textContent = j.message || '(no response)';
+    } catch (e) { out.textContent = 'Error: ' + e; }
+    parseBtn.disabled = false;
+  });
+  huntBtn.addEventListener('click', () => {
+    const target = (tgt.value || '').trim();
+    if (!target) { out.textContent = 'Enter an in-scope target first.'; return; }
+    if (typeof userInput !== 'undefined' && typeof sendMessage === 'function') {
+      userInput.value = 'bug bounty ' + target; sendMessage();
+    }
+    out.textContent = 'Hunt started on ' + target +
+      ' — watch the chat/report. Out-of-scope targets are refused, out-of-scope finding types filtered, scanners rate-limited per the policy.';
+  });
+})();

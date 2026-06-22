@@ -217,6 +217,18 @@
                     <div class="mv-line"><span>INTEL</span><span class="ok">VirusTotal · NVD · DNS</span></div>
                     <div class="mv-line"><span>WORKFLOW</span><span class="ok">bug-bounty pipeline → PoC report</span></div>
                 </div>
+                <div class="mv-card wide"><div class="mv-t">◈ BUG BOUNTY — SCOPE &amp; HUNT</div>
+                    <textarea id="bb-scope-text" rows="4" spellcheck="false"
+                        placeholder="Paste the program's In-Scope / Out-of-Scope policy here…"
+                        style="width:100%;background:rgba(0,0,0,.35);border:1px solid var(--line,#1c3a4a);color:var(--fg,#cfe);font:12px/1.4 monospace;padding:8px;border-radius:6px;resize:vertical;"></textarea>
+                    <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;align-items:center">
+                        <input id="bb-target" placeholder="in-scope target (e.g. app.acme.com)" spellcheck="false"
+                            style="flex:1;min-width:160px;background:rgba(0,0,0,.35);border:1px solid var(--line,#1c3a4a);color:var(--fg,#cfe);font:12px monospace;padding:7px;border-radius:6px"/>
+                        <button id="bb-parse" class="mv-btn">PARSE SCOPE</button>
+                        <button id="bb-hunt" class="mv-btn" style="border-color:#ff4c4c;color:#ff8a8a">START HUNT</button>
+                    </div>
+                    <div id="bb-scope-out" class="mv-sub" style="white-space:pre-wrap;margin-top:8px;max-height:150px;overflow:auto;font:11px/1.45 monospace"></div>
+                </div>
             </div>
         </section>
     </div>
