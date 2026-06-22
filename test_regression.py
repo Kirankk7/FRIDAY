@@ -1204,6 +1204,31 @@ def _route_content_discovery():
     return True if r and r.get("tool")=="ultron" and r.get("action")=="content_discovery" else f"misroute: {r}"
 run_test("Router: content_discovery route", _route_content_discovery)
 
+def _route_spa_crawl():
+    from core.router import fast_route
+    for phrase in ("spa crawl example.com", "render crawl example.com"):
+        r = fast_route(phrase)
+        if not (r and r.get("tool") == "ultron" and r.get("action") == "spa_crawl"):
+            return f"misroute '{phrase}': {r}"
+    return True
+run_test("Router: spa_crawl route", _route_spa_crawl)
+
+def _spa_crawl_graceful_no_playwright():
+    import sys
+    saved = sys.modules.get("playwright.sync_api", "__missing__")
+    sys.modules["playwright.sync_api"] = None        # force the import to fail
+    try:
+        r = _ult.ultron_agent.spa_crawl("example.com")
+        if r.get("success") or "Playwright" not in r.get("message", ""):
+            return f"expected graceful Playwright-absent message, got: {r.get('message')}"
+        return True
+    finally:
+        if saved == "__missing__":
+            sys.modules.pop("playwright.sync_api", None)
+        else:
+            sys.modules["playwright.sync_api"] = saved
+run_test("Ultron: spa_crawl graceful w/o Playwright", _spa_crawl_graceful_no_playwright)
+
 # Phase 36 — HackingTool wrapper gates (offline; no backend needed)
 from agents.ultron.hackingtool import ht_wrapper as _htw
 

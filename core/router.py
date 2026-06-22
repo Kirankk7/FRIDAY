@@ -775,6 +775,11 @@ def route_single_intent(
     if _m:
         return {"tool": "ultron", "action": "content_discovery", "parameters": {"target": _m.group(1).strip()}, "confidence": 0.98}
 
+    # SPA render-crawl (headless browser → capture JS app's API surface)
+    _m = re.match(r"(?:spa[\s-]?crawl|render[\s-]?crawl|(?:crawl|render)\s+spa|js[\s-]?crawl)\s+(?:on\s+)?(.+)", text)
+    if _m:
+        return {"tool": "ultron", "action": "spa_crawl", "parameters": {"target": _m.group(1).strip()}, "confidence": 0.98}
+
     # Screenshot
     _m = re.match(r"(?:screenshot|take screenshot of|screengrab)\s+(.+)", text)
     if _m:
