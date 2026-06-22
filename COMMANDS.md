@@ -10,7 +10,9 @@ Everything you can say (or type) to FRIDAY. Commands below were **live-fired end
 > - Most personal/security/info commands respond **instantly** (≤1.5s).
 > - LLM-backed ones (`how do I test for X`, `deep research X`, full reports) take **~10–40s** — that's the local model thinking, normal.
 > - `content discovery` needs **ffuf or gobuster** installed (else it says so gracefully — no results).
-> - Some need a **key/dep**: VirusTotal (VT key) · `describe my screen` (llava model) · n8n (running server) · Telegram bridge (bot token).
+> - Some need a **key/dep**: VirusTotal (VT key) · `describe my screen` (llava model) · n8n (running server) · Telegram bridge (bot token) · `hackingtool` (WSL/Docker).
+> - `search cve for X` hits the live NVD API — occasionally times out. Don't rely on it on camera; use the local KB (`how do I test for X`) instead.
+> - Browser commands (`open chrome…`, `read page`) need the browser session started; desktop commands (`launch app`, `type`) need a GUI session.
 > - Prefer `check battery` / `network speed test` over `how much RAM` (the latter falls back to the slower LLM router).
 
 ---
