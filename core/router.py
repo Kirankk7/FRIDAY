@@ -1591,6 +1591,12 @@ def route_single_intent(
             .strip()
         )
 
+        # A domain / URL (e.g. "open google.com") belongs in the browser, not the
+        # desktop app launcher — route those to open_url instead of open_app.
+        if re.match(r"^https?://", app) or re.match(r"^[\w-]+(\.[\w-]+)+(/\S*)?$", app):
+            return {"tool": "veronica", "action": "open_url",
+                    "parameters": {"url": app}, "confidence": 0.97}
+
         return {
 
             "tool":
