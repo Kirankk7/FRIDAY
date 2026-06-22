@@ -1,9 +1,17 @@
 # FRIDAY / JARVIS — Command Reference
 
-Everything you can say (or type) to FRIDAY. All commands below are **verified to route
-deterministically** (instant, no LLM lag). Replace `example.com` / placeholders with your own.
+Everything you can say (or type) to FRIDAY. Commands below were **live-fired end-to-end
+(2026-06-23)** — they route deterministically *and* return real responses. Replace
+`example.com` / placeholders with your own.
 
 > Voice or text — same commands. Security tools: **authorized targets only.**
+
+**Demo notes (live-tested):**
+> - Most personal/security/info commands respond **instantly** (≤1.5s).
+> - LLM-backed ones (`how do I test for X`, `deep research X`, full reports) take **~10–40s** — that's the local model thinking, normal.
+> - `content discovery` needs **ffuf or gobuster** installed (else it says so gracefully — no results).
+> - Some need a **key/dep**: VirusTotal (VT key) · `describe my screen` (llava model) · n8n (running server) · Telegram bridge (bot token).
+> - Prefer `check battery` / `network speed test` over `how much RAM` (the latter falls back to the slower LLM router).
 
 ---
 
