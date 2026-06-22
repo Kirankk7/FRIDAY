@@ -770,6 +770,11 @@ def route_single_intent(
     if _m:
         return {"tool": "ultron", "action": "katana_crawl", "parameters": {"target": _m.group(1).strip()}, "confidence": 0.99}
 
+    # Content discovery (brute hidden paths/dirs)
+    _m = re.match(r"(?:content[\s-]?discovery|(?:dir|directory|content)[\s-]?(?:brute|bust|fuzz)\w*|find (?:hidden|directories|paths)(?:\s+on)?|fuzz (?:dirs?|paths?|directories))\s+(?:on\s+)?(.+)", text)
+    if _m:
+        return {"tool": "ultron", "action": "content_discovery", "parameters": {"target": _m.group(1).strip()}, "confidence": 0.98}
+
     # Screenshot
     _m = re.match(r"(?:screenshot|take screenshot of|screengrab)\s+(.+)", text)
     if _m:

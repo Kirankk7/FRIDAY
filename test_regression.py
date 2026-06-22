@@ -1198,6 +1198,12 @@ def _content_discovery_parsers():
 run_test("Ultron: scope guard flags SaaS",      _scope_flags_saas)
 run_test("Ultron: content discovery parsers",   _content_discovery_parsers)
 
+def _route_content_discovery():
+    from core.router import fast_route
+    r = fast_route("content discovery example.com")
+    return True if r and r.get("tool")=="ultron" and r.get("action")=="content_discovery" else f"misroute: {r}"
+run_test("Router: content_discovery route", _route_content_discovery)
+
 # Phase 36 — HackingTool wrapper gates (offline; no backend needed)
 from agents.ultron.hackingtool import ht_wrapper as _htw
 
