@@ -146,6 +146,9 @@ def _resolve_scheme(target: str) -> str:
     returns the first that answers (any HTTP status = reachable), defaulting to
     https. Already-schemed targets pass through untouched.
     """
+    # httpx/nuclei/katana (Go) resolve localhost -> IPv6 ::1; local dev servers
+    # often bind IPv4 only, so the whole pipeline silently gets nothing. Pin IPv4.
+    target = re.sub(r"(^|//)(localhost)(?=[:/]|$)", r"\g<1>127.0.0.1", target)
     if target.startswith(("http://", "https://")):
         return target
     import urllib.request
@@ -570,7 +573,7 @@ def _parse_nuclei_findings(raw: str) -> list:
         return findings
     import re as _re
     for line in raw.splitlines():
-        line = line.strip()
+        line = _re.sub(r"\x1b\[[0-9;]*m", "", line).strip()   # strip ANSI color (nuclei colorizes ids)
         if not line or line.startswith(("[INF]", "[WRN]", "[ERR]", "[FTL]")):
             continue
         tags = _re.findall(r"\[([^\]]+)\]", line)
@@ -879,7 +882,7 @@ class UltronAgent:
 
         print(f"[ULTRON] Nuclei scan: {target} (severity: {severity})")
 
-        cmd = ["nuclei", "-u", target, "-severity", severity, "-silent"]
+        cmd = ["nuclei", "-u", target, "-severity", severity, "-silent", "-nc"]
         _rl = _load_roe().get("rate_limit_rps")          # honor a program's request-rate cap
         if _rl:
             cmd += ["-rl", str(int(_rl)), "-c", str(int(_load_roe().get("max_concurrent") or 5))]
@@ -2309,8 +2312,12 @@ Report:"""
         snap = {"target": target, "ts": datetime.datetime.now().isoformat(),
                 "http": {}, "subdomains": []}
 
+        # _resolve_scheme picks a live scheme and pins localhost -> 127.0.0.1
+        # (Go tools default to IPv6 ::1, which local IPv4-only servers don't answer).
+        probe = _resolve_scheme(target)
+
         # HTTP fingerprint via httpx JSON (status/title/server/tech/content-length)
-        out = run_cmd(["httpx", "-u", target, "-json", "-silent", "-title",
+        out = run_cmd(["httpx", "-u", probe, "-json", "-silent", "-title",
                        "-tech-detect", "-status-code", "-content-length", "-web-server"],
                       timeout=30)
         if "Tool not found" not in out:

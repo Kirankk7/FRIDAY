@@ -1056,6 +1056,11 @@ def _bb_nuclei_parser():
         return f"expected 2 deduped findings, got {len(f)}"
     if f[0]["severity"] != "critical" or f[0]["cve"] != "CVE-2021-44228":
         return "should sort critical-first + extract CVE"
+    # ANSI color must be stripped (nuclei colorizes ids -> leaked into report)
+    colored = "[\x1b[92mprometheus-metrics\x1b[0m] [\x1b[37mhttp\x1b[0m] [\x1b[34minfo\x1b[0m] http://127.0.0.1:3000/metrics"
+    cf = _ult._parse_nuclei_findings(colored)
+    if not cf or cf[0]["template"] != "prometheus-metrics":
+        return f"ANSI not stripped from template id: {cf}"
     return True
 
 def _bb_report_formatter():
