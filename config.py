@@ -129,6 +129,7 @@ PROACTIVE_ENABLED     = os.getenv("PROACTIVE_ENABLED", "1") not in ("0", "false"
 PROACTIVE_DIGEST_HOUR = int(os.getenv("PROACTIVE_DIGEST_HOUR", "8"))   # morning brief after this hour
 PROACTIVE_DEFENSE_MIN = int(os.getenv("PROACTIVE_DEFENSE_MIN", "0"))   # host re-scan interval (0=off)
 PROACTIVE_CVE_MIN     = int(os.getenv("PROACTIVE_CVE_MIN", "180"))     # CVE watchlist check interval
+PROACTIVE_MONITOR_MIN = int(os.getenv("PROACTIVE_MONITOR_MIN", "0"))   # target-watch re-scan interval (0=off)
 
 # ── Phase 52 #8 — optional access token (auth-ready) ──
 # JARVIS binds to 127.0.0.1 (localhost only), so this is OFF by default.

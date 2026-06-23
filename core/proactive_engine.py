@@ -9,6 +9,7 @@ alert goes through core.notify.push (HUD now, Telegram/email later).
   · morning digest       → once/day: tasks / reminders / events
   · defensive delta      → opt-in: new listening ports / suspicious processes
   · CVE watchlist        → new critical/high entries since last check
+  · target monitor       → opt-in: re-recon watched targets, alert on change
 """
 
 import time
@@ -19,14 +20,16 @@ from core.notify import push
 # config (graceful defaults; all overridable)
 try:
     from config import (PROACTIVE_ENABLED, PROACTIVE_DIGEST_HOUR,
-                        PROACTIVE_DEFENSE_MIN, PROACTIVE_CVE_MIN)
+                        PROACTIVE_DEFENSE_MIN, PROACTIVE_CVE_MIN,
+                        PROACTIVE_MONITOR_MIN)
 except Exception:
     PROACTIVE_ENABLED = True
     PROACTIVE_DIGEST_HOUR = 8
     PROACTIVE_DEFENSE_MIN = 0       # 0 = off (host scan is heavier); set e.g. 60
     PROACTIVE_CVE_MIN = 180
+    PROACTIVE_MONITOR_MIN = 0       # 0 = off; set e.g. 360 to re-recon watched targets
 
-_last = {"digest_date": None, "defense": 0.0, "cve": 0.0}
+_last = {"digest_date": None, "defense": 0.0, "cve": 0.0, "monitor": 0.0}
 _seen_cves = set()
 
 
@@ -111,6 +114,16 @@ def _check_cves():
         print(f"[proactive] cve check skipped: {e}")
 
 
+def _check_targets():
+    if not _due("monitor", PROACTIVE_MONITOR_MIN):
+        return
+    try:
+        from agents.ultron.ultron_agent import ultron_agent
+        ultron_agent.monitor_targets()   # pushes its own alerts on change
+    except Exception as e:
+        print(f"[proactive] target monitor skipped: {e}")
+
+
 def tick():
     """Called every ~30s by the scheduler loop. Each check self-paces."""
     if not PROACTIVE_ENABLED:
@@ -119,3 +132,4 @@ def tick():
     _morning_digest()       # gated to once/day after DIGEST_HOUR
     _check_defense()        # opt-in interval
     _check_cves()           # interval
+    _check_targets()        # opt-in: re-recon watched targets, alert on change

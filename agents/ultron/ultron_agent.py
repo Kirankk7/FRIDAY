@@ -399,6 +399,26 @@ def _in_scope(host: str) -> str:
     return "unknown"
 
 
+_TARGET_WATCH = os.path.join("data", "target_watch.json")
+
+
+def _load_target_watch() -> list:
+    """Load the target monitor watchlist (data/target_watch.json). List of
+    {target, snapshot, added, last_checked, last_change}. [] when absent."""
+    try:
+        import json
+        return json.load(open(_TARGET_WATCH, encoding="utf-8")) if os.path.isfile(_TARGET_WATCH) else []
+    except Exception:
+        return []
+
+
+def _save_target_watch(rows: list) -> None:
+    import json
+    os.makedirs("data", exist_ok=True)
+    with open(_TARGET_WATCH, "w", encoding="utf-8") as f:
+        json.dump(rows, f, indent=2)
+
+
 def parse_scope(text: str) -> dict:
     """Read a pasted bug-bounty program policy (in-scope / out-of-scope prose) and extract
     structured rules of engagement via the local LLM. Returns the parsed dict (best-effort —
@@ -2278,6 +2298,149 @@ Report:"""
         return " and ".join(parts)
 
     # =====================================
+    # TARGET MONITOR (mapper-lite: snapshot a target, diff vs last, alert on change)
+    # Inspired by the "mapper watches for changes" workflow — a status-code flip or
+    # new subdomain/JS endpoint on a known target is the cheap lead worth a human look.
+    # Heuristic, not LLM-judged: avoids the model "hyping" noise into findings.
+    # =====================================
+    def _target_snapshot(self, target: str) -> dict:
+        """Cheap recon snapshot of a target: HTTP fingerprint + subdomain set."""
+        import json as _json
+        snap = {"target": target, "ts": datetime.datetime.now().isoformat(),
+                "http": {}, "subdomains": []}
+
+        # HTTP fingerprint via httpx JSON (status/title/server/tech/content-length)
+        out = run_cmd(["httpx", "-u", target, "-json", "-silent", "-title",
+                       "-tech-detect", "-status-code", "-content-length", "-web-server"],
+                      timeout=30)
+        if "Tool not found" not in out:
+            for line in out.splitlines():
+                line = line.strip()
+                if not line.startswith("{"):
+                    continue
+                try:
+                    j = _json.loads(line)
+                except Exception:
+                    continue
+                snap["http"] = {
+                    "status": j.get("status_code"),
+                    "title": (j.get("title") or "")[:120],
+                    "server": j.get("webserver") or "",
+                    "tech": sorted(j.get("tech") or j.get("technologies") or []),
+                    "content_length": j.get("content_length"),
+                }
+                break
+
+        # Subdomain set (only meaningful for a bare domain, but harmless otherwise)
+        host = re.sub(r"^https?://", "", target).split("/")[0].split(":")[0]
+        if host.count(".") >= 1 and not host.replace(".", "").isdigit():
+            sub = self.subfinder(host)
+            snap["subdomains"] = sorted(set(sub.get("data", {}).get("subdomains", [])))
+        return snap
+
+    def _diff_target_snapshot(self, old: dict, new: dict) -> list:
+        """Return human-readable meaningful changes between two snapshots. [] = no change."""
+        changes = []
+        oh, nh = (old or {}).get("http", {}) or {}, (new or {}).get("http", {}) or {}
+        if oh.get("status") != nh.get("status") and nh.get("status") is not None:
+            changes.append(f"status {oh.get('status')} -> {nh.get('status')}")
+        if oh.get("server") != nh.get("server") and (oh.get("server") or nh.get("server")):
+            changes.append(f"server '{oh.get('server')}' -> '{nh.get('server')}'")
+        if oh.get("title") != nh.get("title") and (oh.get("title") or nh.get("title")):
+            changes.append("title changed")
+        ot, nt = set(oh.get("tech") or []), set(nh.get("tech") or [])
+        if ot != nt:
+            added, removed = nt - ot, ot - nt
+            if added:   changes.append("tech + " + ", ".join(sorted(added)[:5]))
+            if removed: changes.append("tech - " + ", ".join(sorted(removed)[:5]))
+        ocl, ncl = oh.get("content_length"), nh.get("content_length")
+        if isinstance(ocl, int) and isinstance(ncl, int) and ocl > 0:
+            if abs(ncl - ocl) > max(200, ocl * 0.20):   # >20% and >200 bytes
+                changes.append(f"size {ocl} -> {ncl}")
+        new_subs = set(new.get("subdomains") or []) - set(old.get("subdomains") or [])
+        if new_subs:
+            shown = ", ".join(sorted(new_subs)[:8])
+            extra = f" (+{len(new_subs) - 8} more)" if len(new_subs) > 8 else ""
+            changes.append(f"new subdomain(s): {shown}{extra}")
+        return changes
+
+    def watch_target(self, target: str) -> dict:
+        """Add a target to the change-monitor watchlist. Scope-gated: refuses out-of-scope."""
+        target = (target or "").strip()
+        if not target:
+            return {"success": False, "message": "Target missing.", "data": {}}
+        if _in_scope(target) == "out":
+            return {"success": False,
+                    "message": f"Refused: {target} is OUT of scope. Not watching it.", "data": {}}
+        rows = _load_target_watch()
+        if any(r.get("target") == target for r in rows):
+            return {"success": True, "message": f"Already watching {target}.", "data": {}}
+        snap = self._target_snapshot(target)
+        now = datetime.datetime.now().isoformat()
+        rows.append({"target": target, "snapshot": snap, "added": now,
+                     "last_checked": now, "last_change": None})
+        _save_target_watch(rows)
+        st = snap.get("http", {}).get("status")
+        nsub = len(snap.get("subdomains") or [])
+        return {"success": True,
+                "message": f"Now watching {target} for changes. Baseline: HTTP {st}, "
+                           f"{nsub} subdomain(s). I'll alert on meaningful change.",
+                "data": {"snapshot": snap}}
+
+    def unwatch_target(self, target: str) -> dict:
+        target = (target or "").strip()
+        rows = _load_target_watch()
+        kept = [r for r in rows if r.get("target") != target]
+        if len(kept) == len(rows):
+            return {"success": False, "message": f"Not watching {target}.", "data": {}}
+        _save_target_watch(kept)
+        return {"success": True, "message": f"Stopped watching {target}.", "data": {}}
+
+    def list_watched(self) -> dict:
+        rows = _load_target_watch()
+        if not rows:
+            return {"success": True, "message": "No targets being watched. Say 'watch target X'.",
+                    "data": {"targets": []}}
+        lines = []
+        for r in rows:
+            st = r.get("snapshot", {}).get("http", {}).get("status")
+            chg = r.get("last_change")
+            lines.append(f"- {r['target']} (HTTP {st}" + (f", last change {chg[:16]}" if chg else "") + ")")
+        return {"success": True, "message": f"Watching {len(rows)} target(s):\n" + "\n".join(lines),
+                "data": {"targets": rows}}
+
+    def monitor_targets(self) -> dict:
+        """Re-snapshot every watched target, diff vs last, push an alert on meaningful change.
+        Called on a schedule by the proactive engine (or 'check targets now')."""
+        rows = _load_target_watch()
+        if not rows:
+            return {"success": True, "message": "No targets to monitor.", "data": {"changed": []}}
+        try:
+            from core import notify
+        except Exception:
+            notify = None
+        changed = []
+        for r in rows:
+            target = r.get("target")
+            if _in_scope(target) == "out":
+                continue
+            new = self._target_snapshot(target)
+            diffs = self._diff_target_snapshot(r.get("snapshot", {}), new)
+            r["snapshot"] = new
+            r["last_checked"] = datetime.datetime.now().isoformat()
+            if diffs:
+                r["last_change"] = r["last_checked"]
+                summary = f"Target change on {target}: " + "; ".join(diffs[:6])
+                changed.append({"target": target, "changes": diffs})
+                if notify:
+                    notify.push(summary, kind="security")
+                print(f"[ULTRON][monitor] {summary}")
+        _save_target_watch(rows)
+        msg = (f"Monitored {len(rows)} target(s) — {len(changed)} changed."
+               if changed else f"Monitored {len(rows)} target(s) — no changes.")
+        return {"success": True, "message": msg, "data": {"changed": changed}}
+
+    # =====================================
     # FILE SCAN
     # =====================================
     def file_scan(self, path: str) -> dict:
@@ -3010,6 +3173,18 @@ Report:"""
 
             elif action == "scope_status":
                 return self.scope_status()
+
+            elif action == "watch_target":
+                return self.watch_target(parameters.get("target", target))
+
+            elif action == "unwatch_target":
+                return self.unwatch_target(parameters.get("target", target))
+
+            elif action == "list_watched":
+                return self.list_watched()
+
+            elif action == "monitor_targets":
+                return self.monitor_targets()
 
             elif action == "setup_scope":
                 return self.setup_scope(parameters.get("text", ""))
