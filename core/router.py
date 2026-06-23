@@ -703,6 +703,20 @@ def route_single_intent(
     if text in ("scope", "show scope", "scope status", "what is my scope", "whats my scope", "current scope"):
         return {"tool": "ultron", "action": "scope_status", "parameters": {}, "confidence": 0.98}
 
+    # ── Target monitor (mapper-lite: watch a target, alert on change) ──
+    if text in ("list watched", "watched targets", "list monitored", "monitored targets",
+                "what am i watching", "show watchlist"):
+        return {"tool": "ultron", "action": "list_watched", "parameters": {}, "confidence": 0.97}
+    if text in ("check targets", "check targets now", "monitor now", "monitor targets",
+                "scan watched targets", "check for changes"):
+        return {"tool": "ultron", "action": "monitor_targets", "parameters": {}, "confidence": 0.97}
+    _m = re.match(r"(?:stop watching|unwatch|stop monitoring|remove watch(?: on)?)\s+(.+)", text)
+    if _m:
+        return {"tool": "ultron", "action": "unwatch_target", "parameters": {"target": _m.group(1).strip()}, "confidence": 0.96}
+    _m = re.match(r"(?:watch target|monitor target|start watching|start monitoring|keep an eye on)\s+(.+)", text)
+    if _m:
+        return {"tool": "ultron", "action": "watch_target", "parameters": {"target": _m.group(1).strip()}, "confidence": 0.95}
+
     _m = re.match(r"(?:target profile|profile (?:for|of)?|what do (?:we|i) know about|recall target)\s+(.+)", text)
     if _m:
         return {"tool": "ultron", "action": "target_profile", "parameters": {"target": _m.group(1).strip()}, "confidence": 0.95}

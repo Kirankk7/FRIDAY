@@ -1162,6 +1162,62 @@ def _probe_sqli_anomaly():
 run_test("Ultron: injection probe sqli+xss",    _probe_sqli_and_xss)
 run_test("Ultron: injection probe anomaly sqli", _probe_sqli_anomaly)
 
+# ── Target monitor (mapper-lite: snapshot/diff/watch/alert) ──
+def _monitor_diff():
+    u = _ult.ultron_agent
+    old = {"http": {"status": 200, "title": "X", "server": "nginx", "tech": ["PHP"],
+                    "content_length": 1000}, "subdomains": ["a.x.com"]}
+    new = {"http": {"status": 403, "title": "X", "server": "nginx", "tech": ["PHP", "Laravel"],
+                    "content_length": 1000}, "subdomains": ["a.x.com", "api.x.com"]}
+    d = u._diff_target_snapshot(old, new)
+    if not any("status 200 -> 403" in c for c in d): return f"status change missed: {d}"
+    if not any("Laravel" in c for c in d):           return f"tech add missed: {d}"
+    if not any("api.x.com" in c for c in d):         return f"new subdomain missed: {d}"
+    if u._diff_target_snapshot(old, old) != []:      return "false-positive on identical snapshot"
+    return True
+
+def _monitor_lifecycle():
+    import tempfile, os as _os
+    u = _ult.ultron_agent
+    saved_path = _ult._TARGET_WATCH
+    saved_snap = u._target_snapshot
+    _ult._TARGET_WATCH = _os.path.join(tempfile.gettempdir(), "tw_regtest.json")
+    open(_ult._TARGET_WATCH, "w").write("[]")
+    state = {"status": 200}
+    u._target_snapshot = lambda t: {"target": t, "ts": "now",
+        "http": {"status": state["status"], "title": "", "server": "nginx",
+                 "tech": [], "content_length": 500}, "subdomains": []}
+    try:
+        if not u.watch_target("example.com").get("success"):      return "watch failed"
+        if "Already watching" not in u.watch_target("example.com").get("message", ""): return "dup not caught"
+        if u.monitor_targets()["data"]["changed"]:                return "phantom change on no-diff"
+        state["status"] = 403
+        if not u.monitor_targets()["data"]["changed"]:            return "real change not detected"
+        if not u.unwatch_target("example.com").get("success"):    return "unwatch failed"
+        if u.list_watched()["data"]["targets"]:                   return "watchlist not empty after unwatch"
+        return True
+    finally:
+        u._target_snapshot = saved_snap
+        try: _os.remove(_ult._TARGET_WATCH)
+        except Exception: pass
+        _ult._TARGET_WATCH = saved_path
+
+def _monitor_routes():
+    from core.router import fast_route
+    bad = []
+    for txt, act in [("watch target hackerone.com", "watch_target"),
+                     ("start watching api.example.com", "watch_target"),
+                     ("stop watching hackerone.com", "unwatch_target"),
+                     ("list watched", "list_watched"),
+                     ("check targets now", "monitor_targets")]:
+        r = fast_route(txt) or {}
+        if r.get("action") != act: bad.append(f"{txt!r}->{r.get('action')}")
+    return True if not bad else "misroutes: " + ", ".join(bad)
+
+run_test("Ultron: target-monitor diff",         _monitor_diff)
+run_test("Ultron: target-monitor lifecycle",    _monitor_lifecycle)
+run_test("Ultron: target-monitor routes",       _monitor_routes)
+
 # Feature B — tailored test plan (DB fingerprint + subtype payloads + manual checklist)
 def _test_plan_sqli_subtypes():
     U = _ult.ultron_agent
