@@ -102,7 +102,7 @@ def _check_cves():
         items = data if isinstance(data, list) else list(data.values()) if isinstance(data, dict) else []
         for entry in items:
             cid = entry.get("cve_id") or entry.get("id") or entry.get("cve") if isinstance(entry, dict) else None
-            sev = (entry.get("severity", "") if isinstance(entry, dict) else "").lower()
+            sev = (entry.get("severity") or "" if isinstance(entry, dict) else "").lower()
             if cid and cid not in _seen_cves:
                 _seen_cves.add(cid)
                 if sev in ("critical", "high"):

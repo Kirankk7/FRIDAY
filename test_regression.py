@@ -422,6 +422,28 @@ run_test("Friday: log_health + show_health",    _friday_health)
 run_test("Friday: add_habit + log_habit",       _friday_habit)
 run_test("Friday: set_reminder + list",         _friday_reminder)
 
+def _purge_regression_seed_data():
+    """Tests above seed _reg_/_regression_ entries into the REAL data files.
+    Strip them so they don't pile up (and spam boot reminders) across runs."""
+    import json, os
+    removed = 0
+    def _junk(v):
+        s = str(v)
+        return "_reg_" in s or "_regression_" in s
+    p = "data/friday_data.json"
+    if os.path.exists(p):
+        d = json.load(open(p, encoding="utf-8"))
+        for key, field in [("reminders","text"),("tasks","text"),("notes","text"),
+                           ("goals","text"),("habits","name")]:
+            if key in d:
+                kept = [x for x in d[key] if not _junk(x.get(field, ""))]
+                removed += len(d[key]) - len(kept)
+                d[key] = kept
+        json.dump(d, open(p, "w", encoding="utf-8"), indent=2)
+    return True
+
+run_test("Cleanup: purge regression seed data",  _purge_regression_seed_data)
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # 9. EDITH AGENT
