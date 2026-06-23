@@ -182,6 +182,7 @@ class Scheduler:
         with _lock:
             tasks = _load()
         now = datetime.datetime.now()
+        fired = {}
 
         for task in tasks:
             if not task.get("enabled", True):
@@ -200,14 +201,16 @@ class Scheduler:
 
                 task["last_run"] = now.isoformat()
                 task["next_run"] = _advance_next_run(task)
+                fired[task["id"]] = task
 
-                with _lock:
-                    tasks = _load()
-                    for i, t in enumerate(tasks):
-                        if t["id"] == task["id"]:
-                            tasks[i] = task
-                            break
-                    _save(tasks)
+        # Persist all advances in ONE save (no mid-loop reload race)
+        if fired:
+            with _lock:
+                disk = _load()
+                for i, t in enumerate(disk):
+                    if t["id"] in fired:
+                        disk[i] = fired[t["id"]]
+                _save(disk)
 
     def _fire(self, task: dict):
         """Execute task tool/action and speak result."""
@@ -306,6 +309,19 @@ class Scheduler:
 
         with _lock:
             tasks = _load()
+            # Dedup: identical schedule+action already exists -> return it, don't pile up
+            for t in tasks:
+                if (t.get("enabled", True)
+                        and t.get("name") == name
+                        and t.get("schedule_type") == stype
+                        and t.get("schedule_time") == stime
+                        and t.get("tool") == tool
+                        and t.get("action") == action):
+                    return {
+                        "success": True,
+                        "message": f"Task '{name}' already scheduled. Not adding duplicate.",
+                        "data": t
+                    }
             tasks.append(task)
             _save(tasks)
 
