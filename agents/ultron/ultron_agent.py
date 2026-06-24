@@ -305,11 +305,13 @@ _SQL_ERROR_SIGNS = re.compile(
 _XSS_MARKER = "jvz9xqk7z"
 
 
-def _http_get(url: str, timeout: int = 8):
+def _http_get(url: str, timeout: int = 8, headers: dict = None):
     """Thin HTTP GET seam used by the injection probe (kept module-level so tests
-    can patch it directly instead of monkeypatching global sys.modules)."""
+    can patch it directly instead of monkeypatching global sys.modules).
+    headers lets the caller carry a session Cookie / auth header for authenticated
+    targets (most real bug-bounty surfaces require a logged-in session)."""
     import requests
-    return requests.get(url, timeout=timeout)
+    return requests.get(url, timeout=timeout, headers=headers or None)
 
 
 # ── Test-planner knowledge (our own words; PortSwigger pages cited as references) ──
@@ -1617,7 +1619,8 @@ Report:"""
         "low": "P4 (Low)", "info": "P5 (Informational)",
     }
 
-    def _probe_injection(self, urls: list, max_urls: int = 30, max_params: int = 8) -> list:
+    def _probe_injection(self, urls: list, max_urls: int = 30, max_params: int = 8,
+                         cookie: str = "", headers: dict = None) -> list:
         """Lightweight injection smell-test over crawled URLs that carry query params.
 
         For each param sends ONE benign probe — a single quote (error-based SQLi
@@ -1625,9 +1628,15 @@ Report:"""
         Minimal-proof by design: one extra request per param, hard-capped, no data
         pulled. Findings carry validated=True (signal observed directly) + evidence
         + repro so the quality gate and report can use them. Authorized targets only.
+
+        cookie / headers carry a logged-in session so authenticated surfaces (most
+        real bug-bounty targets) can be probed, not just the public login page.
         """
         import time
         from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
+        _hdrs = dict(headers or {})
+        if cookie:
+            _hdrs["Cookie"] = cookie
         try:
             import requests  # noqa: F401 — availability check; calls go via _http_get
         except Exception:
@@ -1645,7 +1654,7 @@ Report:"""
                 # baseline response for this URL (once) — for differential detection
                 base_status, base_len = None, None
                 try:
-                    b = _http_get(u)
+                    b = _http_get(u, headers=_hdrs)
                     base_status, base_len = b.status_code, len(b.text or "")
                 except Exception:
                     pass
@@ -1663,7 +1672,7 @@ Report:"""
                         q = qs.copy(); q[i] = (k, (v or "1") + "'")
                         purl = urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(q), ""))
                         time.sleep(0.1)
-                        r = _http_get(purl)
+                        r = _http_get(purl, headers=_hdrs)
                         body = r.text or ""
                         m = _SQL_ERROR_SIGNS.search(body)
                         # anomaly: baseline was a healthy 200-with-body, but the quote
@@ -1693,7 +1702,7 @@ Report:"""
                         q = qs.copy(); q[i] = (k, marker)
                         purl = urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(q), ""))
                         time.sleep(0.1)
-                        r = _http_get(purl)
+                        r = _http_get(purl, headers=_hdrs)
                         if marker in (r.text or ""):
                             out.append({
                                 "template": "xss-reflected", "severity": "medium",

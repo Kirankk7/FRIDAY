@@ -1137,7 +1137,7 @@ def _with_fake_http(getter, fn):
 
 def _probe_sqli_and_xss():
     U = _ult.ultron_agent
-    def _get(url, timeout=8):
+    def _get(url, timeout=8, headers=None):
         if "id=" in url and "%27" in url:                 # error-based SQLi signal
             return _FakeResp("Microsoft OLE DB Provider error: Unclosed quotation mark")
         if "jvz9xqk7z" in url:                            # reflected XSS marker
@@ -1155,7 +1155,7 @@ def _probe_sqli_and_xss():
 
 def _probe_sqli_anomaly():
     U = _ult.ultron_agent
-    def _get(url, timeout=8):
+    def _get(url, timeout=8, headers=None):
         if "%27" in url: return _FakeResp("", 500)        # quote -> empty 500 (anomaly, no error string)
         return _FakeResp("healthy page " * 100, 200)      # baseline 200 with body
     res = _with_fake_http(_get, lambda: U._probe_injection(["http://t.com/n.aspx?id=1"]))
@@ -1168,7 +1168,7 @@ def _probe_sqli_empty_param():
     # crawled URLs often carry EMPTY params (?q=). A bare quote can hit a trivial-query
     # short-circuit (no error); the probe must seed the value so the quote breaks the query.
     U = _ult.ultron_agent
-    def _get(url, timeout=8):
+    def _get(url, timeout=8, headers=None):
         # only the SEEDED injection (q=1') errors; a bare quote on empty (q=') would not
         if "1%27" in url or "1'" in url: return _FakeResp("SQLITE_ERROR: near …", 500)
         return _FakeResp("all products " * 100, 200)      # baseline 200 with body
@@ -1179,6 +1179,21 @@ def _probe_sqli_empty_param():
 run_test("Ultron: injection probe sqli+xss",    _probe_sqli_and_xss)
 run_test("Ultron: injection probe anomaly sqli", _probe_sqli_anomaly)
 run_test("Ultron: injection probe empty-param seed", _probe_sqli_empty_param)
+
+def _probe_carries_cookie():
+    # authenticated scanning: a session cookie must reach the HTTP layer so
+    # login-gated surfaces (most real targets) can be probed.
+    U = _ult.ultron_agent
+    seen = {}
+    def _get(url, timeout=8, headers=None):
+        seen["hdr"] = headers or {}
+        return _FakeResp("x" * 500, 200)
+    _with_fake_http(_get, lambda: U._probe_injection(
+        ["http://t.com/a?id=1"], cookie="PHPSESSID=abc; security=low"))
+    ck = seen.get("hdr", {}).get("Cookie", "")
+    return True if "PHPSESSID=abc" in ck else f"cookie not carried into request: {seen.get('hdr')}"
+
+run_test("Ultron: injection probe carries session cookie", _probe_carries_cookie)
 
 def _search_cve_date_pair():
     # NVD v2 returns 404 if pubStartDate is sent without pubEndDate. The default
