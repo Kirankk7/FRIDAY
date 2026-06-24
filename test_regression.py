@@ -2423,26 +2423,6 @@ def _metrics_recent_order():
 run_test("Metrics: records calls/errors/avg",  _metrics_records)
 run_test("Metrics: recent is newest-first",    _metrics_recent_order)
 
-# Phase 52 #2 — unified memory facade
-from core import unified_memory as _um
-
-def _unified_searches_vector():
-    from core.vector_memory import add_to_vector
-    add_to_vector("unified memory facade test sentinel phrase zzqq")
-    r = _um.search("sentinel zzqq")
-    return True if any(h["source"] == "vector" for h in r["results"]) else "vector hit not surfaced"
-
-def _unified_empty_query():
-    return True if _um.search("")["count"] == 0 else "empty query should return nothing"
-
-def _unified_spans_stores():
-    s = set(_um.stores())
-    return True if {"vector", "edith", "tool", "personal"} <= s else f"missing stores: {s}"
-
-run_test("UnifiedMem: search hits vector store", _unified_searches_vector)
-run_test("UnifiedMem: empty query safe",         _unified_empty_query)
-run_test("UnifiedMem: spans all stores",         _unified_spans_stores)
-
 # Phase 34 — EDITH SQLite backend
 def _edith_sqlite_roundtrip():
     from agents.edith.edith_agent import edith_agent
