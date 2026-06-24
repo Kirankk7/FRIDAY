@@ -1164,8 +1164,21 @@ def _probe_sqli_anomaly():
     if "500" not in sqli[0]["evidence"]: return f"anomaly evidence missing status: {sqli[0]['evidence']}"
     return True
 
+def _probe_sqli_empty_param():
+    # crawled URLs often carry EMPTY params (?q=). A bare quote can hit a trivial-query
+    # short-circuit (no error); the probe must seed the value so the quote breaks the query.
+    U = _ult.ultron_agent
+    def _get(url, timeout=8):
+        # only the SEEDED injection (q=1') errors; a bare quote on empty (q=') would not
+        if "1%27" in url or "1'" in url: return _FakeResp("SQLITE_ERROR: near …", 500)
+        return _FakeResp("all products " * 100, 200)      # baseline 200 with body
+    res = _with_fake_http(_get, lambda: U._probe_injection(["http://t.com/rest/search?q="]))
+    sqli = [r for r in res if r["template"] == "sqli-error-based"]
+    return True if sqli else "SQLi on empty param not flagged (seed missing)"
+
 run_test("Ultron: injection probe sqli+xss",    _probe_sqli_and_xss)
 run_test("Ultron: injection probe anomaly sqli", _probe_sqli_anomaly)
+run_test("Ultron: injection probe empty-param seed", _probe_sqli_empty_param)
 
 # ── Target monitor (mapper-lite: snapshot/diff/watch/alert) ──
 def _monitor_diff():

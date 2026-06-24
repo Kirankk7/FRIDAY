@@ -1633,7 +1633,11 @@ Report:"""
                     seen.add(sig)
                     # --- SQLi probe (single quote): error-string OR response anomaly ---
                     try:
-                        q = qs.copy(); q[i] = (k, (v or "") + "'")
+                        # seed empty params with "1" — a bare quote on an empty value often
+                        # hits a trivial-query short-circuit (no error); a seeded value forces
+                        # the quote into the WHERE clause where it breaks. Crawled URLs very
+                        # often carry empty params (?q=, ?id=), so this is the common case.
+                        q = qs.copy(); q[i] = (k, (v or "1") + "'")
                         purl = urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(q), ""))
                         time.sleep(0.1)
                         r = _http_get(purl)
