@@ -1346,6 +1346,11 @@ class UltronAgent:
                                 el.fill("test")
                                 el.press("Enter")
                                 page.wait_for_timeout(500)
+                                # a form GET navigates to ?param=...; capture that param'd URL
+                                # (form-app vuln pages, e.g. DVWA sqli/?id=, never appear as a link).
+                                cur = page.url.split("#")[0]
+                                if "?" in cur and urlsplit(cur).netloc == host:
+                                    apis.add(cur)
                             except Exception:
                                 continue
                         page.wait_for_timeout(800)        # let interaction XHRs land
