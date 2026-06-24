@@ -2835,10 +2835,13 @@ Report:"""
         if sev_upper in ("CRITICAL", "HIGH", "MEDIUM", "LOW"):
             params["cvssV3Severity"] = sev_upper
 
-        # Date filter
+        # Date filter — NVD v2 REQUIRES pubStartDate and pubEndDate as a PAIR;
+        # sending only the start date returns HTTP 404. (Range also capped at 120 days.)
         if days_back and days_back > 0:
-            start = _dt.datetime.utcnow() - _dt.timedelta(days=days_back)
+            end = _dt.datetime.utcnow()
+            start = end - _dt.timedelta(days=min(days_back, 120))
             params["pubStartDate"] = start.strftime("%Y-%m-%dT00:00:00.000")
+            params["pubEndDate"] = end.strftime("%Y-%m-%dT23:59:59.999")
 
         url = "https://services.nvd.nist.gov/rest/json/cves/2.0?" + urllib.parse.urlencode(params)
         print(f"[ULTRON] NVD search: {url}")
