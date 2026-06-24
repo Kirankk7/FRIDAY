@@ -2490,6 +2490,21 @@ Report:"""
     # =====================================
     # VIRUSTOTAL SCAN (Phase 30b)
     # =====================================
+    def threat_intel(self, ioc: str) -> dict:
+        """Aggregate IOC reputation (IP/domain/URL/hash) across threat feeds.
+        DShield is no-key (IPs); URLhaus/AbuseIPDB/OTX join when their keys are set."""
+        if not ioc:
+            return {"success": False, "message": "Give me an IOC: IP, domain, URL, or file hash.", "data": {}}
+        from core import threat_intel as _ti
+        r = _ti.lookup(ioc)
+        lines = [r["summary"], ""]
+        for s in r["sources"]:
+            mark = {"malicious": "✗", "suspicious": "!", "clean": "✓",
+                    "nokey": "·", "skip": "·", "error": "·", "unknown": "·"}.get(s["status"], "·")
+            lines.append(f"  {mark} {s['source']}: {s['detail']}")
+        return {"success": True, "message": "\n".join(lines),
+                "data": {"verdict": r["verdict"], "kind": r["kind"], "sources": r["sources"]}}
+
     def vt_scan(self, target: str) -> dict:
         """Look up a file path, hash, URL, or domain in VirusTotal (v3 API).
         File paths are hashed locally (sha256) — file content never uploaded."""
@@ -3243,6 +3258,9 @@ Report:"""
 
             elif action == "vt_scan":
                 return self.vt_scan(parameters.get("target", target) or parameters.get("path", ""))
+
+            elif action == "threat_intel":
+                return self.threat_intel(parameters.get("ioc", target))
 
             elif action == "log_check":
                 return self.log_check()

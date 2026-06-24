@@ -95,6 +95,14 @@ NVD_API_KEY = os.getenv("NVD_API_KEY", "")
 # Free tier: 4 req/min, 500/day. File/URL/domain reputation.
 VIRUSTOTAL_API_KEY = os.getenv("VIRUSTOTAL_API_KEY", "")
 
+# ── Phase 66 — threat-intel IOC aggregator (all OPTIONAL; DShield covers IPs no-key) ──
+# ABUSE_CH_API_KEY: free at auth.abuse.ch — unlocks URLhaus url/host/hash lookups.
+# ABUSEIPDB_API_KEY: free (1k/day) at abuseipdb.com — IP abuse scores.
+# OTX_API_KEY: free at otx.alienvault.com — threat-pulse lookups.
+ABUSE_CH_API_KEY  = os.getenv("ABUSE_CH_API_KEY", "")
+ABUSEIPDB_API_KEY = os.getenv("ABUSEIPDB_API_KEY", "")
+OTX_API_KEY       = os.getenv("OTX_API_KEY", "")
+
 # ── Phase 33 — GitHub API (Athena code/repo search) ──
 # Free token: github.com/settings/tokens (classic, public_repo scope is enough).
 # Without token: 60 req/hr + NO code search. With token: 5000/hr + code search.

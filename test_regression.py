@@ -1205,6 +1205,37 @@ def _search_cve_date_pair():
 
 run_test("Ultron: search_cve sends date pair",   _search_cve_date_pair)
 
+def _threat_intel_classify():
+    from core.threat_intel import classify_ioc as c
+    cases = {"8.8.8.8": "ip", "evil.com": "domain", "http://x.com/a": "url",
+             "d41d8cd98f00b204e9800998ecf8427e": "hash", "not an ioc": "unknown"}
+    for inp, want in cases.items():
+        if c(inp) != want:
+            return f"{inp!r} -> {c(inp)}, want {want}"
+    return True
+
+def _threat_intel_aggregate():
+    # mock the source fns so no network; verify aggregation verdict logic
+    import core.threat_intel as ti
+    saved = (ti._dshield, ti._abuseipdb, ti._urlhaus, ti._otx)
+    ti._dshield = lambda ip: {"source": "DShield/ISC", "status": "malicious", "detail": "x"}
+    ti._abuseipdb = lambda ip: {"source": "AbuseIPDB", "status": "nokey", "detail": "x"}
+    ti._urlhaus = lambda i, k: {"source": "URLhaus", "status": "nokey", "detail": "x"}
+    ti._otx = lambda i, k: {"source": "AlienVault OTX", "status": "nokey", "detail": "x"}
+    try:
+        r = ti.lookup("1.2.3.4")
+        if r["verdict"] != "malicious": return f"expected malicious, got {r['verdict']}"
+        # all-nokey on a domain -> unknown (nothing could check)
+        r2 = ti.lookup("nochecks.example")
+        if r2["verdict"] != "unknown": return f"all-nokey should be unknown, got {r2['verdict']}"
+        return True
+    finally:
+        ti._dshield, ti._abuseipdb, ti._urlhaus, ti._otx = saved
+
+run_test("Ultron: threat_intel classify IOC",    _threat_intel_classify)
+run_test("Ultron: threat_intel aggregate verdict", _threat_intel_aggregate)
+run_test("Router: 'threat intel 8.8.8.8'",       _route("threat intel 8.8.8.8", "ultron", "threat_intel"))
+
 # ── Target monitor (mapper-lite: snapshot/diff/watch/alert) ──
 def _monitor_diff():
     u = _ult.ultron_agent

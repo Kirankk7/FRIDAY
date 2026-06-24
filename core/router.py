@@ -842,6 +842,16 @@ def route_single_intent(
         tgt = _m.group(1).strip().rstrip("?")
         return {"tool": "ultron", "action": "vt_scan", "parameters": {"target": tgt}, "confidence": 0.96}
 
+    # Phase 66 — threat-intel IOC aggregator: "threat intel X" / "ioc X" / "reputation check X" / "is X malicious"
+    _m = re.match(
+        r"(?:threat intel|threat intelligence|ioc(?: lookup| check)?|reputation check|"
+        r"check ioc|intel on|is)\s+(.+?)(?:\s+malicious| dangerous)?\??$",
+        text, re.IGNORECASE
+    )
+    if _m and _m.group(1).strip().lower() not in ("my machine", "my system", "this safe"):
+        return {"tool": "ultron", "action": "threat_intel",
+                "parameters": {"ioc": _m.group(1).strip().rstrip("?")}, "confidence": 0.94}
+
     # ── File scan (local heuristic) ──
     _m = re.match(r"(?:scan file|check file|file scan|analyze file)\s+(.+)", text)
     if _m:
