@@ -66,3 +66,7 @@ Thumbs.db
 .vscode/
 .claude/
 *.swp
+
+# internal working docs (local only)
+DOGFOOD_PLAN.md
+DOGFOOD_LOG.md
