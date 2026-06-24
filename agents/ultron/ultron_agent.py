@@ -1287,7 +1287,7 @@ class UltronAgent:
     # =====================================
     # SPA RENDER-CRAWL (the attack surface a passive crawler can't see)
     # =====================================
-    def spa_crawl(self, target: str, timeout: int = 30, interact: bool = True) -> dict:
+    def spa_crawl(self, target: str, timeout: int = 30, interact: bool = True, cookie: str = "") -> dict:
         """Render a JS/SPA target in headless Chromium and capture its LIVE attack surface:
         rendered DOM links + every same-origin XHR/fetch API call the app makes — the real
         endpoints (e.g. /api/..., /rest/..., /graphql) that katana's passive crawl misses on
@@ -1309,6 +1309,8 @@ class UltronAgent:
             with sync_playwright() as p:
                 b = p.chromium.launch(headless=True)
                 page = b.new_page()
+                if cookie:                       # authenticated crawl — carry the session
+                    page.set_extra_http_headers({"Cookie": cookie})
 
                 def _on_req(r):
                     try:
@@ -1368,7 +1370,7 @@ class UltronAgent:
     # FULL PIPELINE (Phase 24)
     # Nmap → Subfinder → Httpx → Nuclei → Katana → Screenshot
     # =====================================
-    def full_pipeline(self, target: str) -> dict:
+    def full_pipeline(self, target: str, cookie: str = "") -> dict:
 
         if not target:
             return {"success": False, "message": "Target missing.", "data": {}}
@@ -1418,7 +1420,7 @@ class UltronAgent:
         # SPA fallback: a passive crawl returning ~nothing usually means a JS app — render it
         # in headless Chromium and capture the live API surface katana can't see.
         if len([u for u in urls if "?" in u or u.count("/") > 3]) < 3:
-            spa = self.spa_crawl(target)
+            spa = self.spa_crawl(target, cookie=cookie)
             spa_urls = spa.get("data", {}).get("urls", [])
             if spa_urls:
                 urls = sorted(set(urls) | set(spa_urls))
@@ -1965,9 +1967,12 @@ Report:"""
                 "low": "Low — limited direct impact; defence-in-depth concern.",
                 }.get(sev, "Informational — minimal direct security impact.")
 
-    def bug_bounty(self, target: str, validate: bool = True, force: bool = False) -> dict:
+    def bug_bounty(self, target: str, validate: bool = True, force: bool = False,
+                   cookie: str = "") -> dict:
         """Full bug-bounty hunt: recon pipeline → parse findings → CVE/exploit
-        lookup → (validate) → structured PoC report. Authorized targets only."""
+        lookup → (validate) → structured PoC report. Authorized targets only.
+        cookie carries a logged-in session so the crawl + injection probe cover
+        authenticated surface (most real targets), not just the public pages."""
         if not target:
             return {"success": False, "message": "Target missing. Usage: 'bug bounty example.com'", "data": {}}
 
@@ -1983,7 +1988,7 @@ Report:"""
                                f"Pass force=True (or --force) only if you're certain it's authorized."}
 
         # ── Stage 1: Recon pipeline (nmap→subfinder→httpx→nuclei→katana) ──
-        pipeline = self.full_pipeline(target)
+        pipeline = self.full_pipeline(target, cookie=cookie)
         pdata = pipeline.get("data", {})
         nuclei_raw = pdata.get("sections", {}).get("nuclei", "")
 
@@ -1994,7 +1999,7 @@ Report:"""
         # nuclei detects known CVEs/misconfigs, not custom app-logic SQLi/XSS — so
         # actively probe the params katana found and surface injectable candidates.
         try:
-            findings += self._probe_injection(pdata.get("urls", []))
+            findings += self._probe_injection(pdata.get("urls", []), cookie=cookie)
         except Exception as e:
             print(f"[ULTRON] injection probe skipped: {e}")
 
