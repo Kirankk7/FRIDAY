@@ -1180,6 +1180,31 @@ run_test("Ultron: injection probe sqli+xss",    _probe_sqli_and_xss)
 run_test("Ultron: injection probe anomaly sqli", _probe_sqli_anomaly)
 run_test("Ultron: injection probe empty-param seed", _probe_sqli_empty_param)
 
+def _search_cve_date_pair():
+    # NVD v2 returns 404 if pubStartDate is sent without pubEndDate. The default
+    # call (days_back=7) must send BOTH. Capture the URL without hitting the network.
+    import urllib.request
+    cap = {}
+    class _R:
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def read(self): return b'{"vulnerabilities": []}'
+    def _fake(req, timeout=30):
+        cap["url"] = req.full_url
+        return _R()
+    orig = urllib.request.urlopen
+    urllib.request.urlopen = _fake
+    try:
+        _ult.ultron_agent.search_cve("regtest", days_back=7)
+    finally:
+        urllib.request.urlopen = orig
+    url = cap.get("url", "")
+    if "pubStartDate" not in url: return "pubStartDate missing"
+    if "pubEndDate" not in url:   return "pubEndDate missing — NVD needs the pair (404 otherwise)"
+    return True
+
+run_test("Ultron: search_cve sends date pair",   _search_cve_date_pair)
+
 # ── Target monitor (mapper-lite: snapshot/diff/watch/alert) ──
 def _monitor_diff():
     u = _ult.ultron_agent
