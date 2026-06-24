@@ -137,6 +137,13 @@ def _parse_nmap_voice(raw: str, target: str) -> str:
     return f"Nmap found {len(open_ports)} open port{'s' if len(open_ports)!=1 else ''} on {target}: {ports_str}{suffix}."
 
 
+def _ipv4_local(target: str) -> str:
+    """Pin localhost -> 127.0.0.1. Go tools (httpx/nuclei/katana) resolve localhost
+    to IPv6 ::1, but local dev servers often bind IPv4 only, so they silently get
+    nothing. Real domains are untouched."""
+    return re.sub(r"(^|//)(localhost)(?=[:/]|$)", r"\g<1>127.0.0.1", target or "")
+
+
 def _resolve_scheme(target: str) -> str:
     """Pick a scheme that actually responds for a bare host.
 
@@ -146,9 +153,7 @@ def _resolve_scheme(target: str) -> str:
     returns the first that answers (any HTTP status = reachable), defaulting to
     https. Already-schemed targets pass through untouched.
     """
-    # httpx/nuclei/katana (Go) resolve localhost -> IPv6 ::1; local dev servers
-    # often bind IPv4 only, so the whole pipeline silently gets nothing. Pin IPv4.
-    target = re.sub(r"(^|//)(localhost)(?=[:/]|$)", r"\g<1>127.0.0.1", target)
+    target = _ipv4_local(target)
     if target.startswith(("http://", "https://")):
         return target
     import urllib.request
@@ -855,7 +860,7 @@ class UltronAgent:
 
         print(f"[ULTRON] Httpx probe: {target}")
         output = run_cmd(
-            ["httpx", "-u", target, "-title", "-status-code", "-tech-detect", "-silent"],
+            ["httpx", "-u", _ipv4_local(target), "-title", "-status-code", "-tech-detect", "-silent", "-nc"],
             timeout=30
         )
 
@@ -882,7 +887,7 @@ class UltronAgent:
 
         print(f"[ULTRON] Nuclei scan: {target} (severity: {severity})")
 
-        cmd = ["nuclei", "-u", target, "-severity", severity, "-silent", "-nc"]
+        cmd = ["nuclei", "-u", _ipv4_local(target), "-severity", severity, "-silent", "-nc"]
         _rl = _load_roe().get("rate_limit_rps")          # honor a program's request-rate cap
         if _rl:
             cmd += ["-rl", str(int(_rl)), "-c", str(int(_load_roe().get("max_concurrent") or 5))]
