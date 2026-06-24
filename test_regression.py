@@ -1219,6 +1219,23 @@ def _monitor_routes():
         if r.get("action") != act: bad.append(f"{txt!r}->{r.get('action')}")
     return True if not bad else "misroutes: " + ", ".join(bad)
 
+def _ipv4_local_normalize():
+    f = _ult._ipv4_local
+    cases = {
+        "localhost:3000": "127.0.0.1:3000",
+        "http://localhost:3000/x": "http://127.0.0.1:3000/x",
+        "https://localhost/api": "https://127.0.0.1/api",
+        "localhost": "127.0.0.1",
+        "example.com": "example.com",            # real domain untouched
+        "mylocalhost.com": "mylocalhost.com",    # substring not mangled
+    }
+    for inp, want in cases.items():
+        got = f(inp)
+        if got != want:
+            return f"{inp!r} -> {got!r}, want {want!r}"
+    return True
+
+run_test("Ultron: _ipv4_local localhost->127",  _ipv4_local_normalize)
 run_test("Ultron: target-monitor diff",         _monitor_diff)
 run_test("Ultron: target-monitor lifecycle",    _monitor_lifecycle)
 run_test("Ultron: target-monitor routes",       _monitor_routes)
