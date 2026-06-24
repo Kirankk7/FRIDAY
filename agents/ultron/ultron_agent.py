@@ -1285,7 +1285,7 @@ class UltronAgent:
     # =====================================
     # SPA RENDER-CRAWL (the attack surface a passive crawler can't see)
     # =====================================
-    def spa_crawl(self, target: str, timeout: int = 30) -> dict:
+    def spa_crawl(self, target: str, timeout: int = 30, interact: bool = True) -> dict:
         """Render a JS/SPA target in headless Chromium and capture its LIVE attack surface:
         rendered DOM links + every same-origin XHR/fetch API call the app makes — the real
         endpoints (e.g. /api/..., /rest/..., /graphql) that katana's passive crawl misses on
@@ -1311,6 +1311,10 @@ class UltronAgent:
                 def _on_req(r):
                     try:
                         if r.resource_type in ("xhr", "fetch") and urlsplit(r.url).netloc == host:
+                            # drop websocket transport polling (/socket.io/?EIO=..&t=..&sid=..) —
+                            # not a testable API endpoint, and its volatile sids spam the surface.
+                            if "/socket.io/" in r.url or "transport=polling" in r.url:
+                                return
                             apis.add(r.url.split("#")[0])
                     except Exception:
                         pass
@@ -1324,6 +1328,25 @@ class UltronAgent:
                     full = href if href.startswith("http") else urljoin(base, href)
                     if urlsplit(full).netloc == host:
                         links.add(full.split("#")[0])
+
+                # Bounded interaction: type into visible search/text inputs and submit, so
+                # endpoints that only fire on USER action (search XHRs, form GETs) surface too.
+                # Same _on_req handler captures them. Capped + wrapped — never breaks the crawl.
+                if interact:
+                    try:
+                        boxes = page.query_selector_all(
+                            "input[type=search], input[type=text], input:not([type]), "
+                            "input[name*=q], input[name*=search], input[placeholder*=earch]")
+                        for el in boxes[:5]:
+                            try:
+                                el.fill("test")
+                                el.press("Enter")
+                                page.wait_for_timeout(500)
+                            except Exception:
+                                continue
+                        page.wait_for_timeout(800)        # let interaction XHRs land
+                    except Exception:
+                        pass
                 b.close()
         except Exception as e:
             return {"success": False, "data": {"urls": []},
