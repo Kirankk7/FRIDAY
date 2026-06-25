@@ -758,6 +758,42 @@ T.update({
 })
 
 
+# ---- Claude-BugHunter distillation (Batch 6 B6-2): NET-NEW vs PortSwigger labs —
+#      gRPC, framework-specific stacks, supply-chain, source-leak. Our own words. ----
+CBH = [
+  ("grpc", "gRPC/gRPC-web", "enable server reflection to list services/methods, then call privileged RPCs "
+   "directly (grpcurl -plaintext host list); auth often enforced only at the gateway, not the RPC",
+   "grpcurl -plaintext T list  ->  grpcurl -d '{\"id\":1}' T svc.Method", "unauth RPC returns other users' data"),
+  ("grpc", "gRPC-web", "gRPC-web rides HTTP/1.1 (Content-Type application/grpc-web-text, base64 body); replay "
+   "in Burp and tamper the protobuf to reach methods the UI hides", "POST /pkg.Svc/Method grpc-web-text body",
+   "hidden/admin method responds"),
+  ("ssrf", "Spring Boot", "exposed actuator: /actuator/env leaks secrets, /heapdump dumps memory (creds/tokens), "
+   "/actuator/gateway routes -> SSRF, jolokia -> JNDI/RCE; always probe /actuator first",
+   "/actuator/health /actuator/env /actuator/heapdump /actuator/mappings", "actuator index lists sensitive endpoints"),
+  ("rce", "Laravel/PHP", "APP_DEBUG=true exposes the Ignition error page -> CVE-2021-3129 RCE; also /.env leak, "
+   "/telescope, /_ignition/execute-solution; trigger a 500 to see the debug stack",
+   "GET /.env  ;  POST /_ignition/execute-solution (Ignition RCE)", "framework version + APP_KEY/DB creds leak"),
+  ("deserialization", "ASP.NET", "__VIEWSTATE without MAC (or with a leaked validationKey/machineKey from web.config) "
+   "-> ysoserial.net ViewState gadget -> RCE; check for EnableViewStateMac=false / leaked keys",
+   "ysoserial.net -p ViewState -g ... --generator=... __VIEWSTATE", "command runs on the IIS worker"),
+  ("auth-bypass", "Next.js", "middleware-based auth can be skipped: the x-middleware-subrequest header (CVE-2025-29927) "
+   "or a crafted internal _next/data path bypasses the middleware that enforces auth on protected routes",
+   "GET /admin  with  x-middleware-subrequest: middleware", "protected route served without auth"),
+  ("prototype-pollution", "Node.js", "server-side deep-merge of JSON body pollutes Object.prototype; chain to "
+   "RCE via child_process options (execArgv/shell) or to privesc via an isAdmin gadget",
+   '{"__proto__":{"isAdmin":true}}  /  {"constructor":{"prototype":{...}}}', "polluted property changes server behaviour"),
+  ("source-leak", "any/JS app", "fetch JS source maps (app.js.map) to recover original source incl. comments, "
+   "API routes and hardcoded secrets; also check webpack:// in DevTools sources",
+   "GET /static/js/main.<hash>.js.map  ->  unpack with sourcemapper", "original source + secrets recovered"),
+  ("supply-chain", "npm/pip scope", "dependency confusion: an internal package name with no public registry entry "
+   "lets you publish a malicious public package the build pulls; check package.json for unscoped internal names",
+   "look for @org/internal or requires not on npm -> claim the name", "build installs the attacker package"),
+  ("api", "REST/BOLA", "broken object-level auth (BOLA/API1): swap the object id in /api/v1/<obj>/<id> using a "
+   "second account's token; also try array/wildcard ids and the sibling /v1 of a /v2 endpoint",
+   "GET /api/v1/orders/1001  with user-B token", "user-B reads user-A's object"),
+]
+
+
 def main():
     pb._save({"version": 1, "techniques": []})        # fresh build
 
@@ -796,6 +832,10 @@ def main():
     ]
     for cls, stack, tech, pay, tell in kb:
         pb.add(cls, tech, stack=stack, payload=pay, tell=tell, source="kb", dedup=False)
+
+    # ---- Claude-BugHunter net-new (B6-2) ----
+    for cls, stack, tech, pay, tell in CBH:
+        pb.add(cls, tech, stack=stack, payload=pay, tell=tell, source="cbh", dedup=False)
 
     # ---- 274 PortSwigger labs ----
     diffs = {"APPRENTICE", "PRACTITIONER", "EXPERT"}
