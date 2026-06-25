@@ -303,6 +303,14 @@ _SQL_ERROR_SIGNS = re.compile(
     re.IGNORECASE)
 # Unique-ish token for reflected-XSS detection (with angle brackets to prove no encoding).
 _XSS_MARKER = "jvz9xqk7z"
+# NoSQL injection error signatures (Mongo/Mongoose/CouchDB parse errors leaking into the page).
+_NOSQL_ERROR_SIGNS = re.compile(
+    r"mongoerror|mongoservererror|cast to objectid failed|"
+    r"\$where|\$regex|bson|unexpected token.*in json|"
+    r"casterror|e11000|couchdb|unknown operator|\$gt|\$ne",
+    re.IGNORECASE)
+# Host-header injection marker — reflected in a Location header / body = poisoning candidate.
+_HHI_MARKER = "jvz9hhi.example"
 
 
 def _http_get(url: str, timeout: int = 8, headers: dict = None, allow_redirects: bool = True):
@@ -1790,6 +1798,56 @@ Report:"""
                                 continue
                         except Exception:
                             pass
+                    # --- NoSQL operator injection (error-based, clear oracle) ---
+                    #     turn  k=v  into  k[$ne]=v  — a Mongo/Couch backend that passes it
+                    #     raw often throws a parse error (differential, not in baseline).
+                    try:
+                        q = [(kk, vv) for kk, vv in qs]
+                        q[i] = (k + "[$ne]", v or "1")
+                        purl = urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(q), ""))
+                        time.sleep(0.1)
+                        r = _http_get(purl, headers=_hdrs)
+                        body = r.text or ""
+                        nm = _NOSQL_ERROR_SIGNS.search(body)
+                        # differential discipline: a NoSQL-error token already in the baseline
+                        # is static text, not injection-triggered — require it to be new.
+                        if nm and not (base_body and _NOSQL_ERROR_SIGNS.search(base_body)):
+                            out.append({
+                                "template": "nosqli-operator", "severity": "high",
+                                "url": purl, "cve": None, "validated": True,
+                                "evidence": f"Operator injection '{k}[$ne]' surfaced a NoSQL error "
+                                            f"('{nm.group(0)}') — the param feeds an unsanitized Mongo/Couch query.",
+                                "repro": [f"Baseline: GET {u}",
+                                          f"Inject:   GET {purl}",
+                                          "Observe the NoSQL parse error; confirm auth-bypass manually with "
+                                          "a JSON body {\"user\":{\"$gt\":\"\"},\"pass\":{\"$gt\":\"\"}}"],
+                            })
+                            continue
+                    except Exception:
+                        pass
+                # --- Host-header injection (per-URL, reflection oracle) ---
+                #     inject a marker host via X-Forwarded-Host; if it lands in a redirect
+                #     Location (or the body), the app trusts the header = cache/reset poisoning.
+                try:
+                    hh = dict(_hdrs)
+                    hh["X-Forwarded-Host"] = _HHI_MARKER
+                    hh["X-Forwarded-Server"] = _HHI_MARKER
+                    time.sleep(0.1)
+                    r = _http_get(u, headers=hh, allow_redirects=False)
+                    loc = (r.headers.get("Location") or "") if hasattr(r, "headers") else ""
+                    if _HHI_MARKER in loc or (base_body and _HHI_MARKER in (r.text or "")
+                                              and _HHI_MARKER not in base_body):
+                        where = "Location header" if _HHI_MARKER in loc else "response body"
+                        out.append({
+                            "template": "host-header-injection", "severity": "medium",
+                            "url": u, "cve": None, "validated": True,
+                            "evidence": f"X-Forwarded-Host: {_HHI_MARKER} is reflected in the {where} — "
+                                        f"the app trusts a client-controlled host (password-reset / cache poisoning).",
+                            "repro": [f"Send: GET {u}  with header  X-Forwarded-Host: {_HHI_MARKER}",
+                                      f"Observe {_HHI_MARKER} reflected in the {where}"],
+                        })
+                except Exception:
+                    pass
             except Exception:
                 continue
         if out:
