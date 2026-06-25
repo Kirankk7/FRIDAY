@@ -1220,6 +1220,61 @@ def _probe_param_routed():
 
 run_test("Ultron: probe param-routed redirect+LFI", _probe_param_routed)
 
+# B6-7 — false-positive discipline corpus (from Claude-BugHunter eval/fp_cases.json).
+# The gate's worth = NOT flagging FP-shaped behavior. Each safe trap must yield 0 findings;
+# each real-bug control must still flag. Models the named discipline rules:
+#  - xss-encoded         : marker HTML-encoded → literal (with <x>) absent → not flagged
+#  - xss-json-reflection : marker echoed in application/json → wrong context → skipped
+#  - sqli-canned         : DB-error string in BOTH baseline+inject → static, not differential
+#  - xss-real / sqli-real: real signal only post-inject → still flagged (TP held)
+class _HResp:
+    def __init__(self, text, code=200, ctype="text/html"):
+        self.text = text; self.status_code = code; self.headers = {"Content-Type": ctype}
+
+def _fp_corpus_discipline():
+    U = _ult.ultron_agent
+    M = "jvz9xqk7z"
+
+    def run(getter, url):
+        return _with_fake_http(getter, lambda: U._probe_injection([url]))
+
+    # 1. xss-encoded (SAFE): server reflects but HTML-encodes the brackets.
+    def g_enc(url, timeout=8, headers=None, allow_redirects=True):
+        if M in url: return _HResp(f"you searched: {M}&lt;x&gt; ok")   # brackets encoded
+        return _HResp("normal " * 50)
+    if run(g_enc, "http://t/s?q=a"):
+        return "FP: encoded XSS reflection flagged"
+
+    # 2. xss-json-reflection (SAFE): marker reflects verbatim but content-type is JSON.
+    def g_json(url, timeout=8, headers=None, allow_redirects=True):
+        if M in url: return _HResp(f'{{"q":"{M}<x>"}}', ctype="application/json")
+        return _HResp('{"q":""}', ctype="application/json")
+    if run(g_json, "http://t/api/s?q=a"):
+        return "FP: JSON-context reflection flagged as XSS"
+
+    # 3. sqli-canned (SAFE): a static SQL-error-looking banner present on EVERY response.
+    def g_canned(url, timeout=8, headers=None, allow_redirects=True):
+        return _HResp("Welcome. (note: SQL syntax help at /docs) " * 5)   # same in base + inject
+    if run(g_canned, "http://t/p?id=1"):
+        return "FP: canned/static SQL-error banner flagged as SQLi"
+
+    # 4. xss-real (VULN control): unencoded marker in HTML → must flag.
+    def g_xss(url, timeout=8, headers=None, allow_redirects=True):
+        if M in url: return _HResp(f"echo {M}<x> back")
+        return _HResp("normal " * 50)
+    if not any(r["template"] == "xss-reflected" for r in run(g_xss, "http://t/echo?msg=a")):
+        return "TP lost: real reflected XSS not flagged"
+
+    # 5. sqli-real (VULN control): DB error appears ONLY after injection → must flag.
+    def g_sqli(url, timeout=8, headers=None, allow_redirects=True):
+        if "%27" in url: return _HResp("You have an error in your SQL syntax near ''", 500)
+        return _HResp("healthy " * 100, 200)
+    if not any(r["template"] == "sqli-error-based" for r in run(g_sqli, "http://t/p?id=1")):
+        return "TP lost: real error-based SQLi not flagged"
+    return True
+
+run_test("Ultron: FP-discipline corpus (CBH traps)", _fp_corpus_discipline)
+
 def _search_cve_date_pair():
     # NVD v2 returns 404 if pubStartDate is sent without pubEndDate. The default
     # call (days_back=7) must send BOTH. Capture the URL without hitting the network.
