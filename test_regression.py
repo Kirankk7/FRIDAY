@@ -1505,6 +1505,29 @@ run_test("Router: 'playbook jwt bypass'",        _route("playbook jwt bypass", "
 run_test("Router: 'remember technique: X'",      _route("remember technique: chain idor to acct takeover", "ultron", "remember_technique"))
 run_test("Router: 'dorks for example.com'",      _route("dorks for example.com", "ultron", "target_dorks"))
 
+# ingest_writeup — distil public writeups into the playbook (local). Test the fragile parts:
+# the JSON parser (tolerant of fences/prose) + routing + graceful bad input (no net/LLM call).
+def _writeup_parse_and_route():
+    U = _ult.ultron_agent
+    raw = ('here you go:\n```json\n'
+           '[{"class":"idor","stack":"REST","technique":"swap order id","payload":"GET /api/orders/1002",'
+           '"tell":"200 with another user data"},'
+           '{"class":"sqli","technique":"quote in search threw error","payload":"q=test\'","tell":"SQL error"}]\n'
+           '```\nhope it helps')
+    techs = U._parse_writeup_json(raw)
+    if len(techs) != 2:                       return f"parser got {len(techs)}, want 2"
+    if {t['class'] for t in techs} != {"idor", "sqli"}: return "parser lost a class"
+    if U._parse_writeup_json("no json at all") != []:   return "bad input should yield []"
+    # entries with no technique are dropped
+    if U._parse_writeup_json('[{"class":"x","technique":""}]') != []: return "empty-technique not dropped"
+    if "URL" not in U.ingest_writeup("not-a-url")["message"] and \
+       "url" not in U.ingest_writeup("not-a-url")["message"]:        return "bad URL not handled"
+    return True
+
+run_test("Ultron: ingest_writeup parser + guard",  _writeup_parse_and_route)
+run_test("Router: 'ingest writeup <url>'",        _route("ingest writeup https://blog.x/bug", "ultron", "ingest_writeup"))
+run_test("Router: 'learn from <url>'",            _route("learn from https://medium.com/p/abc", "ultron", "ingest_writeup"))
+
 # ── Target monitor (mapper-lite: snapshot/diff/watch/alert) ──
 def _monitor_diff():
     u = _ult.ultron_agent
