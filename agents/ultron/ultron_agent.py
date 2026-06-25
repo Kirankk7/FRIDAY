@@ -3357,6 +3357,26 @@ Report:"""
             return ""
 
     @staticmethod
+    def _crawl4ai_markdown(url: str) -> str:
+        """Optional accelerator (#9): if crawl4ai is installed, use its Playwright render +
+        clean-markdown extraction (better on ramble-heavy blog pages). Returns '' when it's
+        not installed or fails — the caller falls back to safe_get + MarkItDown + our nav-strip,
+        so this is a pure upgrade with zero hard dependency. `pip install crawl4ai && crawl4ai-setup`."""
+        try:
+            from crawl4ai import AsyncWebCrawler
+            import asyncio
+        except Exception:
+            return ""
+        try:
+            async def _run():
+                async with AsyncWebCrawler(verbose=False) as crawler:
+                    res = await crawler.arun(url=url)
+                    return (getattr(res, "markdown", "") or "")
+            return asyncio.run(_run())
+        except Exception:
+            return ""
+
+    @staticmethod
     def _render_text_html(url: str, timeout: int = 30) -> str:
         """Render a page in headless Chromium and return its full HTML (for link extraction
         from JS-built index pages). '' if Playwright absent / fails."""
@@ -3433,29 +3453,33 @@ Report:"""
         if not url or not re.match(r"https?://", url.strip(), re.IGNORECASE):
             return {"success": False, "message": "Give a writeup URL (http/https).", "data": {}}
         url = url.strip()
+        # Preferred path (#9): crawl4ai render+clean-markdown if installed (better extraction);
+        # returns '' when absent -> we fall back to safe_get + MarkItDown + nav-strip below.
+        text = self._clean_writeup_text(self._crawl4ai_markdown(url), limit=max_chars)
         # fetch → clean text (safe_get validates every redirect hop; MarkItDown → markdown)
         from core.url_guard import safe_get
         import tempfile as _tf, os as _os
-        try:
-            resp = safe_get(url)
-        except ValueError as e:
-            return {"success": False, "message": f"Refused to fetch — {e}.", "data": {}}
-        except Exception as e:
-            return {"success": False, "message": f"Fetch failed: {str(e)[:80]}", "data": {}}
-        try:
-            from markitdown import MarkItDown
-            from urllib.parse import urlsplit as _usplit
-            ext = _os.path.splitext(_usplit(url).path)[1] or ".html"
-            with _tf.NamedTemporaryFile(delete=False, suffix=ext) as tmp:
-                tmp.write(resp.content); tp = tmp.name
+        if len(text.strip()) < 120:
             try:
-                raw_md = MarkItDown().convert(tp).text_content or ""
-                text = self._clean_writeup_text(raw_md, limit=max_chars)
-            finally:
-                try: _os.remove(tp)
-                except Exception: pass
-        except Exception as e:
-            return {"success": False, "message": f"Could not extract text: {str(e)[:80]}", "data": {}}
+                resp = safe_get(url)
+            except ValueError as e:
+                return {"success": False, "message": f"Refused to fetch — {e}.", "data": {}}
+            except Exception as e:
+                return {"success": False, "message": f"Fetch failed: {str(e)[:80]}", "data": {}}
+            try:
+                from markitdown import MarkItDown
+                from urllib.parse import urlsplit as _usplit
+                ext = _os.path.splitext(_usplit(url).path)[1] or ".html"
+                with _tf.NamedTemporaryFile(delete=False, suffix=ext) as tmp:
+                    tmp.write(resp.content); tp = tmp.name
+                try:
+                    raw_md = MarkItDown().convert(tp).text_content or ""
+                    text = self._clean_writeup_text(raw_md, limit=max_chars)
+                finally:
+                    try: _os.remove(tp)
+                    except Exception: pass
+            except Exception as e:
+                return {"success": False, "message": f"Could not extract text: {str(e)[:80]}", "data": {}}
         # JS-SPA fallback (HackerOne / Medium-react / etc): a plain fetch returns a
         # "enable JavaScript" shell — render in headless Chromium and use the visible text.
         if len(text.strip()) < 300 or "javascript is disabled" in text.lower() or "enable javascript" in text.lower():
