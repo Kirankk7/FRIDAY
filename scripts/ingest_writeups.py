@@ -18,6 +18,18 @@ from agents.ultron.ultron_agent import ultron_agent as U
 from core import playbook as pb
 
 RAW = "https://raw.githubusercontent.com/KathanP19/HowToHunt/master/"
+# second source: PayloadsAllTheThings — payload-DENSE per-class README markdown
+PATTH = "https://raw.githubusercontent.com/swisskyrepo/PayloadsAllTheThings/master/"
+PATTH_PATHS = [
+    "Command Injection/README.md", "SQL Injection/README.md", "NoSQL Injection/README.md",
+    "XSS Injection/README.md", "Server Side Request Forgery/README.md", "Open Redirect/README.md",
+    "File Inclusion/README.md", "Directory Traversal/README.md", "CORS Misconfiguration/README.md",
+    "CRLF Injection/README.md", "GraphQL Injection/README.md", "JSON Web Token/README.md",
+    "OAuth Misconfiguration/README.md", "Insecure Deserialization/README.md", "Mass Assignment/README.md",
+    "Prototype Pollution/README.md", "Request Smuggling/README.md", "Server Side Template Injection/README.md",
+    "XXE Injection/README.md", "LDAP Injection/README.md", "Account Takeover/README.md",
+    "Business Logic Errors/README.md", "Race Condition/README.md", "Upload Insecure Files/README.md",
+]
 
 # one or two primary methodology files per class we carry in the playbook
 PATHS = [
@@ -48,26 +60,30 @@ PATHS = [
 
 
 def main():
+    import sys as _sys
+    # `python scripts/ingest_writeups.py patth` runs the PayloadsAllTheThings batch
+    which = _sys.argv[1] if len(_sys.argv) > 1 else "howtohunt"
+    base, paths = (PATTH, PATTH_PATHS) if which == "patth" else (RAW, PATHS)
     before = pb.stats()["total"]
     total_added = ok = 0
-    for i, p in enumerate(PATHS, 1):
-        url = RAW + quote(p)
+    for i, p in enumerate(paths, 1):
+        url = base + quote(p)
         try:
             r = U.ingest_writeup(url)
         except Exception as e:
-            print(f"[{i:2}/{len(PATHS)}] ERR {p}: {str(e)[:60]}")
+            print(f"[{i:2}/{len(paths)}] ERR {p}: {str(e)[:60]}")
             continue
         d = r.get("data", {})
         added = d.get("added", 0)
         if r.get("success") and added is not None:
             ok += 1
             total_added += added or 0
-            print(f"[{i:2}/{len(PATHS)}] +{added or 0:2}  {p}")
+            print(f"[{i:2}/{len(paths)}] +{added or 0:2}  {p}")
         else:
-            print(f"[{i:2}/{len(PATHS)}] --  {p}  ({r.get('message','')[:50]})")
+            print(f"[{i:2}/{len(paths)}] --  {p}  ({r.get('message','')[:50]})")
         time.sleep(1.0)        # be polite to raw.githubusercontent
     s = pb.stats()
-    print(f"\nDONE: {ok}/{len(PATHS)} pages ingested, +{total_added} techniques.")
+    print(f"\nDONE: {ok}/{len(paths)} pages ingested, +{total_added} techniques.")
     print(f"PLAYBOOK: {before} -> {s['total']} | validated {s['validated']} | "
           f"verify {s['verify_needed']} | classes {s['classes']}")
 
