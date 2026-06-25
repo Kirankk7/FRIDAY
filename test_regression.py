@@ -1401,6 +1401,66 @@ def _probe_post_oracles():
 
 run_test("Ultron: POST-body probe (nosql/sqli/cmdi oracles)", _probe_post_oracles)
 
+# New probe extensions: SSTI, time-blind SQLi, path-param SQLi, stored-XSS, XXE.
+def _probe_ssti_and_timeblind():
+    import urllib.parse as _up, time as _t
+    U = _ult.ultron_agent
+    def run(g, url, **kw): return _with_fake_http(g, lambda: U._probe_injection([url], **kw))
+    # SSTI: engine evaluates 1337*1337 -> 1787569 (not reflected)
+    def g_ssti(url, timeout=8, headers=None, allow_redirects=True):
+        return _HResp("out: 1787569") if "1337*1337" in _up.unquote(url) else _HResp("home " * 40)
+    if not any(r["template"] == "ssti" for r in run(g_ssti, "http://t/p?name=x")):
+        return "SSTI not flagged"
+    # SSTI reflection trap (literal echoed) -> no flag
+    def g_refl(url, timeout=8, headers=None, allow_redirects=True):
+        return _HResp("you said " + _up.unquote(url))
+    if any(r["template"] == "ssti" for r in run(g_refl, "http://t/p?name=x")):
+        return "FP: reflected SSTI expression flagged"
+    # time-blind: SLEEP payload delays, control fast
+    def g_time(url, timeout=8, headers=None, allow_redirects=True):
+        if "SLEEP(5)" in _up.unquote(url) or "pg_sleep(5)" in _up.unquote(url):
+            _t.sleep(5); return _HResp("ok")
+        return _HResp("ok " * 40)
+    if not any(r["template"] == "sqli-blind-time" for r in run(g_time, "http://t/p?id=1", max_params=1)):
+        return "time-blind SQLi not flagged"
+    return True
+
+def _probe_path_stored_xxe():
+    import re as _re, urllib.parse as _up
+    U = _ult.ultron_agent
+    # path-param: /api/user/1 -> 1' SQL error
+    def g_path(url, timeout=8, headers=None, allow_redirects=True):
+        return _HResp("error in your SQL syntax") if "%27" in url else _HResp("user " * 20)
+    if not any(r["template"] == "sqli-error-based"
+               for r in _with_fake_http(g_path, lambda: U._probe_path_params(["http://t/api/user/1"]))):
+        return "path-param SQLi not flagged"
+    # path-param FP guard: /about (non-id segment) must not be probed
+    if _with_fake_http(g_path, lambda: U._probe_path_params(["http://t/about"])):
+        return "FP: non-id path segment probed"
+    # stored-XSS: marker injected on /post appears on /feed
+    store = {}
+    def g_stored(url, timeout=8, headers=None, allow_redirects=True):
+        d = _up.unquote(url)
+        if "/post" in d and "jvz9stored" in d:
+            m = _re.search(r"jvz9stored\d<x>", d); store["m"] = m.group(0) if m else None; return _HResp("saved")
+        if "/feed" in d: return _HResp("c: " + (store.get("m") or "") + " end")
+        return _HResp("p " * 20)
+    if not any(r["template"] == "xss-stored"
+               for r in _with_fake_http(g_stored, lambda: U._probe_stored_xss(["http://t/post?c=hi", "http://t/feed"]))):
+        return "stored-XSS not flagged"
+    # XXE: XML body entity file read -> root:x
+    def g_xxe(url, data=None, json_body=None, timeout=8, headers=None):
+        b = data.decode() if isinstance(data, bytes) else str(data or "")
+        return _HResp("root:x:0:0:root:/root:/bin/bash") if ("file:///etc/passwd" in b and "&xxe;" in b) else _HResp("<ok/>")
+    eps = [{"url": "http://t/api/xml", "method": "POST",
+            "body": "<?xml version='1.0'?><data><name>x</name></data>", "ctype": "application/xml"}]
+    if not any(r["template"] == "xxe" for r in _with_fake_post(g_xxe, lambda: U._probe_post(eps))):
+        return "XXE not flagged"
+    return True
+
+run_test("Ultron: probe SSTI + time-blind SQLi", _probe_ssti_and_timeblind)
+run_test("Ultron: probe path-param + stored-XSS + XXE", _probe_path_stored_xxe)
+
 def _search_cve_date_pair():
     # NVD v2 returns 404 if pubStartDate is sent without pubEndDate. The default
     # call (days_back=7) must send BOTH. Capture the URL without hitting the network.
