@@ -1251,6 +1251,33 @@ run_test("Ultron: threat_intel classify IOC",    _threat_intel_classify)
 run_test("Ultron: threat_intel aggregate verdict", _threat_intel_aggregate)
 run_test("Router: 'threat intel 8.8.8.8'",       _route("threat intel 8.8.8.8", "ultron", "threat_intel"))
 
+def _playbook_add_recall_novelty():
+    from core import playbook as pb
+    import tempfile, os as _os
+    saved = pb._PATH
+    pb._PATH = _os.path.join(tempfile.gettempdir(), "pb_regtest.json")
+    pb._save({"version": 1, "techniques": []})
+    try:
+        if not pb.add("sqli", "seed empty param with 1' before the quote", payload="id=1'", validated=True)["added"]:
+            return "first add should succeed"
+        if pb.add("sqli", "seed empty param with 1' before the quote", payload="id=1'")["added"]:
+            return "near-duplicate should be rejected by novelty"
+        if pb.add("xss-reflected", "reflect marker jvz<x> unencoded", payload="jvz<x>")["added"] is not True:
+            return "distinct class/technique should add"
+        hits = pb.recall("empty param sql injection", vuln_class="sqli")
+        if not hits or not hits[0].get("validated"):
+            return "recall should return the proven sqli entry first"
+        return True
+    finally:
+        try: _os.remove(pb._PATH)
+        except Exception: pass
+        pb._PATH = saved
+
+run_test("Ultron: playbook add/recall/novelty",  _playbook_add_recall_novelty)
+run_test("Router: 'playbook jwt bypass'",        _route("playbook jwt bypass", "ultron", "playbook_recall"))
+run_test("Router: 'remember technique: X'",      _route("remember technique: chain idor to acct takeover", "ultron", "remember_technique"))
+run_test("Router: 'dorks for example.com'",      _route("dorks for example.com", "ultron", "target_dorks"))
+
 # ── Target monitor (mapper-lite: snapshot/diff/watch/alert) ──
 def _monitor_diff():
     u = _ult.ultron_agent

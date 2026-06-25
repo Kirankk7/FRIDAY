@@ -746,7 +746,25 @@ def route_single_intent(
     if _m:
         return {"tool": "ultron", "action": "kb_wordlist", "parameters": {"kind": _m.group(1).strip()}, "confidence": 0.95}
 
-    _m = re.match(r"(?:methodology|playbook|how (?:do i|to)|how can i|steps to|guide to|approach for|"
+    # Playbook — technique library recall + manual add
+    _m = re.match(r"(?:remember(?: this)? technique|learn technique|note technique|save technique)\s*:?\s*(.+)", text)
+    if _m:
+        return {"tool": "ultron", "action": "remember_technique",
+                "parameters": {"text": _m.group(1).strip()}, "confidence": 0.95}
+    if text in ("find programs", "find bug bounty programs", "program dorks", "bug bounty dorks",
+                "find bounty programs", "find rd programs"):
+        return {"tool": "ultron", "action": "find_programs", "parameters": {}, "confidence": 0.95}
+    _m = re.match(r"(?:find programs?|program dorks?)\s+(?:in\s+)?(\w{2,3})$", text)
+    if _m:
+        return {"tool": "ultron", "action": "find_programs", "parameters": {"region": _m.group(1)}, "confidence": 0.95}
+    _m = re.match(r"(?:target dorks?|recon dorks?|dorks?(?: for| on)?)\s+(.+)", text)
+    if _m:
+        return {"tool": "ultron", "action": "target_dorks", "parameters": {"target": _m.group(1).strip()}, "confidence": 0.94}
+    _m = re.match(r"(?:playbook|recall techniques?|techniques? for|what techniques?(?: for)?)\s+(.+)", text)
+    if _m:
+        return {"tool": "ultron", "action": "playbook_recall", "parameters": {"query": _m.group(1).strip()}, "confidence": 0.93}
+
+    _m = re.match(r"(?:methodology|how (?:do i|to)|how can i|steps to|guide to|approach for|"
                   r"bug bounty notes? (?:on|for|about)|notes? (?:on|for|about))\s+(.+)", text)
     if _m and any(w in text for w in (
             "test", "find", "exploit", "hunt", "bypass", "takeover", "recon", "enumerate",
