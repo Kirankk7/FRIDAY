@@ -102,6 +102,11 @@ VIRUSTOTAL_API_KEY = os.getenv("VIRUSTOTAL_API_KEY", "")
 ABUSE_CH_API_KEY  = os.getenv("ABUSE_CH_API_KEY", "")
 ABUSEIPDB_API_KEY = os.getenv("ABUSEIPDB_API_KEY", "")
 OTX_API_KEY       = os.getenv("OTX_API_KEY", "")
+# threat_intel wirings (#8): DEFENSE_INTEL = reputation-check the public IPs the host is
+# connected to during defensive_scan (DShield no-key, on by default). URL_GUARD_INTEL =
+# reputation pre-check a URL before safe_get fetches it (off — adds latency, best feeds need keys).
+DEFENSE_INTEL     = os.getenv("DEFENSE_INTEL", "1") not in ("0", "false", "False", "")
+URL_GUARD_INTEL   = os.getenv("URL_GUARD_INTEL", "0") not in ("0", "false", "False", "")
 
 # ── Phase 33 — GitHub API (Athena code/repo search) ──
 # Free token: github.com/settings/tokens (classic, public_repo scope is enough).

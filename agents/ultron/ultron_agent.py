@@ -3019,9 +3019,49 @@ Report:"""
                            f"{len(snap['procs'])} processes noted. I'll flag anything new.",
                 "data": snap}
 
+    def _remote_ip_intel(self, max_ips: int = 5) -> list:
+        """threat_intel enrichment (#8): established OUTBOUND connections to PUBLIC remote IPs,
+        reputation-checked via threat_intel (DShield is no-key). A malicious remote IP your host
+        is talking to is the real 'context on change' a port/proc diff can't give. Capped + graceful."""
+        try:
+            from config import DEFENSE_INTEL as _on
+        except Exception:
+            _on = True
+        if not _on:
+            return []
+        import ipaddress
+        ips = set()
+        try:
+            for c in psutil.net_connections(kind="inet"):
+                if c.status == psutil.CONN_ESTABLISHED and c.raddr:
+                    try:
+                        a = ipaddress.ip_address(c.raddr.ip)
+                        if not (a.is_private or a.is_loopback or a.is_link_local
+                                or a.is_multicast or a.is_reserved):
+                            ips.add(c.raddr.ip)
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+        flagged = []
+        try:
+            from core import threat_intel
+            for ip in list(ips)[:max_ips]:
+                try:
+                    v = threat_intel.lookup(ip)
+                    if (v.get("verdict") or "").lower() in ("malicious", "suspicious"):
+                        flagged.append({"ip": ip, "verdict": v["verdict"], "summary": v.get("summary", "")})
+                except Exception:
+                    continue
+        except Exception:
+            pass
+        return flagged
+
     def defensive_scan(self) -> dict:
-        """Compare the host against its baseline; flag new ports/processes + known-bad."""
+        """Compare the host against its baseline; flag new ports/processes + known-bad +
+        reputation-check the public IPs the host is connected to (threat_intel enrichment)."""
         snap = self._defense_snapshot()
+        bad_ips = self._remote_ip_intel()
 
         baseline = None
         try:
@@ -3049,10 +3089,14 @@ Report:"""
         new_procs = sorted(set(snap["procs"]) - set(baseline.get("procs", [])))
 
         # build a spoken report
-        if not new_ports and not new_procs and not bad_ports and not bad_procs:
-            msg = "All clear, boss. Nothing new listening and no suspicious processes since your baseline."
+        if not new_ports and not new_procs and not bad_ports and not bad_procs and not bad_ips:
+            msg = "All clear, boss. Nothing new listening, no suspicious processes, and the IPs " \
+                  "you're connected to look clean since your baseline."
         else:
             bits = []
+            if bad_ips:
+                bits.append("RED FLAG — malicious/suspicious remote IP(s) connected: "
+                            + ", ".join(f"{x['ip']} ({x['verdict']})" for x in bad_ips))
             if bad_ports or bad_procs:
                 bits.append("RED FLAG — " + self._defense_flags(bad_ports, bad_procs))
             if new_ports:
@@ -3066,7 +3110,7 @@ Report:"""
         return {"success": True, "message": msg,
                 "data": {"new_ports": new_ports, "new_procs": new_procs,
                          "suspicious": {"ports": bad_ports, "procs": bad_procs},
-                         "snapshot": snap}}
+                         "bad_remote_ips": bad_ips, "snapshot": snap}}
 
     def _defense_flags(self, bad_ports, bad_procs) -> str:
         parts = []
