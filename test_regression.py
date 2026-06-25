@@ -1461,6 +1461,38 @@ def _probe_path_stored_xxe():
 run_test("Ultron: probe SSTI + time-blind SQLi", _probe_ssti_and_timeblind)
 run_test("Ultron: probe path-param + stored-XSS + XXE", _probe_path_stored_xxe)
 
+# Multi-page crawler: follow same-origin links → collect param URLs from sub-pages.
+def _crawl_site_bfs():
+    U = _ult.ultron_agent
+    PAGES = {
+        "http://t.com": '<a href="/app/sqli?id=1">x</a> <a href="/app/redir/handler.php?url=a">y</a> '
+                        '<a href="http://evil.com/out">ext</a> <a href="/app/about">about</a>',
+        "http://t.com/app/about": '<a href="/app/deep?q=1">deep</a>',
+        "http://t.com/app/sqli?id=1": "ok",
+        "http://t.com/app/redir/handler.php?url=a": "ok",
+        "http://t.com/app/deep?q=1": "ok",
+    }
+    class _R:
+        def __init__(s, t): s.text = t; s.status_code = 200; s.headers = {"Content-Type": "text/html"}
+    def g(url, timeout=8, headers=None, allow_redirects=True):
+        key = "http://" + url.split("://", 1)[-1].split("#")[0]   # scheme-agnostic lookup
+        return _R(PAGES.get(key, "<html>none</html>"))
+    saved = _ult._http_get; _ult._http_get = g
+    try:
+        r = U.crawl_site("t.com", max_pages=20, max_depth=2)
+    finally:
+        _ult._http_get = saved
+    urls = r["data"]["urls"]
+    # must reach the sub-path param URLs (incl the deep one behind /about), skip the external host
+    if not any("redir/handler.php?url=" in u for u in urls): return "missed sub-path handler"
+    if not any("/app/sqli?id=1" in u for u in urls):         return "missed sqli param url"
+    if not any("/app/deep?q=1" in u for u in urls):          return "missed depth-2 url"
+    if any("evil.com" in u for u in urls):                   return "followed off-origin host"
+    return True
+
+run_test("Ultron: multi-page crawler (BFS, sub-paths)", _crawl_site_bfs)
+run_test("Router: 'crawl site <t>'",  _route("crawl site example.com", "ultron", "crawl_site"))
+
 def _search_cve_date_pair():
     # NVD v2 returns 404 if pubStartDate is sent without pubEndDate. The default
     # call (days_back=7) must send BOTH. Capture the URL without hitting the network.
