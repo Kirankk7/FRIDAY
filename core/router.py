@@ -760,6 +760,10 @@ def route_single_intent(
     _m = re.match(r"(?:target dorks?|recon dorks?|dorks?(?: for| on)?)\s+(.+)", text)
     if _m:
         return {"tool": "ultron", "action": "target_dorks", "parameters": {"target": _m.group(1).strip()}, "confidence": 0.94}
+    _m = re.match(r"(?:ingest writeup|ingest this writeup|learn(?: from)?(?: this)?(?: writeup)?|"
+                  r"read(?: this)? writeup|study writeup)\s+(https?://\S+)", text)
+    if _m:
+        return {"tool": "ultron", "action": "ingest_writeup", "parameters": {"url": _m.group(1).strip()}, "confidence": 0.95}
     _m = re.match(r"(?:playbook|recall techniques?|techniques? for|what techniques?(?: for)?)\s+(.+)", text)
     if _m:
         return {"tool": "ultron", "action": "playbook_recall", "parameters": {"query": _m.group(1).strip()}, "confidence": 0.93}

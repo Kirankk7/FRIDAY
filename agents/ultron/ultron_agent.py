@@ -2967,6 +2967,125 @@ Report:"""
             return {"success": True, "message": f"Remembered ({r['id']}): {text[:80]}", "data": r}
         return {"success": True, "message": f"Already known ({r['reason']}).", "data": r}
 
+    @staticmethod
+    def _clean_writeup_text(md: str, limit: int = 6000) -> str:
+        """Strip site nav/boilerplate from a MarkItDown dump so the real writeup content
+        (prose + payloads + code) reaches the LLM. Pages lead with menus — feeding the
+        first N raw chars grabs the menu, not the bug. Keep substantive lines only."""
+        keep, in_code = [], False
+        for ln in (md or "").splitlines():
+            s = ln.strip()
+            if s.startswith("```"):
+                in_code = not in_code; keep.append(ln); continue
+            if in_code:
+                keep.append(ln); continue
+            if not s:
+                continue
+            # drop pure-navigation lines: short, or mostly markdown links / menu items
+            links = len(re.findall(r"\[[^\]]*\]\([^)]*\)", s))
+            stripped = re.sub(r"\[[^\]]*\]\([^)]*\)", "", s).strip()
+            if links and len(stripped) < 15:            # a line that's basically just link(s)
+                continue
+            # keep real prose (long lines) or anything code-ish (payloads/requests/signatures)
+            if len(s) >= 40 or any(c in s for c in "/'`;=<>$|") or s.startswith(("#", "-", "*", ">")):
+                keep.append(s)
+        out = "\n".join(keep)
+        return out[:limit]
+
+    @staticmethod
+    def _parse_writeup_json(raw: str) -> list:
+        """Pull the JSON array of techniques out of an LLM reply (tolerates ```json
+        fences + surrounding prose). Returns [] on anything unparseable."""
+        import json as _json
+        s = (raw or "").strip()
+        if "```" in s:                                  # strip code fences
+            m = re.search(r"```(?:json)?\s*(.+?)```", s, re.DOTALL)
+            if m:
+                s = m.group(1).strip()
+        a, b = s.find("["), s.rfind("]")                # isolate the array
+        if a == -1 or b == -1 or b < a:
+            return []
+        try:
+            arr = _json.loads(s[a:b + 1])
+        except Exception:
+            return []
+        out = []
+        for e in arr if isinstance(arr, list) else []:
+            if isinstance(e, dict) and (e.get("technique") or "").strip():
+                out.append(e)
+        return out
+
+    def ingest_writeup(self, url: str, max_chars: int = 7000) -> dict:
+        """Learn from a public bug-bounty writeup: fetch the page (SSRF-guarded), distil
+        the techniques with the local LLM, and add them to the playbook with verify=True
+        so you eyeball them before they rank as proven. Local-only — data/playbook.json is
+        gitignored, so anything captured stays on your machine."""
+        if not url or not re.match(r"https?://", url.strip(), re.IGNORECASE):
+            return {"success": False, "message": "Give a writeup URL (http/https).", "data": {}}
+        url = url.strip()
+        # fetch → clean text (safe_get validates every redirect hop; MarkItDown → markdown)
+        from core.url_guard import safe_get
+        import tempfile as _tf, os as _os
+        try:
+            resp = safe_get(url)
+        except ValueError as e:
+            return {"success": False, "message": f"Refused to fetch — {e}.", "data": {}}
+        except Exception as e:
+            return {"success": False, "message": f"Fetch failed: {str(e)[:80]}", "data": {}}
+        try:
+            from markitdown import MarkItDown
+            from urllib.parse import urlsplit as _usplit
+            ext = _os.path.splitext(_usplit(url).path)[1] or ".html"
+            with _tf.NamedTemporaryFile(delete=False, suffix=ext) as tmp:
+                tmp.write(resp.content); tp = tmp.name
+            try:
+                raw_md = MarkItDown().convert(tp).text_content or ""
+                text = self._clean_writeup_text(raw_md, limit=max_chars)
+            finally:
+                try: _os.remove(tp)
+                except Exception: pass
+        except Exception as e:
+            return {"success": False, "message": f"Could not extract text: {str(e)[:80]}", "data": {}}
+        if len(text.strip()) < 120:
+            return {"success": False, "message": "Writeup text too short / not extractable.", "data": {}}
+
+        # distil → JSON techniques (local LLM, deterministic)
+        prompt = (
+            "Extract the reusable attack techniques from this bug-bounty writeup for a pentest "
+            "playbook. Output ONLY a JSON array (no prose). Each item: "
+            '{"class","stack","technique","payload","tell"} where class is the vuln type '
+            "(sqli/xss/idor/ssrf/nosqli/ssti/lfi/auth-bypass/rce/open-redirect/csrf/xxe/race/"
+            "jwt/graphql...), technique is one sentence on the trigger+how, payload is the exact "
+            "payload/request if shown (else empty), tell is the signal it worked. Max 8. If none, [].\n\n"
+            "WRITEUP:\n" + text
+        )
+        # explicit options: a big-enough context window for the writeup (default num_ctx
+        # truncates long pages -> empty []) + room for the JSON array + low temp for structure.
+        techs = []
+        for _try in range(2):                            # qwen is non-deterministic; one retry on empty
+            raw = ask_llm(prompt, agent="ultron", autotune_on=False,
+                          params={"num_ctx": 8192, "num_predict": 1200, "temperature": 0.1})
+            techs = self._parse_writeup_json(raw)
+            if techs:
+                break
+        if not techs:
+            return {"success": True, "data": {"added": 0, "url": url},
+                    "message": "Fetched the writeup but distilled no clear techniques. "
+                               "Try 'remember technique: ...' to add one by hand."}
+        from core import playbook as pb
+        added, ids = 0, []
+        for t in techs[:12]:
+            r = pb.add(t.get("class") or "misc", (t.get("technique") or "").strip(),
+                       stack=t.get("stack", ""), payload=t.get("payload", ""),
+                       tell=t.get("tell", ""), source="writeup", ref=url, verify=True)
+            if r.get("added"):
+                added += 1; ids.append(r["id"])
+        return {"success": True,
+                "message": f"Learned {added} new technique(s) from the writeup "
+                           f"({len(techs)} distilled, {len(techs) - added} already known). "
+                           f"Tagged verify — run 'playbook needs verify' to review/promote.",
+                "data": {"added": added, "ids": ids, "distilled": len(techs), "url": url}}
+
     def target_dorks(self, target: str) -> dict:
         """Google dorks to recon a SPECIFIC target (TakSec set), with the target substituted in."""
         import json as _json
@@ -3755,6 +3874,9 @@ Report:"""
                 return self.remember_technique(parameters.get("text", target) or input_text,
                                                parameters.get("vuln_class", "manual"),
                                                parameters.get("stack", ""))
+
+            elif action == "ingest_writeup":
+                return self.ingest_writeup(parameters.get("url", target) or input_text)
 
             elif action == "target_dorks":
                 return self.target_dorks(parameters.get("target", target))
