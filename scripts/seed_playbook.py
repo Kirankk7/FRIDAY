@@ -719,6 +719,42 @@ T.update({
    ("the cache stores paths exactly matching a static rule; append a delimiter so the URL maps to the "
     "dynamic private page yet still matches the static cache rule (e.g. /my-account;.js or /my-account%00.css)",
     "victim's private page cached under a public path"),
+ # ---- advanced HTTP/2 smuggling (8 from user solutions + 0.CL from knowledge) = 100% ----
+ "h2.cl request smuggling":
+   ("HTTP/2 request with Content-Length: 0 plus a smuggled body; on H2->H1 downgrade the back-end appends "
+    "the next request to your prefix. POST / HTTP/2, Content-Length:0, body=the smuggled request",
+    "every 2nd request gets a 404 = prefix smuggled"),
+ "response queue poisoning via h2.te request smuggling":
+   ("HTTP/2 + Transfer-Encoding: chunked, body '0\\r\\n\\r\\n' then a COMPLETE smuggled request to /x; "
+    "poisons the response queue so subsequent responses are mismatched", "capture the admin's 302 + session cookie"),
+ "http/2 request smuggling via crlf injection":
+   ("inject \\r\\n into an HTTP/2 header VALUE to add 'Transfer-Encoding: chunked', then smuggle via a "
+    "chunked body (H2 carries the CRLF that the H1 downgrade re-introduces)", "every 2nd request 404; steal victim session"),
+ "http/2 request splitting via crlf injection":
+   ("inject \\r\\n\\r\\n in an H2 header value to SPLIT off a complete second request; on downgrade the "
+    "front-end's appended \\r\\n\\r\\n turns the prefix into a real queued request", "poison queue -> capture admin 302"),
+ "bypassing access controls via http/2 request tunnelling":
+   ("H2 header-NAME CRLF injection to tunnel past the front-end: first leak the front-end-added auth "
+    "headers (X-SSL-VERIFIED / X-FRONTEND-KEY) by smuggling a large Content-Length + extra search param, "
+    "then HEAD + tunnelled 'GET /admin' replaying those headers (use a short :path like /login so the "
+    "tunnelled response fits)", "tunnelled HTTP/1.1 admin response nested in your response body"),
+ "web cache poisoning via http/2 request tunnelling":
+   ("use H2 request tunnelling (CRLF in a header name) so a reflected/redirect response gets cached "
+    "against a victim-reachable URL", "poisoned response served from cache -> stored XSS/redirect"),
+ "client-side desync":
+   ("front-end ignores Content-Length on some endpoints (POST with CL>0 + empty body -> server replies "
+    "immediately = CL ignored). From the VICTIM'S BROWSER: fetch(POST, body='GET /smuggled HTTP/1.1...', "
+    "credentials:include) then a CORS-error .catch() chaining a 2nd request — no proxy needed",
+    "victim's request captured into a comment / their cookie stolen"),
+ "server-side pause-based request smuggling":
+   ("Apache 2.4.x redirect endpoints: POST /resources (a redirecting path) with a complete 'GET /admin/ "
+    "Host: localhost' in the body, then PAUSE ~61s after the header \\r\\n\\r\\n (Turbo Intruder pauseMarker"
+    "=['\\r\\n\\r\\n'], pauseTime=61000) so the back-end processes the smuggled request during the pause",
+    "admin panel reached after the 61s pause"),
+ "0.cl request smuggling":
+   ("inverse of CL.0: the FRONT-END reads Content-Length as 0 (ignores the body) but the back-end honours "
+    "it, so the body smuggles a request to the back-end. Probe with a pause/timing test on redirect "
+    "endpoints, then put a complete 'GET /admin' in the body", "back-end processes the smuggled body as a request"),
 })
 
 
