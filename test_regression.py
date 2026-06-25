@@ -1298,7 +1298,28 @@ def _playbook_add_recall_novelty():
         except Exception: pass
         pb._PATH = saved
 
+def _test_plan_recalls_playbook():
+    # Phase 3: the test plan surfaces playbook techniques for the detected stack
+    from core import playbook as pb
+    import tempfile, os as _os
+    saved = pb._PATH
+    pb._PATH = _os.path.join(tempfile.gettempdir(), "pb_tplan.json")
+    pb._save({"version": 1, "techniques": []})
+    pb.add("sqli", "mysql time-blind extraction", stack="mysql", payload="SLEEP(5)", validated=True)
+    try:
+        U = _ult.ultron_agent
+        findings = [{"template": "sqli-error-based", "url": "http://t.com/p?id=1%27",
+                     "_gate": {"report": True, "tier": "P2"}}]
+        plan = "\n".join(U._build_test_plan("t.com", findings,
+                  {"sections": {"httpx": "MySQL"}, "urls": ["http://t.com/p?id=1", "http://t.com/login"]}))
+        return True if "From your playbook" in plan else "playbook section missing from test plan"
+    finally:
+        try: _os.remove(pb._PATH)
+        except Exception: pass
+        pb._PATH = saved
+
 run_test("Ultron: playbook add/recall/novelty",  _playbook_add_recall_novelty)
+run_test("Ultron: test-plan recalls playbook",   _test_plan_recalls_playbook)
 run_test("Router: 'playbook jwt bypass'",        _route("playbook jwt bypass", "ultron", "playbook_recall"))
 run_test("Router: 'remember technique: X'",      _route("remember technique: chain idor to acct takeover", "ultron", "remember_technique"))
 run_test("Router: 'dorks for example.com'",      _route("dorks for example.com", "ultron", "target_dorks"))

@@ -2009,6 +2009,26 @@ Report:"""
                 L += [f"- **{name}** — {how}", f"  - Reference: {ref}"]
             L.append("")
 
+        # ── Playbook recall: surface YOUR accumulated techniques for this stack ──
+        try:
+            from core import playbook as pb
+            feat_q = " ".join(k for k, v in feats.items() if v)
+            stack_q = (("" if db == "generic" else db) + " " + feat_q).strip()
+            hits = pb.recall(query=stack_q or "injection", stack=stack_q, top_k=6)
+            if hits:
+                L += ["### From your playbook (recalled for this stack)"]
+                for e in hits:
+                    tag = "PROVEN" if e.get("validated") else "ref"
+                    line = f"- [{tag}] {e.get('class')}: {e.get('technique')}"
+                    if e.get("payload"):
+                        line += f"  ->  `{e['payload'][:70]}`"
+                    L.append(line)
+                    if e.get("ref"):
+                        L.append(f"  - {e['ref']}")
+                L.append("")
+        except Exception:
+            pass
+
         if not sqli and not xss and not manual:
             L.append("_No auto-findings and no high-signal features detected — review the crawled "
                      "endpoints manually._")
@@ -2095,6 +2115,27 @@ Report:"""
             f["_gate"] = self._validate_finding(f, exploits_map)
         reportable = [f for f in findings if f["_gate"]["report"]]
         filtered = len(findings) - len(reportable)
+
+        # ── Auto-capture: a confirmed finding promotes its technique in the playbook
+        #     (novelty-checked; a reference technique that fires on a real target
+        #     gets marked PROVEN). Every hunt feeds the edge. ──
+        try:
+            from core import playbook as pb
+            _db = _detect_db(pdata.get("sections", {}).get("httpx", "") or "", findings)
+            _stack = "" if _db == "generic" else _db
+            _CAP = {
+              "sqli-error-based": ("sqli", "error/anomaly SQLi: a single quote (seed empty params with 1') breaks the query", "param=1'"),
+              "xss-reflected": ("xss-reflected", "reflected XSS: marker echoed unencoded in the response", "param=jvz9xqk7z<x>"),
+              "open-redirect": ("open-redirect", "param controls the redirect target", "param=//attacker.example"),
+              "lfi-path-traversal": ("lfi", "path traversal reads /etc/passwd", "param=../../../../etc/passwd"),
+            }
+            for f in reportable:
+                c = _CAP.get(f.get("template"))
+                if c:
+                    pb.add(c[0], c[1], stack=_stack, payload=c[2],
+                           tell=(f.get("evidence", "") or "")[:90], source="hunt", validated=True)
+        except Exception:
+            pass
 
         # ── Stage 5: Structured PoC report ──
         report = self._format_bb_report(target, findings, exploits_map, pdata, validated)
