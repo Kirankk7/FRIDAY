@@ -70,3 +70,8 @@ Thumbs.db
 # internal working docs (local only)
 DOGFOOD_PLAN.md
 DOGFOOD_LOG.md
+STATE_DUMP.md
+
+# ─── Local vuln-lab pack (3rd-party Claude-BugHunter test apps + eval corpora;
+#     local dogfood targets only, not ours to redistribute) ──────────────────
+labs/

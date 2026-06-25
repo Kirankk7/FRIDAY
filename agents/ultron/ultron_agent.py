@@ -1673,10 +1673,10 @@ Report:"""
                     continue
                 tested += 1
                 # baseline response for this URL (once) — for differential detection
-                base_status, base_len = None, None
+                base_status, base_len, base_body = None, None, ""
                 try:
                     b = _http_get(u, headers=_hdrs)
-                    base_status, base_len = b.status_code, len(b.text or "")
+                    base_status, base_len, base_body = b.status_code, len(b.text or ""), (b.text or "")
                 except Exception:
                     pass
                 for i, (k, v) in enumerate(qs[:max_params]):
@@ -1696,6 +1696,11 @@ Report:"""
                         r = _http_get(purl, headers=_hdrs)
                         body = r.text or ""
                         m = _SQL_ERROR_SIGNS.search(body)
+                        # discipline (CBH sqli-canned FP trap): a DB-error string that ALSO
+                        # appears in the baseline is a static/canned message, not injection-
+                        # triggered — require the error to be DIFFERENTIAL (post-inject only).
+                        if m and base_body and _SQL_ERROR_SIGNS.search(base_body):
+                            m = None
                         # anomaly: baseline was a healthy 200-with-body, but the quote
                         # flips it to a server error / empty body = query broke (classic SQLi).
                         anomaly = (base_status == 200 and (base_len or 0) > 200
@@ -1724,11 +1729,21 @@ Report:"""
                         purl = urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(q), ""))
                         time.sleep(0.1)
                         r = _http_get(purl, headers=_hdrs)
-                        if marker in (r.text or ""):
+                        # discipline (CBH xss-json-reflection FP trap): the marker (with angle
+                        # brackets) reflecting unencoded only matters in an HTML context — a
+                        # marker echoed in application/json or javascript won't render as markup.
+                        # Skip when the content-type is EXPLICITLY non-HTML (absent/unknown = allow).
+                        _ct = ""
+                        try:
+                            _ct = (r.headers.get("Content-Type") or "").lower()
+                        except Exception:
+                            _ct = ""
+                        _html_ctx = not (_ct and ("json" in _ct or "javascript" in _ct))
+                        if marker in (r.text or "") and _html_ctx:
                             out.append({
                                 "template": "xss-reflected", "severity": "medium",
                                 "url": purl, "cve": None, "validated": True,
-                                "evidence": f"Input '{marker}' reflected unencoded in the response for param '{k}'.",
+                                "evidence": f"Input '{marker}' reflected unencoded in an HTML response for param '{k}'.",
                                 "repro": [f"Send: GET {purl}",
                                           f"Find the literal string '{marker}' (angle brackets intact) in the response",
                                           "Escalate to a script payload only under authorized manual testing"],
