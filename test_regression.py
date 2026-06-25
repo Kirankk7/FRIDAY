@@ -2423,6 +2423,43 @@ run_test("Defense: baseline then compare",     _defense_baseline_then_clear)
 run_test("Defense: flags backdoor port + tool",_defense_flags_suspicious)
 run_test("Defense: router (scan/baseline)",    _defense_router)
 
+# threat_intel wirings (#8): defensive_scan remote-IP enrichment + url_guard pre-check.
+def _threat_intel_wirings():
+    import core.threat_intel as _ti
+    from core import url_guard as _ug
+    import config as _cfg
+    U = _ult.ultron_agent
+    saved_lookup = _ti.lookup
+    # 1. url_guard pre-check: off by default -> safe; on + malicious -> blocked
+    if _ug.threat_check("http://example.com")[0] is not True:
+        return "threat_check should be safe when off"
+    _ti.lookup = lambda ioc: {"verdict": "malicious", "summary": "evil"}
+    saved_flag = _cfg.URL_GUARD_INTEL
+    _cfg.URL_GUARD_INTEL = True
+    try:
+        ok, why = _ug.threat_check("http://evil.test")
+    finally:
+        _cfg.URL_GUARD_INTEL = saved_flag
+    if ok or "MALICIOUS" not in why:
+        return f"threat_check should block malicious host: {ok},{why}"
+    # 2. defensive_scan remote-IP enrichment: a malicious established remote IP -> flagged
+    import psutil
+    saved_conns = psutil.net_connections
+    class _C:
+        status = psutil.CONN_ESTABLISHED
+        class raddr: ip = "8.8.8.8"        # clearly-public IP (not private/reserved)
+    psutil.net_connections = lambda kind="inet": [_C()]
+    _ti.lookup = lambda ioc: {"verdict": "malicious", "summary": f"{ioc} bad"}
+    try:
+        flagged = U._remote_ip_intel()
+    finally:
+        psutil.net_connections = saved_conns; _ti.lookup = saved_lookup
+    if not any(x["ip"] == "8.8.8.8" for x in flagged):
+        return f"defensive enrichment missed malicious remote IP: {flagged}"
+    return True
+
+run_test("Defense: threat_intel wirings (#8)",  _threat_intel_wirings)
+
 # Phase 59 — multimodal vision (graceful without a model)
 def _vision_missing_file():
     from core.vision_model import describe_image
