@@ -1620,6 +1620,43 @@ run_test("Ultron: ingest_writeup parser + guard",  _writeup_parse_and_route)
 run_test("Router: 'ingest writeup <url>'",        _route("ingest writeup https://blog.x/bug", "ultron", "ingest_writeup"))
 run_test("Router: 'learn from <url>'",            _route("learn from https://medium.com/p/abc", "ultron", "ingest_writeup"))
 
+# ingest_feed — pull article links off an index page, skip nav/social, ingest each.
+def _ingest_feed_links():
+    import core.url_guard as _ug
+    U = _ult.ultron_agent
+    INDEX = ('<html><body>'
+             '<a href="https://feedhost.com/about">nav</a>'              # same host -> skip
+             '<a href="https://twitter.com/someone">tw</a>'              # social -> skip
+             '<a href="https://blog.dev/my-sqli-bug-writeup">A</a>'      # article -> keep
+             '<a href="https://medium.com/p/idor-story">B</a>'           # article -> keep
+             '<a href="https://x.io/">bare</a>'                          # bare domain -> skip
+             '<!-- padding so the index is over the 300-char SPA-shell threshold and the '
+             'render fallback is not triggered during the test: '
+             'lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod -->'
+             '</body></html>')
+    class _R:
+        def __init__(s): s.text = INDEX; s.status_code = 200
+    captured = []
+    def fake_writeup(url, max_chars=7000):
+        captured.append(url)
+        return {"success": True, "data": {"added": 1, "ids": ["pbX"]}}
+    saved_get, saved_w = _ug.safe_get, U.ingest_writeup
+    _ug.safe_get = lambda u, **k: _R()
+    U.ingest_writeup = fake_writeup
+    try:
+        r = U.ingest_feed("https://feedhost.com/list", max_articles=10)
+    finally:
+        _ug.safe_get = saved_get; U.ingest_writeup = saved_w
+    if r["data"]["articles"] != 2:        return f"ingested {r['data']['articles']}, want 2"
+    if any("twitter" in u or "feedhost.com/about" in u or u == "https://x.io/" for u in captured):
+        return f"did not filter nav/social/bare: {captured}"
+    if not (any("blog.dev" in u for u in captured) and any("medium.com" in u for u in captured)):
+        return "missed article links"
+    return True
+
+run_test("Ultron: ingest_feed link extraction", _ingest_feed_links)
+run_test("Router: 'ingest feed <url>'", _route("ingest feed https://pentester.land/list", "ultron", "ingest_feed"))
+
 # ── Target monitor (mapper-lite: snapshot/diff/watch/alert) ──
 def _monitor_diff():
     u = _ult.ultron_agent
