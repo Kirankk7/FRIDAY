@@ -1902,16 +1902,21 @@ Report:"""
                                 break                                # no stable baseline to diff against
                             lt, put, _ = _plen(t_suf)                # TRUE  branch
                             lf, puf, _ = _plen(f_suf)                # FALSE branch
-                            margin = max(40, int(base_len * 0.03))
-                            # cheap pre-check before spending the stability request
-                            if abs(lt - base_len) <= max(16, int(base_len * 0.02)) and abs(lt - lf) >= margin:
-                                lf2, _, _ = _plen(f_suf)             # confirm FALSE is reproducible
-                                if abs(lf - lf2) <= max(8, int(base_len * 0.01)):
+                            # Oracle by EQUALITY, not delta: TRUE must reproduce the baseline tightly
+                            # (<=2b) and FALSE must DIFFER yet be exactly reproducible. A boolean diff
+                            # can be tiny (DVWA blind = 6 bytes: "exists" vs "MISSING") — a delta margin
+                            # misses it. The strict-equality gates also make dynamic/jittery pages
+                            # self-exclude (TRUE won't match baseline, FALSE won't be stable) = no FP.
+                            true_matches = abs(lt - base_len) <= 2
+                            false_differs = lf != lt
+                            if true_matches and false_differs:
+                                lf2, _, _ = _plen(f_suf)             # FALSE must be byte-stable on re-test
+                                if lf == lf2:
                                     out.append({
                                         "template": "sqli-blind-boolean", "severity": "high",
                                         "url": put, "cve": None, "validated": True,
                                         "evidence": f"Param '{k}' is boolean-blind SQLi-able ({ctx} context): "
-                                                    f"'{t_suf.strip()}' reproduces the baseline ({base_len}b vs {lt}b) "
+                                                    f"'{t_suf.strip()}' reproduces the baseline ({base_len}b == {lt}b) "
                                                     f"while '{f_suf.strip()}' changes it to {lf}b (stable on re-test {lf2}b) "
                                                     f"— the condition controls the query result.",
                                         "repro": [f"TRUE : GET {put}  -> {lt}b (== baseline {base_len}b)",
