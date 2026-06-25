@@ -2968,6 +2968,34 @@ Report:"""
         return {"success": True, "message": f"Already known ({r['reason']}).", "data": r}
 
     @staticmethod
+    def _render_text(url: str, timeout: int = 30) -> str:
+        """Render a JS/SPA page in headless Chromium and return its visible text.
+        HackerOne, Medium-react, etc. ship a JS shell — a plain fetch gets "enable
+        JavaScript", not the report. Returns '' if Playwright is absent or it fails."""
+        try:
+            from playwright.sync_api import sync_playwright
+        except Exception:
+            return ""
+        try:
+            with sync_playwright() as p:
+                b = p.chromium.launch(headless=True)
+                # a real UA dodges bot-detection that serves a stripped shell (HackerOne does this);
+                # scroll + a longer settle let lazy GraphQL content (the report body) render.
+                pg = b.new_page(user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                                "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36")
+                pg.goto(url, wait_until="networkidle", timeout=timeout * 1000)
+                pg.wait_for_timeout(3500)
+                try:
+                    pg.mouse.wheel(0, 3000); pg.wait_for_timeout(2500)
+                except Exception:
+                    pass
+                txt = pg.inner_text("body")
+                b.close()
+                return txt or ""
+        except Exception:
+            return ""
+
+    @staticmethod
     def _clean_writeup_text(md: str, limit: int = 6000) -> str:
         """Strip site nav/boilerplate from a MarkItDown dump so the real writeup content
         (prose + payloads + code) reaches the LLM. Pages lead with menus — feeding the
@@ -3046,8 +3074,15 @@ Report:"""
                 except Exception: pass
         except Exception as e:
             return {"success": False, "message": f"Could not extract text: {str(e)[:80]}", "data": {}}
+        # JS-SPA fallback (HackerOne / Medium-react / etc): a plain fetch returns a
+        # "enable JavaScript" shell — render in headless Chromium and use the visible text.
+        if len(text.strip()) < 300 or "javascript is disabled" in text.lower() or "enable javascript" in text.lower():
+            rendered = self._render_text(url)
+            if rendered:
+                text = self._clean_writeup_text(rendered, limit=max_chars)
         if len(text.strip()) < 120:
-            return {"success": False, "message": "Writeup text too short / not extractable.", "data": {}}
+            return {"success": False, "message": "Writeup text too short / not extractable "
+                                                 "(JS-heavy page and Playwright unavailable?).", "data": {}}
 
         # distil → JSON techniques (local LLM, deterministic)
         prompt = (
