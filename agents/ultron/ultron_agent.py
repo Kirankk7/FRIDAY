@@ -2532,6 +2532,64 @@ Report:"""
     # =====================================
     # VIRUSTOTAL SCAN (Phase 30b)
     # =====================================
+    def playbook_recall(self, query: str = "", stack: str = "") -> dict:
+        """Recall attack techniques from the growing playbook (proven + KB + PortSwigger),
+        ranked for the query/stack. Proven techniques surface first."""
+        from core import playbook as pb
+        hits = pb.recall(query=query, stack=stack, top_k=8)
+        if not hits:
+            s = pb.stats()
+            return {"success": True, "data": {"hits": []},
+                    "message": f"No playbook match for '{query}'. ({s['total']} techniques loaded.)"}
+        lines = [f"Playbook — {len(hits)} technique(s) for '{query or stack}':", ""]
+        for e in hits:
+            tag = "PROVEN" if e.get("validated") else ("VERIFY" if e.get("verify") else "ref")
+            lines.append(f"[{tag}] {e['class']}: {e['technique']}")
+            if e.get("payload"): lines.append(f"   payload: {e['payload']}")
+            if e.get("tell"):    lines.append(f"   tell:    {e['tell']}")
+            if e.get("ref"):     lines.append(f"   ref:     {e['ref']}")
+        return {"success": True, "message": "\n".join(lines), "data": {"hits": hits}}
+
+    def remember_technique(self, text: str, vuln_class: str = "manual", stack: str = "") -> dict:
+        """Manually add a technique YOU found to the playbook (your creative finds become
+        JARVIS's permanent knowledge)."""
+        from core import playbook as pb
+        r = pb.add(vuln_class, text, stack=stack, source="user", validated=True)
+        if r["added"]:
+            return {"success": True, "message": f"Remembered ({r['id']}): {text[:80]}", "data": r}
+        return {"success": True, "message": f"Already known ({r['reason']}).", "data": r}
+
+    def target_dorks(self, target: str) -> dict:
+        """Google dorks to recon a SPECIFIC target (TakSec set), with the target substituted in."""
+        import json as _json
+        host = re.sub(r"^https?://", "", (target or "").strip()).split("/")[0] or "example.com"
+        try:
+            doc = _json.load(open("data/target_dorks.json", encoding="utf-8"))
+        except Exception:
+            return {"success": False, "message": "target_dorks.json missing (run scripts/seed).", "data": {}}
+        lines = [f"Target-recon dorks for {host} (paste into Google):", ""]
+        for cat in doc.get("categories", []):
+            lines.append(f"# {cat['category']}")
+            for d in cat["dorks"][:2]:
+                lines.append("  " + d.replace("example.com", host).replace("example[.]com", host))
+        return {"success": True, "message": "\n".join(lines[:80]),
+                "data": {"host": host, "categories": doc.get("categories", [])}}
+
+    def find_programs(self, region: str = "") -> dict:
+        """Recall program-discovery dorks (find bounty/RD programs). Run on Google —
+        many use Google-only operators DuckDuckGo can't."""
+        import json as _json
+        try:
+            doc = _json.load(open("data/recon_dorks.json", encoding="utf-8"))
+        except Exception:
+            return {"success": False, "message": "recon_dorks.json missing (run scripts/seed).", "data": {}}
+        rows = doc.get("dorks", [])
+        if region:
+            rows = [d for d in rows if (d.get("region") or "") == region.lower()] or rows
+        lines = [f"Program-discovery dorks{' (' + region + ')' if region else ''} — run on Google:", ""]
+        lines += ["  " + d["dork"] for d in rows[:30]]
+        return {"success": True, "message": "\n".join(lines), "data": {"count": len(rows)}}
+
     def threat_intel(self, ioc: str) -> dict:
         """Aggregate IOC reputation (IP/domain/URL/hash) across threat feeds.
         DShield is no-key (IPs); URLhaus/AbuseIPDB/OTX join when their keys are set."""
@@ -3280,6 +3338,21 @@ Report:"""
             elif action == "collect_evidence":
                 return self.collect_evidence(parameters.get("url", target),
                                              parameters.get("label", ""))
+
+            elif action == "playbook_recall":
+                return self.playbook_recall(parameters.get("query", target) or input_text,
+                                            parameters.get("stack", ""))
+
+            elif action == "remember_technique":
+                return self.remember_technique(parameters.get("text", target) or input_text,
+                                               parameters.get("vuln_class", "manual"),
+                                               parameters.get("stack", ""))
+
+            elif action == "target_dorks":
+                return self.target_dorks(parameters.get("target", target))
+
+            elif action == "find_programs":
+                return self.find_programs(parameters.get("region", ""))
 
             elif action == "kb_methodology":
                 from core import security_kb
