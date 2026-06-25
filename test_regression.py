@@ -1195,6 +1195,31 @@ def _probe_carries_cookie():
 
 run_test("Ultron: injection probe carries session cookie", _probe_carries_cookie)
 
+def _probe_param_routed():
+    # dork-derived: redirect/file params get the open-redirect / LFI probe (not just SQLi/XSS)
+    U = _ult.ultron_agent
+    class _R:
+        def __init__(s, t="", sc=200, loc=None):
+            s.text = t; s.status_code = sc; s.headers = {"Location": loc} if loc else {}
+    def _get(url, timeout=8, headers=None, allow_redirects=True):
+        if "redirect=" in url:
+            return _R(sc=302, loc="https://jvz9redir.example/") if "jvz9redir" in url else _R("x", 302, "/home")
+        if "file=" in url:
+            return _R("root:x:0:0:root:/root:/bin/bash") if "etc" in url and "passwd" in url else _R("page " * 60)
+        return _R("benign " * 80)
+    orig = _ult._http_get
+    _ult._http_get = _get
+    try:
+        res = U._probe_injection(["http://t.com/a?redirect=x", "http://t.com/b?file=index.php"])
+        tmpls = {f["template"] for f in res}
+        if "open-redirect" not in tmpls:     return f"open-redirect not caught: {tmpls}"
+        if "lfi-path-traversal" not in tmpls: return f"LFI not caught: {tmpls}"
+        return True
+    finally:
+        _ult._http_get = orig
+
+run_test("Ultron: probe param-routed redirect+LFI", _probe_param_routed)
+
 def _search_cve_date_pair():
     # NVD v2 returns 404 if pubStartDate is sent without pubEndDate. The default
     # call (days_back=7) must send BOTH. Capture the URL without hitting the network.

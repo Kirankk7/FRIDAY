@@ -305,13 +305,27 @@ _SQL_ERROR_SIGNS = re.compile(
 _XSS_MARKER = "jvz9xqk7z"
 
 
-def _http_get(url: str, timeout: int = 8, headers: dict = None):
+def _http_get(url: str, timeout: int = 8, headers: dict = None, allow_redirects: bool = True):
     """Thin HTTP GET seam used by the injection probe (kept module-level so tests
     can patch it directly instead of monkeypatching global sys.modules).
-    headers lets the caller carry a session Cookie / auth header for authenticated
-    targets (most real bug-bounty surfaces require a logged-in session)."""
+    headers carries a session Cookie / auth header for authenticated targets;
+    allow_redirects=False lets the open-redirect probe read the Location header."""
     import requests
-    return requests.get(url, timeout=timeout, headers=headers or None)
+    return requests.get(url, timeout=timeout, headers=headers or None,
+                        allow_redirects=allow_redirects)
+
+
+# Param-name -> extra test type. Dork-derived (TakSec param classes): the param's
+# NAME hints which class to test, so the probe doesn't fire every payload at every param.
+_PARAM_HINTS = {
+    "open-redirect": ("redirect", "redir", "url", "next", "return", "returnurl", "dest",
+                      "destination", "continue", "goto", "out", "to", "link", "callback", "r2", "u"),
+    "lfi": ("file", "page", "path", "include", "doc", "document", "template", "folder",
+            "dir", "load", "download", "read", "filename", "pg"),
+}
+_LFI_PROBE = "../../../../../../etc/passwd"
+_LFI_SIGN = re.compile(r"root:.?:0:0:|\[boot loader\]|\[fonts\]")        # /etc/passwd or win.ini
+_REDIR_MARKER = "jvz9redir.example"
 
 
 # ── Test-planner knowledge (our own words; PortSwigger pages cited as references) ──
@@ -1721,6 +1735,46 @@ Report:"""
                             })
                     except Exception:
                         pass
+                    # --- param-name-routed tests (dork-derived): fire only the test the
+                    #     param name suggests, so redirect/file params get the right probe ---
+                    kl = k.lower()
+                    if any(h in kl for h in _PARAM_HINTS["open-redirect"]):
+                        try:
+                            q = qs.copy(); q[i] = (k, "https://" + _REDIR_MARKER + "/")
+                            purl = urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(q), ""))
+                            time.sleep(0.1)
+                            r = _http_get(purl, headers=_hdrs, allow_redirects=False)
+                            loc = (r.headers.get("Location") or "") if hasattr(r, "headers") else ""
+                            if r.status_code in (301, 302, 303, 307, 308) and _REDIR_MARKER in loc:
+                                out.append({
+                                    "template": "open-redirect", "severity": "medium",
+                                    "url": purl, "cve": None, "validated": True,
+                                    "evidence": f"Param '{k}' controls the redirect target — HTTP {r.status_code} "
+                                                f"Location: {loc[:80]} points to the attacker host.",
+                                    "repro": [f"Send: GET {purl}",
+                                              f"Observe the {r.status_code} redirect to {_REDIR_MARKER} in the Location header"],
+                                })
+                                continue
+                        except Exception:
+                            pass
+                    if any(h in kl for h in _PARAM_HINTS["lfi"]):
+                        try:
+                            q = qs.copy(); q[i] = (k, _LFI_PROBE)
+                            purl = urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(q, safe="/."), ""))
+                            time.sleep(0.1)
+                            r = _http_get(purl, headers=_hdrs)
+                            if _LFI_SIGN.search(r.text or ""):
+                                out.append({
+                                    "template": "lfi-path-traversal", "severity": "high",
+                                    "url": purl, "cve": None, "validated": True,
+                                    "evidence": f"Param '{k}' is path-traversable — /etc/passwd (or win.ini) signature "
+                                                f"in the response.",
+                                    "repro": [f"Send: GET {purl}",
+                                              "Observe the file contents (root:x:0:0 / [boot loader]) in the response"],
+                                })
+                                continue
+                        except Exception:
+                            pass
             except Exception:
                 continue
         if out:
