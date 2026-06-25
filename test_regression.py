@@ -1346,6 +1346,61 @@ def _probe_cmdi_and_blind():
 
 run_test("Ultron: probe cmd-injection + blind SQLi (oracle+FP)", _probe_cmdi_and_blind)
 
+# POST-body probe (_probe_post) — NoSQL auth-bypass / POST SQLi / POST cmd-inj over JSON+form.
+# Patches the module-level _http_post seam.
+def _with_fake_post(getter, fn):
+    saved = _ult._http_post
+    _ult._http_post = getter
+    try:
+        return fn()
+    finally:
+        _ult._http_post = saved
+
+def _probe_post_oracles():
+    U = _ult.ultron_agent
+
+    # 1. NoSQL auth-bypass: {"$ne":null} flips a 401 baseline to 200 (JSON body)
+    def g_nosql(url, data=None, json_body=None, timeout=8, headers=None):
+        if json_body and isinstance(json_body.get("password"), dict):
+            return _HResp('{"token":"abc"}', 200)
+        return _HResp('{"error":"bad creds"}', 401)
+    eps = [{"url": "http://t/api/login", "method": "POST",
+            "body": '{"username":"a","password":"b"}', "ctype": "application/json"}]
+    if not any(r["template"] == "nosqli-operator"
+               for r in _with_fake_post(g_nosql, lambda: U._probe_post(eps))):
+        return "POST NoSQL auth-bypass (401->200 flip) not flagged"
+
+    # 2. POST SQLi error-based on a form field
+    def g_sqli(url, data=None, json_body=None, timeout=8, headers=None):
+        if any("'" in str(v) for v in (data or {}).values()):
+            return _HResp("You have an error in your SQL syntax", 500)
+        return _HResp("ok", 200)
+    eps2 = [{"url": "http://t/search", "method": "POST", "body": "q=test&page=1",
+             "ctype": "application/x-www-form-urlencoded"}]
+    if not any(r["template"] == "sqli-error-based"
+               for r in _with_fake_post(g_sqli, lambda: U._probe_post(eps2))):
+        return "POST form SQLi not flagged"
+
+    # 3. POST cmd-inj executed arithmetic
+    def g_cmdi(url, data=None, json_body=None, timeout=8, headers=None):
+        src = json_body or data or {}
+        if any("$((7*7))" in str(v) for v in src.values()):
+            return _HResp("res: jvz9c49jvz9c", 200)
+        return _HResp("ok", 200)
+    eps3 = [{"url": "http://t/api/run", "method": "POST", "body": '{"cmd":"ls"}', "ctype": "application/json"}]
+    if not any(r["template"] == "command-injection"
+               for r in _with_fake_post(g_cmdi, lambda: U._probe_post(eps3))):
+        return "POST cmd-injection not flagged"
+
+    # 4. Safe control: nothing injectable → 0 findings (no FP)
+    def g_safe(url, data=None, json_body=None, timeout=8, headers=None):
+        return _HResp("welcome", 200)
+    if _with_fake_post(g_safe, lambda: U._probe_post(eps)):
+        return "FP on safe POST endpoint"
+    return True
+
+run_test("Ultron: POST-body probe (nosql/sqli/cmdi oracles)", _probe_post_oracles)
+
 def _search_cve_date_pair():
     # NVD v2 returns 404 if pubStartDate is sent without pubEndDate. The default
     # call (days_back=7) must send BOTH. Capture the URL without hitting the network.

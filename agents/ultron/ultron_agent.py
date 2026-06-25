@@ -331,6 +331,14 @@ def _http_get(url: str, timeout: int = 8, headers: dict = None, allow_redirects:
                         allow_redirects=allow_redirects)
 
 
+def _http_post(url: str, data=None, json_body=None, timeout: int = 8, headers: dict = None):
+    """POST seam for the POST-body injection probe (patchable in tests).
+    data = form dict; json_body = JSON dict. headers carries the session."""
+    import requests
+    return requests.post(url, data=data, json=json_body, timeout=timeout,
+                         headers=headers or None)
+
+
 # Param-name -> extra test type. Dork-derived (TakSec param classes): the param's
 # NAME hints which class to test, so the probe doesn't fire every payload at every param.
 _PARAM_HINTS = {
@@ -912,7 +920,7 @@ class UltronAgent:
     # =====================================
     # NUCLEI SCAN
     # =====================================
-    def nuclei_scan(self, target: str, severity: str = "medium,high,critical") -> dict:
+    def nuclei_scan(self, target: str, severity: str = "medium,high,critical", cookie: str = "") -> dict:
 
         if not target:
             return {"success": False, "message": "Target missing.", "data": {}}
@@ -920,6 +928,8 @@ class UltronAgent:
         print(f"[ULTRON] Nuclei scan: {target} (severity: {severity})")
 
         cmd = ["nuclei", "-u", _ipv4_local(target), "-severity", severity, "-silent", "-nc"]
+        if cookie:                                       # authenticated scan — carry the session
+            cmd += ["-H", f"Cookie: {cookie}"]
         _rl = _load_roe().get("rate_limit_rps")          # honor a program's request-rate cap
         if _rl:
             cmd += ["-rl", str(int(_rl)), "-c", str(int(_load_roe().get("max_concurrent") or 5))]
@@ -1334,6 +1344,7 @@ class UltronAgent:
         from urllib.parse import urlsplit, urljoin
         host = urlsplit(base).netloc
         apis, links = set(), set()
+        posts, _post_seen = [], set()            # POST/PUT endpoints (url+body) for the POST probe
         print(f"[ULTRON] SPA render-crawl: {base}")
         try:
             with sync_playwright() as p:
@@ -1349,7 +1360,16 @@ class UltronAgent:
                             # not a testable API endpoint, and its volatile sids spam the surface.
                             if "/socket.io/" in r.url or "transport=polling" in r.url:
                                 return
-                            apis.add(r.url.split("#")[0])
+                            u = r.url.split("#")[0]
+                            apis.add(u)
+                            # capture POST/PUT/PATCH bodies — the real auth/mutation endpoints
+                            # (login, search, GraphQL) the POST probe needs (NoSQL auth-bypass etc).
+                            if r.method in ("POST", "PUT", "PATCH"):
+                                pd = r.post_data
+                                if pd and (u, pd) not in _post_seen and len(posts) < 25:
+                                    _post_seen.add((u, pd))
+                                    posts.append({"url": u, "method": r.method, "body": pd,
+                                                  "ctype": (r.headers or {}).get("content-type", "")})
                     except Exception:
                         pass
                 page.on("request", _on_req)
@@ -1398,8 +1418,10 @@ class UltronAgent:
         except Exception:
             pass
         return {"success": True,
-                "message": f"SPA render-crawl: {len(links)} link(s) + {len(apis)} API endpoint(s) on {base}.",
-                "data": {"urls": allu, "links": sorted(links), "apis": sorted(apis), "count": len(allu)}}
+                "message": f"SPA render-crawl: {len(links)} link(s) + {len(apis)} API endpoint(s)"
+                           + (f" + {len(posts)} POST endpoint(s)" if posts else "") + f" on {base}.",
+                "data": {"urls": allu, "links": sorted(links), "apis": sorted(apis),
+                         "post_endpoints": posts, "count": len(allu)}}
 
     # =====================================
     # FULL PIPELINE (Phase 24)
@@ -1443,7 +1465,7 @@ class UltronAgent:
 
         # ── Stage 4: Nuclei ──
         print("[ULTRON] Stage 4/5: Nuclei...")
-        nuclei_r = self.nuclei_scan(base_url)
+        nuclei_r = self.nuclei_scan(base_url, cookie=cookie)
         sections["nuclei"] = nuclei_r.get("data", {}).get("raw") or nuclei_r.get("message", "No findings.")
 
         # ── Stage 5: Katana ──
@@ -1454,9 +1476,11 @@ class UltronAgent:
 
         # SPA fallback: a passive crawl returning ~nothing usually means a JS app — render it
         # in headless Chromium and capture the live API surface katana can't see.
+        post_endpoints = []
         if len([u for u in urls if "?" in u or u.count("/") > 3]) < 3:
             spa = self.spa_crawl(target, cookie=cookie)
             spa_urls = spa.get("data", {}).get("urls", [])
+            post_endpoints = spa.get("data", {}).get("post_endpoints", [])
             if spa_urls:
                 urls = sorted(set(urls) | set(spa_urls))
                 sections["katana"] = (sections.get("katana", "") + "  |  " + spa.get("message", "")).strip()
@@ -1578,6 +1602,7 @@ Report:"""
                 "target": target,
                 "sections": sections,
                 "urls": urls,
+                "post_endpoints": post_endpoints,
                 "screenshot": shot_path,
                 "saved_path": saved_md,
                 "full_report": full_report
@@ -1929,6 +1954,136 @@ Report:"""
                   f"across {tested} parameterized endpoint(s).")
         return out
 
+    def _probe_post(self, endpoints: list, max_eps: int = 15, max_fields: int = 8,
+                    cookie: str = "", headers: dict = None) -> list:
+        """Inject into POST/PUT JSON or form bodies captured by spa_crawl — the auth /
+        mutation endpoints (login, search, GraphQL) the GET probe can't reach. This is
+        where the high-value bugs live (NoSQL auth-bypass is POST-JSON only).
+
+        Per string field, replays the request with ONE mutated field, using the SAME
+        clean oracles as the GET probe:
+          - SQLi      : append `'`  -> a DIFFERENTIAL DB error (not present in baseline)
+          - cmd-inj   : `;echo jvz9c$((7*7))jvz9c` -> EXECUTED marker (can't be reflected)
+          - NoSQL     : value -> {"$ne": null} (JSON) -> auth-bypass status flip / Mongo error
+        Authorized targets only. cookie/headers carry the logged-in session.
+        """
+        import json as _json
+        from urllib.parse import parse_qsl
+        _hdrs = dict(headers or {})
+        if cookie:
+            _hdrs["Cookie"] = cookie
+        try:
+            import requests  # noqa: F401 — availability check; calls go via _http_post
+        except Exception:
+            return []
+        out, tested = [], 0
+        for ep in endpoints or []:
+            if tested >= max_eps:
+                break
+            url = ep.get("url") or ""
+            body = ep.get("body") or ""
+            ctype = (ep.get("ctype") or "").lower()
+            # parse the body into a flat {field: value} dict (JSON object or form-encoded)
+            fields, mode = None, None
+            if "json" in ctype or body.strip().startswith("{"):
+                try:
+                    obj = _json.loads(body)
+                    if isinstance(obj, dict):
+                        fields, mode = obj, "json"
+                except Exception:
+                    pass
+            if fields is None:
+                try:
+                    pairs = parse_qsl(body, keep_blank_values=True)
+                    if pairs:
+                        fields, mode = dict(pairs), "form"
+                except Exception:
+                    pass
+            if not fields:
+                continue
+            keys = [k for k, v in fields.items()
+                    if isinstance(v, (str, int, float, type(None)))][:max_fields]
+            if not keys:
+                continue
+            tested += 1
+
+            def _send(mut):
+                if mode == "json":
+                    return _http_post(url, json_body=mut, headers=_hdrs)
+                return _http_post(url, data={k: ("" if v is None else v) for k, v in mut.items()},
+                                  headers=_hdrs)
+            try:
+                b = _send(fields)
+                base_status, base_body = b.status_code, (b.text or "")
+            except Exception:
+                continue
+            base_err = bool(_SQL_ERROR_SIGNS.search(base_body) or _NOSQL_ERROR_SIGNS.search(base_body))
+
+            flagged = False
+            for k in keys:
+                if flagged:
+                    break
+                sval = "" if fields.get(k) is None else str(fields.get(k))
+                # --- error-based SQLi / NoSQL (differential) ---
+                try:
+                    m = dict(fields); m[k] = (sval or "1") + "'"
+                    r = _send(m); rb = r.text or ""
+                    hit = _SQL_ERROR_SIGNS.search(rb) or _NOSQL_ERROR_SIGNS.search(rb)
+                    if hit and not base_err:
+                        out.append({
+                            "template": "sqli-error-based", "severity": "high",
+                            "url": url, "cve": None, "validated": True,
+                            "evidence": f"POST field '{k}' on {url}: a single quote surfaced a DB error "
+                                        f"('{hit.group(0)}') absent from the baseline = server-side query injection.",
+                            "repro": [f"POST {url}  with {mode} field {k}={sval or '1'}'",
+                                      "Observe the database error in the response; confirm with sqlmap"],
+                        })
+                        flagged = True; continue
+                except Exception:
+                    pass
+                # --- command injection (executed arithmetic, not reflected) ---
+                try:
+                    m = dict(fields); m[k] = sval + ";echo " + _CMDI_MARK + "$((7*7))" + _CMDI_MARK
+                    r = _send(m)
+                    if _CMDI_HIT.search(r.text or ""):
+                        out.append({
+                            "template": "command-injection", "severity": "critical",
+                            "url": url, "cve": None, "validated": True,
+                            "evidence": f"POST field '{k}' on {url}: the shell evaluated $((7*7)) to 49 "
+                                        f"({_CMDI_MARK}49{_CMDI_MARK}) — command injection, not reflection.",
+                            "repro": [f"POST {url}  with {mode} field {k} appended ;echo {_CMDI_MARK}$((7*7)){_CMDI_MARK}",
+                                      f"Observe '{_CMDI_MARK}49{_CMDI_MARK}'; confirm RCE with id/whoami under authorization"],
+                        })
+                        flagged = True; continue
+                except Exception:
+                    pass
+                # --- NoSQL operator auth-bypass (JSON bodies only) ---
+                if mode == "json":
+                    try:
+                        m = dict(fields); m[k] = {"$ne": None}
+                        r = _send(m); rb = r.text or ""
+                        nerr = _NOSQL_ERROR_SIGNS.search(rb)
+                        # oracle: a 4xx baseline (auth fail) flipping to 2xx with the operator, OR a
+                        # NoSQL parse error = the field feeds an unsanitized query (auth-bypass candidate).
+                        flip = base_status >= 400 and r.status_code < 300
+                        if (flip or nerr) and not base_err:
+                            why = (f"NoSQL error '{nerr.group(0)}'" if nerr
+                                   else f"status flipped {base_status} -> {r.status_code} with operator injection")
+                            out.append({
+                                "template": "nosqli-operator", "severity": "critical",
+                                "url": url, "cve": None, "validated": True,
+                                "evidence": f"POST field '{k}' on {url}: {{\"$ne\":null}} — {why}. The field is "
+                                            f"placed into a Mongo/Couch query unsanitized (auth-bypass candidate).",
+                                "repro": [f'POST {url}  with JSON {{"{k}":{{"$ne":null}}, ...}}',
+                                          "If you got a session/token, you bypassed auth as the first matching user"],
+                            })
+                            flagged = True; continue
+                    except Exception:
+                        pass
+        if out:
+            print(f"[ULTRON] POST-body probe flagged {len(out)} candidate(s) across {tested} endpoint(s).")
+        return out
+
     def _validate_finding(self, f: dict, exploits_map: dict) -> dict:
         """
         7-question quality gate. Returns {report, score, tier, reasons, drop}.
@@ -2228,6 +2383,12 @@ Report:"""
             findings += self._probe_injection(pdata.get("urls", []), cookie=cookie)
         except Exception as e:
             print(f"[ULTRON] injection probe skipped: {e}")
+        # POST-body probe on the auth/mutation endpoints spa_crawl captured (NoSQL auth-
+        # bypass, POST SQLi/cmd-inj live here — the GET probe can't reach them).
+        try:
+            findings += self._probe_post(pdata.get("post_endpoints", []), cookie=cookie)
+        except Exception as e:
+            print(f"[ULTRON] POST probe skipped: {e}")
 
         # ── Stage 3: CVE → exploit lookup (critical/high only, capped) ──
         exploits_map = {}
