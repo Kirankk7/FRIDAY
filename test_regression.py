@@ -1275,6 +1275,38 @@ def _fp_corpus_discipline():
 
 run_test("Ultron: FP-discipline corpus (CBH traps)", _fp_corpus_discipline)
 
+# B6-3 / B6-5 — NoSQL operator-injection + host-header-injection probes (clear oracles).
+def _probe_nosqli_and_hhi():
+    U = _ult.ultron_agent
+    def run(getter, url):
+        return _with_fake_http(getter, lambda: U._probe_injection([url]))
+
+    # NoSQL: k[$ne]= surfaces a Mongo error only after injection → flag (differential)
+    def g_nosql(url, timeout=8, headers=None, allow_redirects=True):
+        if "%5B%24ne%5D" in url or "[$ne]" in url:
+            return _HResp("MongoError: cast to ObjectId failed")
+        return _HResp("products " * 40)
+    if not any(r["template"] == "nosqli-operator" for r in run(g_nosql, "http://t/api/find?id=1")):
+        return "nosqli operator injection not flagged"
+
+    # Host-header injection: X-Forwarded-Host marker reflected in redirect Location → flag
+    def g_hhi(url, timeout=8, headers=None, allow_redirects=True):
+        h = headers or {}
+        if h.get("X-Forwarded-Host") == "jvz9hhi.example":
+            r = _HResp("redirecting", 302); r.headers["Location"] = "https://jvz9hhi.example/reset"; return r
+        return _HResp("home " * 40)
+    if not any(r["template"] == "host-header-injection" for r in run(g_hhi, "http://t/reset?u=1")):
+        return "host-header injection not flagged"
+
+    # Safe control: no header trust, no NoSQL error → neither class fires (no FP)
+    def g_safe(url, timeout=8, headers=None, allow_redirects=True):
+        r = _HResp("clean " * 40); r.headers["Location"] = "/home"; return r
+    bad = [r for r in run(g_safe, "http://t/p?id=1")
+           if r["template"] in ("nosqli-operator", "host-header-injection")]
+    return True if not bad else f"FP on safe control: {[r['template'] for r in bad]}"
+
+run_test("Ultron: probe nosqli + host-header injection", _probe_nosqli_and_hhi)
+
 def _search_cve_date_pair():
     # NVD v2 returns 404 if pubStartDate is sent without pubEndDate. The default
     # call (days_back=7) must send BOTH. Capture the URL without hitting the network.
