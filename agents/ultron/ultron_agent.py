@@ -323,7 +323,7 @@ _PARAM_HINTS = {
     "lfi": ("file", "page", "path", "include", "doc", "document", "template", "folder",
             "dir", "load", "download", "read", "filename", "pg"),
 }
-_LFI_PROBE = "../../../../../../etc/passwd"
+_LFI_PROBE = "../" * 10 + "etc/passwd"   # deep traversal — app nesting/mount depth is unknown
 _LFI_SIGN = re.compile(r"root:.?:0:0:|\[boot loader\]|\[fonts\]")        # /etc/passwd or win.ini
 _REDIR_MARKER = "jvz9redir.example"
 
