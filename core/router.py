@@ -804,6 +804,10 @@ def route_single_intent(
                                "args": (_m.group(2) or "").strip()},
                 "confidence": 0.96}
 
+    # multi-page BFS crawl (follow links → full param surface across sub-pages) — before katana
+    _m = re.match(r"(?:multi[\s-]?page[\s-]?crawl|crawl[\s-]?site|site[\s-]?crawl|deep[\s-]?crawl|crawl\s+site|crawl\s+all\s+pages)\s+(?:on\s+)?(.+)", text)
+    if _m:
+        return {"tool": "ultron", "action": "crawl_site", "parameters": {"target": _m.group(1).strip()}, "confidence": 0.96}
     # Katana crawl
     _m = re.match(r"(?:crawl|katana|spider)\s+(.+)", text)
     if _m:

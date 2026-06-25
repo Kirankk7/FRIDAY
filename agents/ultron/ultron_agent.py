@@ -1433,6 +1433,84 @@ class UltronAgent:
                 "data": {"urls": allu, "links": sorted(links), "apis": sorted(apis),
                          "post_endpoints": posts, "count": len(allu)}}
 
+    def crawl_site(self, target: str, max_pages: int = 25, max_depth: int = 2,
+                   cookie: str = "", headers: dict = None) -> dict:
+        """Bounded same-origin BFS crawl: follow <a href> links from the root, collect every
+        parameterized URL across pages. The root-only crawl misses per-module vuln pages
+        (DVWA open_redirect lives at /open_redirect/source/low.php?redirect=) — this walks the
+        site so the probes see the WHOLE param surface, not just the landing page. HTTP-fetch
+        (fast) + bs4 link extraction; pairs with spa_crawl (which renders the root for XHR).
+        Authorized targets only."""
+        import time
+        from urllib.parse import urlsplit, urljoin, urldefrag
+        try:
+            import requests  # noqa: F401
+            from bs4 import BeautifulSoup
+        except Exception:
+            return {"success": False, "message": "requests/bs4 unavailable.", "data": {"urls": []}}
+        base = _resolve_scheme(target)
+        host = urlsplit(base).netloc
+        _hdrs = dict(headers or {})
+        if cookie:
+            _hdrs["Cookie"] = cookie
+        seen, params, queue = set(), set(), [(base, 0)]
+        pages = 0
+        print(f"[ULTRON] Multi-page crawl: {base} (<= {max_pages} pages, depth {max_depth})")
+        while queue and pages < max_pages:
+            url, depth = queue.pop(0)
+            url = urldefrag(url)[0]
+            if url in seen:
+                continue
+            seen.add(url)
+            try:
+                r = _http_get(url, headers=_hdrs, timeout=8)
+            except Exception:
+                continue
+            pages += 1
+            if "?" in url:
+                params.add(url)
+            ctype = ""
+            try:
+                ctype = (r.headers.get("Content-Type") or "").lower()
+            except Exception:
+                pass
+            if "html" not in ctype and "<" not in (r.text or "")[:200]:
+                continue
+            if depth >= max_depth:
+                continue
+            try:
+                soup = BeautifulSoup(r.text or "", "html.parser")
+            except Exception:
+                continue
+            for a in soup.find_all("a", href=True):
+                href = (a["href"] or "").strip()
+                if not href or href.startswith(("javascript:", "mailto:", "tel:", "#")):
+                    continue
+                full = urldefrag(urljoin(url, href))[0]
+                if urlsplit(full).netloc != host:
+                    continue
+                if "?" in full:
+                    params.add(full)
+                if full not in seen:
+                    queue.append((full, depth + 1))
+            # also harvest param'd URLs from <form action>+inputs (GET forms)
+            for form in soup.find_all("form"):
+                act = urljoin(url, (form.get("action") or url))
+                names = [i.get("name") for i in form.find_all(("input", "select", "textarea")) if i.get("name")]
+                if names and urlsplit(act).netloc == host and (form.get("method") or "get").lower() == "get":
+                    params.add(act + ("&" if "?" in act else "?") + "&".join(f"{n}=1" for n in names[:6]))
+            time.sleep(0.05)
+        allp = sorted(params)
+        try:
+            from core import target_profiles
+            if allp:
+                target_profiles.record_endpoints(_clean_site(target), allp)
+        except Exception:
+            pass
+        return {"success": True,
+                "message": f"Multi-page crawl: {pages} page(s), {len(allp)} parameterized URL(s) on {base}.",
+                "data": {"urls": allp, "pages": pages, "count": len(allp)}}
+
     # =====================================
     # FULL PIPELINE (Phase 24)
     # Nmap → Subfinder → Httpx → Nuclei → Katana → Screenshot
@@ -1484,9 +1562,21 @@ class UltronAgent:
         sections["katana"] = katana_r.get("message", "Skipped.")
         urls = katana_r.get("data", {}).get("urls", [])
 
-        # SPA fallback: a passive crawl returning ~nothing usually means a JS app — render it
-        # in headless Chromium and capture the live API surface katana can't see.
+        # Multi-page BFS crawl: follow links so per-module vuln pages (sub-paths) are in scope,
+        # not just the landing page — katana's passive pass often stays shallow on server-rendered apps.
         post_endpoints = []
+        try:
+            mc = self.crawl_site(target, cookie=cookie)
+            mc_urls = mc.get("data", {}).get("urls", [])
+            if mc_urls:
+                urls = sorted(set(urls) | set(mc_urls))
+                sections["katana"] = (sections.get("katana", "") + "  |  " + mc.get("message", "")).strip()
+                print(f"[ULTRON] multi-page enrichment: surface now {len(urls)} endpoint(s).")
+        except Exception as e:
+            print(f"[ULTRON] multi-page crawl skipped: {e}")
+
+        # SPA fallback: a passive crawl returning ~nothing usually means a JS app — render it
+        # in headless Chromium and capture the live API surface (+ POST endpoints) katana can't see.
         if len([u for u in urls if "?" in u or u.count("/") > 3]) < 3:
             spa = self.spa_crawl(target, cookie=cookie)
             spa_urls = spa.get("data", {}).get("urls", [])
@@ -4042,6 +4132,9 @@ Report:"""
 
             elif action == "spa_crawl":
                 return self.spa_crawl(target)
+
+            elif action == "crawl_site":
+                return self.crawl_site(target)
 
             elif action == "take_screenshot":
                 return self.take_screenshot(target)
