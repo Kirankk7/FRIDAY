@@ -1307,6 +1307,45 @@ def _probe_nosqli_and_hhi():
 
 run_test("Ultron: probe nosqli + host-header injection", _probe_nosqli_and_hhi)
 
+# B6-4 / B6-6 — command-injection (arithmetic-echo oracle) + blind boolean SQLi (stability-gated).
+# Both must FIRE on the real bug and STAY SILENT on the FP-shaped trap (reflection / page jitter).
+def _probe_cmdi_and_blind():
+    import urllib.parse as _up, random as _rnd
+    U = _ult.ultron_agent
+    def run(getter, url):
+        return _with_fake_http(getter, lambda: U._probe_injection([url]))
+
+    # cmd-inj: shell ran $((7*7)) → jvz9c49jvz9c (cannot be produced by reflection)
+    def g_cmdi(url, timeout=8, headers=None, allow_redirects=True):
+        if "jvz9c$((7*7))jvz9c" in _up.unquote(url): return _HResp("out: jvz9c49jvz9c done")
+        return _HResp("normal " * 40)
+    if not any(r["template"] == "command-injection" for r in run(g_cmdi, "http://t/ping?host=1")):
+        return "command injection not flagged on executed arithmetic"
+
+    # cmd-inj FP trap: payload reflected verbatim (literal $((7*7)), never 49) → must NOT flag
+    def g_refl(url, timeout=8, headers=None, allow_redirects=True):
+        return _HResp("you said: " + _up.unquote(url))
+    if any(r["template"] == "command-injection" for r in run(g_refl, "http://t/ping?host=1")):
+        return "FP: reflected cmd payload flagged as command-injection"
+
+    # blind boolean: TRUE reproduces baseline, FALSE differs + is reproducible
+    def g_blind(url, timeout=8, headers=None, allow_redirects=True):
+        d = _up.unquote(url)
+        if "AND 1=1" in d or "'1'='1" in d: return _HResp("A" * 500)   # TRUE  == baseline
+        if "AND 1=2" in d or "'1'='2" in d: return _HResp("A" * 200)   # FALSE  shorter, stable
+        return _HResp("A" * 500)                                       # baseline
+    if not any(r["template"] == "sqli-blind-boolean" for r in run(g_blind, "http://t/p?id=5")):
+        return "blind boolean SQLi not flagged on stable differential"
+
+    # blind FP trap: non-deterministic page (length jitter both branches) → must NOT flag
+    def g_rand(url, timeout=8, headers=None, allow_redirects=True):
+        return _HResp("A" * (500 + _rnd.randint(-150, 150)))
+    if any(r["template"] == "sqli-blind-boolean" for r in run(g_rand, "http://t/p?id=5")):
+        return "FP: random-length page flagged as blind SQLi"
+    return True
+
+run_test("Ultron: probe cmd-injection + blind SQLi (oracle+FP)", _probe_cmdi_and_blind)
+
 def _search_cve_date_pair():
     # NVD v2 returns 404 if pubStartDate is sent without pubEndDate. The default
     # call (days_back=7) must send BOTH. Capture the URL without hitting the network.

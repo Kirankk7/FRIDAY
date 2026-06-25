@@ -311,6 +311,14 @@ _NOSQL_ERROR_SIGNS = re.compile(
     re.IGNORECASE)
 # Host-header injection marker — reflected in a Location header / body = poisoning candidate.
 _HHI_MARKER = "jvz9hhi.example"
+# Command-injection oracle: marker halves wrap a shell ARITHMETIC expansion. If the shell
+# runs it, the response shows jvz9c49jvz9c; a mere reflection shows the literal $((7*7)) —
+# so the executed form can NOT be produced by reflection (kills the XSS-style FP).
+_CMDI_MARK = "jvz9c"
+_CMDI_HIT = re.compile(re.escape(_CMDI_MARK) + r"49" + re.escape(_CMDI_MARK))
+_CMDI_PAYLOADS = (";echo " + _CMDI_MARK + "$((7*7))" + _CMDI_MARK + ";",
+                  "|echo " + _CMDI_MARK + "$((7*7))" + _CMDI_MARK,
+                  "$(echo " + _CMDI_MARK + "$((7*7))" + _CMDI_MARK + ")")
 
 
 def _http_get(url: str, timeout: int = 8, headers: dict = None, allow_redirects: bool = True):
@@ -1822,6 +1830,72 @@ Report:"""
                                           "Observe the NoSQL parse error; confirm auth-bypass manually with "
                                           "a JSON body {\"user\":{\"$gt\":\"\"},\"pass\":{\"$gt\":\"\"}}"],
                             })
+                            continue
+                    except Exception:
+                        pass
+                    # --- command injection (arithmetic-echo oracle: executed != reflected) ---
+                    try:
+                        hit = False
+                        for pay in _CMDI_PAYLOADS:
+                            q = qs.copy(); q[i] = (k, (v or "1") + pay)
+                            purl = urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(q), ""))
+                            time.sleep(0.1)
+                            r = _http_get(purl, headers=_hdrs)
+                            if _CMDI_HIT.search(r.text or ""):
+                                out.append({
+                                    "template": "command-injection", "severity": "critical",
+                                    "url": purl, "cve": None, "validated": True,
+                                    "evidence": f"Param '{k}' is command-injectable — the shell evaluated "
+                                                f"$((7*7)) to 49 ({_CMDI_MARK}49{_CMDI_MARK} in the response); "
+                                                f"a reflection would show the literal expression.",
+                                    "repro": [f"Send: GET {purl}",
+                                              f"Observe '{_CMDI_MARK}49{_CMDI_MARK}' (the arithmetic was executed, not echoed)",
+                                              "Confirm RCE manually with a bounded command (id / whoami) under authorization"],
+                                })
+                                hit = True
+                                break
+                        if hit:
+                            continue
+                    except Exception:
+                        pass
+                    # --- blind boolean SQLi (stability-gated differential, no error needed) ---
+                    #     TRUE must reproduce the baseline, FALSE must clearly differ AND be
+                    #     reproducible — a non-deterministic page can't satisfy all three, so
+                    #     random length jitter doesn't become a false positive.
+                    try:
+                        seed = v or "1"
+                        def _plen(val):
+                            q2 = qs.copy(); q2[i] = (k, seed + val)
+                            pu = urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(q2), ""))
+                            time.sleep(0.1)
+                            rr = _http_get(pu, headers=_hdrs)
+                            return len(rr.text or ""), pu, rr.status_code
+                        flagged = False
+                        for t_suf, f_suf, ctx in ((" AND 1=1", " AND 1=2", "numeric"),
+                                                  ("' AND '1'='1", "' AND '1'='2", "string")):
+                            if base_len is None or base_len < 80:
+                                break                                # no stable baseline to diff against
+                            lt, put, _ = _plen(t_suf)                # TRUE  branch
+                            lf, puf, _ = _plen(f_suf)                # FALSE branch
+                            margin = max(40, int(base_len * 0.03))
+                            # cheap pre-check before spending the stability request
+                            if abs(lt - base_len) <= max(16, int(base_len * 0.02)) and abs(lt - lf) >= margin:
+                                lf2, _, _ = _plen(f_suf)             # confirm FALSE is reproducible
+                                if abs(lf - lf2) <= max(8, int(base_len * 0.01)):
+                                    out.append({
+                                        "template": "sqli-blind-boolean", "severity": "high",
+                                        "url": put, "cve": None, "validated": True,
+                                        "evidence": f"Param '{k}' is boolean-blind SQLi-able ({ctx} context): "
+                                                    f"'{t_suf.strip()}' reproduces the baseline ({base_len}b vs {lt}b) "
+                                                    f"while '{f_suf.strip()}' changes it to {lf}b (stable on re-test {lf2}b) "
+                                                    f"— the condition controls the query result.",
+                                        "repro": [f"TRUE : GET {put}  -> {lt}b (== baseline {base_len}b)",
+                                                  f"FALSE: GET {puf}  -> {lf}b (reproducible {lf2}b)",
+                                                  "Extract data with sqlmap --technique=B, or a CASE/SUBSTRING oracle"],
+                                    })
+                                    flagged = True
+                                    break
+                        if flagged:
                             continue
                     except Exception:
                         pass
