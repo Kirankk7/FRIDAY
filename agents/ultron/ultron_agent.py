@@ -3313,6 +3313,27 @@ Report:"""
             return ""
 
     @staticmethod
+    def _render_text_html(url: str, timeout: int = 30) -> str:
+        """Render a page in headless Chromium and return its full HTML (for link extraction
+        from JS-built index pages). '' if Playwright absent / fails."""
+        try:
+            from playwright.sync_api import sync_playwright
+        except Exception:
+            return ""
+        try:
+            with sync_playwright() as p:
+                b = p.chromium.launch(headless=True)
+                pg = b.new_page(user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                                "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36")
+                pg.goto(url, wait_until="networkidle", timeout=timeout * 1000)
+                pg.wait_for_timeout(2500)
+                html = pg.content()
+                b.close()
+                return html or ""
+        except Exception:
+            return ""
+
+    @staticmethod
     def _clean_writeup_text(md: str, limit: int = 6000) -> str:
         """Strip site nav/boilerplate from a MarkItDown dump so the real writeup content
         (prose + payloads + code) reaches the LLM. Pages lead with menus — feeding the
@@ -3437,6 +3458,65 @@ Report:"""
                            f"({len(techs)} distilled, {len(techs) - added} already known). "
                            f"Tagged verify — run 'playbook needs verify' to review/promote.",
                 "data": {"added": added, "ids": ids, "distilled": len(techs), "url": url}}
+
+    def ingest_feed(self, index_url: str, max_articles: int = 10) -> dict:
+        """Feed-poller: point at a writeup-INDEX page (PentesterLand list, a 'top writeups'
+        page, your bookmarks export), pull the article links, and ingest_writeup each one —
+        turning a curated list into playbook techniques in one shot. Same-page nav/social links
+        are filtered out. Capped + polite. Local-only (playbook is gitignored)."""
+        import time
+        from urllib.parse import urlsplit
+        if not index_url or not re.match(r"https?://", index_url.strip(), re.IGNORECASE):
+            return {"success": False, "message": "Give a writeup-index URL (http/https).", "data": {}}
+        index_url = index_url.strip()
+        from core.url_guard import safe_get
+        try:
+            resp = safe_get(index_url)
+            text_html = resp.text or ""
+        except Exception as e:
+            return {"success": False, "message": f"Fetch failed: {str(e)[:80]}", "data": {}}
+        if "javascript is disabled" in text_html.lower() or len(text_html) < 300:
+            text_html = self._render_text_html(index_url) or text_html
+        try:
+            from bs4 import BeautifulSoup
+            soup = BeautifulSoup(text_html, "html.parser")
+        except Exception:
+            return {"success": False, "message": "Could not parse the index page.", "data": {}}
+        host = urlsplit(index_url).netloc
+        _SOCIAL = ("twitter.com", "x.com", "facebook.com", "linkedin.com", "youtube.com",
+                   "github.com/sponsors", "t.me", "discord", "/tag/", "/category/", "/author/")
+        links, seen = [], set()
+        for a in soup.find_all("a", href=True):
+            h = a["href"].strip()
+            if not h.startswith("http"):
+                continue
+            netloc = urlsplit(h).netloc
+            # external article links (skip same-host nav + social/aggregator chrome)
+            if netloc == host or any(s in h.lower() for s in _SOCIAL):
+                continue
+            if len(urlsplit(h).path) < 6:                 # bare domains = not an article
+                continue
+            if h not in seen:
+                seen.add(h); links.append(h)
+        if not links:
+            return {"success": True, "data": {"added": 0, "articles": 0},
+                    "message": "No external article links found on that index page."}
+        links = links[:max_articles]
+        total_added = ok = 0
+        per = []
+        for u in links:
+            try:
+                r = self.ingest_writeup(u)
+            except Exception:
+                continue
+            a = r.get("data", {}).get("added")
+            if r.get("success") and a is not None:
+                ok += 1; total_added += a or 0; per.append((u, a or 0))
+            time.sleep(1.0)
+        return {"success": True,
+                "message": f"Feed: ingested {ok}/{len(links)} articles, +{total_added} new technique(s) "
+                           f"(tagged verify). Source: {index_url}",
+                "data": {"added": total_added, "articles": ok, "per": per, "index": index_url}}
 
     def target_dorks(self, target: str) -> dict:
         """Google dorks to recon a SPECIFIC target (TakSec set), with the target substituted in."""
@@ -4232,6 +4312,9 @@ Report:"""
 
             elif action == "ingest_writeup":
                 return self.ingest_writeup(parameters.get("url", target) or input_text)
+
+            elif action == "ingest_feed":
+                return self.ingest_feed(parameters.get("url", target) or input_text)
 
             elif action == "target_dorks":
                 return self.target_dorks(parameters.get("target", target))
