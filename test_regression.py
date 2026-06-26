@@ -1423,6 +1423,13 @@ def _probe_ssti_and_timeblind():
         return _HResp("ok " * 40)
     if not any(r["template"] == "sqli-blind-time" for r in run(g_time, "http://t/p?id=1", max_params=1)):
         return "time-blind SQLi not flagged"
+    # dogfood FP (fixed): a FAST connection failure on the SLEEP request must NOT read as a delay
+    def g_fail(url, timeout=8, headers=None, allow_redirects=True):
+        if "SLEEP(5)" in _up.unquote(url) or "pg_sleep(5)" in _up.unquote(url):
+            raise ConnectionError("refused")            # fails immediately, not a 12s timeout
+        return _HResp("row " * 40)
+    if any(r["template"] == "sqli-blind-time" for r in run(g_fail, "http://t/p?id=1", max_params=1)):
+        return "FP: fast connection-fail flagged as time-blind"
     return True
 
 def _probe_path_stored_xxe():

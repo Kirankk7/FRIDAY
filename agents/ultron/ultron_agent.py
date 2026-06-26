@@ -2068,7 +2068,10 @@ Report:"""
                                 try:
                                     _http_get(pu, headers=_hdrs, timeout=12)
                                 except Exception:
-                                    return 99.0, pu        # a timeout still indicates the delay fired
+                                    pass                   # use REAL elapsed below: a real SLEEP that
+                                # exceeds the timeout still reads ~12s (>= threshold = flagged), but a
+                                # FAST connection error (refused/reset, ~0s) reads small and is NOT
+                                # mistaken for a delay — kills the flaky-endpoint false positive.
                                 return time.time() - t0, pu
                             # baseline timing for THIS param (benign control must be fast)
                             ctrl, _ = _elapsed(" AND 1=1-- -")
