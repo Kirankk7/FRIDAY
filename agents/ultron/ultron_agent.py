@@ -3739,6 +3739,61 @@ Report:"""
                else f"No cross-principal access at {url} — attacker didn't get the owner's resource (good auth).")
         return {"success": True, "message": msg, "data": {"findings": findings}}
 
+    def graphql_hunt(self, url: str, as_user: str = "") -> dict:
+        """Hunt a GraphQL endpoint (Tier-2): introspection (schema exposure = info disclosure),
+        operation inventory, flag privileged-looking mutations, and (if a session is set) check
+        introspection is reachable as a low-priv principal. Mechanical capture — the human +
+        request_mutator drive the per-operation authz tests. Authorized targets only."""
+        import json as _json
+        from core import session_manager as sm
+        hdrs = {"Content-Type": "application/json"}
+        if as_user:
+            sh = sm.headers_for(as_user)
+            if sh:
+                hdrs.update(sh)
+        introspection = ('{"query":"query{__schema{queryType{fields{name}} mutationType{fields{name}} '
+                         'types{name kind}}}"}')
+        try:
+            r = _http_post(url, data=introspection, headers=hdrs)
+            body = r.text or ""
+            data = _json.loads(body)
+        except Exception as e:
+            return {"success": False, "data": {},
+                    "message": f"Not a GraphQL endpoint / unreachable / non-JSON: {str(e)[:60]}"}
+        schema = ((data.get("data") or {}) if isinstance(data, dict) else {}).get("__schema")
+        if not schema:
+            disabled = isinstance(data, dict) and ("errors" in data or "data" in data)
+            return {"success": True, "data": {"introspection": False, "findings": []},
+                    "message": (f"GraphQL at {url} — introspection DISABLED (good). Infer the schema from the "
+                                "app's own queries or a wordlist; then test operations per-session."
+                                if disabled else f"{url} did not return a GraphQL schema (not GraphQL?).")}
+        queries = [f["name"] for f in (schema.get("queryType") or {}).get("fields") or [] if f.get("name")]
+        muts = [f["name"] for f in (schema.get("mutationType") or {}).get("fields") or [] if f.get("name")]
+        findings = [{
+            "template": "graphql-introspection", "severity": "low", "url": url, "cve": None, "validated": True,
+            "evidence": f"Introspection is ENABLED — full schema exposed ({len(queries)} queries, "
+                        f"{len(muts)} mutations). Attackers map every operation + hidden fields.",
+            "repro": [f"POST {url} the introspection query", "Map the schema; hunt hidden/admin operations"],
+        }]
+        _PRIV = re.compile(r"delete|remove|create|update|^set|grant|revoke|admin|role|password|"
+                           r"promote|disable|reset|refund|transfer|impersonate|invite", re.I)
+        priv = [m for m in muts if _PRIV.search(m)]
+        if priv:
+            findings.append({
+                "template": "graphql-privileged-mutation", "severity": "medium", "url": url,
+                "cve": None, "validated": False,
+                "evidence": f"Privileged-looking mutations exposed (test per-operation authz as a low-priv "
+                            f"user — call each as userB and confirm it's rejected): {', '.join(priv[:15])}",
+                "repro": [f"As a low-priv session: mutation {{ {priv[0]}(...) }}",
+                          "If a normal user can invoke an admin-only mutation = broken access control"],
+            })
+        gate = ("[as %s] " % as_user) if as_user else ""
+        return {"success": True,
+                "message": f"GraphQL {gate}at {url}: introspection ENABLED, {len(queries)} queries, "
+                           f"{len(muts)} mutations, {len(priv)} privileged-looking. {len(findings)} finding(s).",
+                "data": {"introspection": True, "queries": queries, "mutations": muts,
+                         "privileged": priv, "findings": findings}}
+
     def target_dorks(self, target: str) -> dict:
         """Google dorks to recon a SPECIFIC target (TakSec set), with the target substituted in."""
         import json as _json
@@ -4548,6 +4603,8 @@ Report:"""
             elif action == "idor_check":
                 return self.idor_check(parameters.get("url", target), parameters.get("owner", "userA"),
                                        parameters.get("attacker", "userB"))
+            elif action == "graphql_hunt":
+                return self.graphql_hunt(parameters.get("url", target), parameters.get("as_user", ""))
 
             elif action == "target_dorks":
                 return self.target_dorks(parameters.get("target", target))
