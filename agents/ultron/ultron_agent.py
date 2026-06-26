@@ -3735,6 +3735,14 @@ Report:"""
                                   "Iterate the id to enumerate other users' objects; confirm ownership"],
                     })
                     break    # one enum signal per endpoint is enough
+        # exploitability memory: bank each candidate as a hypothesis on the target profile
+        try:
+            from core import target_profiles as tp
+            for f in findings:
+                tp.record_hypothesis(_clean_site(url), f["url"], f["template"],
+                                     rationale=(f.get("evidence") or "")[:120], status="candidate")
+        except Exception:
+            pass
         msg = (f"IDOR/BOLA: {len(findings)} candidate(s) at {url}." if findings
                else f"No cross-principal access at {url} — attacker didn't get the owner's resource (good auth).")
         return {"success": True, "message": msg, "data": {"findings": findings}}

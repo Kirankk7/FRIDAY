@@ -1799,6 +1799,30 @@ def _graphql_hunter():
 run_test("Ultron: graphql hunter (Tier-2)", _graphql_hunter)
 run_test("Router: 'graphql hunt <url> as B'", _route("graphql hunt http://t/graphql as userB", "ultron", "graphql_hunt"))
 
+def _exploitability_memory():
+    from core import target_profiles as tp
+    h = "regtest-hyp.local"
+    tp.record_hypothesis(h, "/api/orders/{id}", "idor-bola", "numeric id", "candidate")
+    tp.record_hypothesis(h, "/api/orders/{id}", "idor-bola", "", "untested")     # weaker — no downgrade
+    tp.record_hypothesis(h, "/graphql", "graphql-privileged-mutation", "grantAdmin", "candidate")
+    s = tp.summary(h)
+    hyps = s["data"].get("hypotheses", [])
+    if len(hyps) != 2: return f"dedup failed: {len(hyps)} hypotheses (want 2)"
+    orders = [x for x in hyps if "orders" in x["endpoint"]][0]
+    if orders["status"] != "candidate": return f"weaker status downgraded it: {orders['status']}"
+    tp.record_hypothesis(h, "/api/orders/{id}", "idor-bola", "2-acct confirmed", "confirmed")  # escalate
+    orders2 = [x for x in tp.summary(h)["data"]["hypotheses"] if "orders" in x["endpoint"]][0]
+    if orders2["status"] != "confirmed": return f"escalation failed: {orders2['status']}"
+    if "Hypotheses" not in s["message"]: return "summary doesn't surface hypotheses"
+    # cleanup the throwaway profile
+    try:
+        d = tp._load(); d.pop(tp._norm(h), None); tp._save(d)
+    except Exception:
+        pass
+    return True
+
+run_test("Ultron: exploitability memory (Tier-2)", _exploitability_memory)
+
 # ── Target monitor (mapper-lite: snapshot/diff/watch/alert) ──
 def _monitor_diff():
     u = _ult.ultron_agent
