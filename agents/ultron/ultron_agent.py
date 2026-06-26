@@ -246,7 +246,7 @@ def _cve_product_keywords(entry: dict) -> set:
     """Extract product-name keywords from a CVE watchlist entry's affected CPE list + description."""
     kws = set()
     for a in entry.get("affected", []):
-        # "vendor:product version" → take product, drop version
+        # "vendor:product version" -> take product, drop version
         vp = a.split()[0] if a else ""
         parts = vp.split(":")
         if parts:
@@ -268,7 +268,7 @@ def _cve_product_keywords(entry: dict) -> set:
 
 
 def _service_tokens(services: list) -> set:
-    """Service-name tokens from scan history port entries ('22/tcp ssh' → {'ssh'})."""
+    """Service-name tokens from scan history port entries ('22/tcp ssh' -> {'ssh'})."""
     toks = set()
     for s in services:
         parts = s.split()  # "22/tcp ssh"
@@ -450,7 +450,7 @@ def _in_scope(host: str) -> str:
         return "unknown"
     best_in = max([_host_score(r, host) for r in scope.get("in_scope", [])], default=-1)
     best_out = max([_host_score(r, host) for r in scope.get("out_of_scope", [])], default=-1)
-    if best_out >= 0 and best_out >= best_in:   # tie or a more-specific exclusion → OUT
+    if best_out >= 0 and best_out >= best_in:   # tie or a more-specific exclusion -> OUT
         return "out"
     if best_in >= 0:
         return "in"
@@ -621,7 +621,7 @@ def _report_type_target(name: str) -> tuple:
 
 
 def _parse_nuclei_findings(raw: str) -> list:
-    """Parse nuclei output lines → structured findings.
+    """Parse nuclei output lines -> structured findings.
     Nuclei format: [template-id] [protocol] [severity] url [extra]"""
     findings = []
     if not raw:
@@ -682,7 +682,7 @@ def _parse_nuclei_voice(raw: str, target: str) -> str:
 
 
 def _md_to_html(md: str, title: str) -> str:
-    """Minimal Markdown → HTML converter for reports (no external deps)."""
+    """Minimal Markdown -> HTML converter for reports (no external deps)."""
     import re as _re
     lines = md.splitlines()
     html_lines = [
@@ -1513,7 +1513,7 @@ class UltronAgent:
 
     # =====================================
     # FULL PIPELINE (Phase 24)
-    # Nmap → Subfinder → Httpx → Nuclei → Katana → Screenshot
+    # Nmap -> Subfinder -> Httpx -> Nuclei -> Katana -> Screenshot
     # =====================================
     def full_pipeline(self, target: str, cookie: str = "") -> dict:
 
@@ -1646,7 +1646,7 @@ Report:"""
 
 {bb_banner}**Target:** {target}
 **Generated:** {date_str}
-**Pipeline:** Nmap → Subfinder → Httpx → Nuclei → Katana → Screenshot
+**Pipeline:** Nmap -> Subfinder -> Httpx -> Nuclei -> Katana -> Screenshot
 
 ---
 
@@ -1716,7 +1716,7 @@ Report:"""
     # BURP INGEST (Phase 63 — Community-friendly)
     # =====================================
     def ingest_burp(self, path: str) -> dict:
-        """Parse a Burp HTTP-history XML export → endpoint inventory → target profile."""
+        """Parse a Burp HTTP-history XML export -> endpoint inventory -> target profile."""
         from core import burp_ingest, target_profiles
         if not path:
             return {"success": False, "message": "Point me at a Burp export: 'ingest burp <file.xml>'.", "data": {}}
@@ -1855,7 +1855,7 @@ Report:"""
                             out.append({
                                 "template": "sqli-error-based", "severity": "high",
                                 "url": purl, "cve": None, "validated": True, "evidence": ev,
-                                "repro": [f"Baseline: GET {u}  → HTTP {base_status}/{base_len}b",
+                                "repro": [f"Baseline: GET {u}  -> HTTP {base_status}/{base_len}b",
                                           f"Inject:   GET {purl}",
                                           ("Observe the database error in the response body" if m
                                            else f"Observe the response break to HTTP {r.status_code}/{len(body)}b")],
@@ -2276,7 +2276,7 @@ Report:"""
             url = ep.get("url") or ""
             body = ep.get("body") or ""
             ctype = (ep.get("ctype") or "").lower()
-            # --- XXE: XML body → inject a file-read external entity, look for /etc/passwd ---
+            # --- XXE: XML body -> inject a file-read external entity, look for /etc/passwd ---
             if "xml" in ctype or body.lstrip().startswith("<?xml") or body.lstrip().startswith("<"):
                 try:
                     tested += 1
@@ -2414,12 +2414,12 @@ Report:"""
         url = f.get("url") or ""
         cve = f.get("cve") or ""
 
-        # hard blacklist → never submit
+        # hard blacklist -> never submit
         if any(bad in tmpl for bad in self._NEVER_SUBMIT):
             return {"report": False, "score": 0, "tier": self._PAYOUT_TIER.get(sev, "P5"),
                     "reasons": [], "drop": "informational/noise class (never-submit list)"}
 
-        # program-specific out-of-scope types (from a pasted policy via setup_scope → roe.json)
+        # program-specific out-of-scope types (from a pasted policy via setup_scope -> roe.json)
         _oos_types = _load_roe().get("out_of_scope_types", [])
         _blob = (tmpl + " " + (f.get("evidence") or "")).lower()
         for _t in _oos_types:
@@ -2481,7 +2481,7 @@ Report:"""
             "",
             f"**Target:** {target}",
             f"**Generated:** {date_str}",
-            "**Workflow:** Recon → Hunt → Validate → Quality Gate → Report (JARVIS Ultron)",
+            "**Workflow:** Recon -> Hunt -> Validate -> Quality Gate -> Report (JARVIS Ultron)",
             "",
             "## Executive Summary",
             f"- Reportable findings: **{len(reportable)}** ({tier_line})",
@@ -2569,7 +2569,7 @@ Report:"""
         sqli = [f for f in reportable if f.get("template") == "sqli-error-based"]
         xss = [f for f in reportable if f.get("template") == "xss-reflected"]
 
-        # ── Confirmed SQLi → subtype payloads (DB-tailored) + sqlmap ──
+        # ── Confirmed SQLi -> subtype payloads (DB-tailored) + sqlmap ──
         if sqli:
             pay = _SQLI_PAYLOADS.get(db, _SQLI_PAYLOADS["generic"])
             for f in sqli:
@@ -2584,7 +2584,7 @@ Report:"""
                       f"  - Auto-extract everything:  `sqlmap -u \"{base}\" --batch --dbs --dump`",
                       f"  - Reference: {_TEST_REFS['sqli']}", ""]
 
-        # ── Confirmed reflected XSS → stored/DOM to-try ──
+        # ── Confirmed reflected XSS -> stored/DOM to-try ──
         if xss:
             for f in xss:
                 u = f.get("url", ""); p = _param_of(u)
@@ -2670,8 +2670,8 @@ Report:"""
 
     def bug_bounty(self, target: str, validate: bool = True, force: bool = False,
                    cookie: str = "") -> dict:
-        """Full bug-bounty hunt: recon pipeline → parse findings → CVE/exploit
-        lookup → (validate) → structured PoC report. Authorized targets only.
+        """Full bug-bounty hunt: recon pipeline -> parse findings -> CVE/exploit
+        lookup -> (validate) -> structured PoC report. Authorized targets only.
         cookie carries a logged-in session so the crawl + injection probe cover
         authenticated surface (most real targets), not just the public pages."""
         if not target:
@@ -2688,12 +2688,12 @@ Report:"""
                     "message": f"REFUSED: '{target}' is OUT OF SCOPE per data/scope.json. "
                                f"Pass force=True (or --force) only if you're certain it's authorized."}
 
-        # ── Stage 1: Recon pipeline (nmap→subfinder→httpx→nuclei→katana) ──
+        # ── Stage 1: Recon pipeline (nmap->subfinder->httpx->nuclei->katana) ──
         pipeline = self.full_pipeline(target, cookie=cookie)
         pdata = pipeline.get("data", {})
         nuclei_raw = pdata.get("sections", {}).get("nuclei", "")
 
-        # ── Stage 2: Parse nuclei → structured findings ──
+        # ── Stage 2: Parse nuclei -> structured findings ──
         findings = _parse_nuclei_findings(nuclei_raw)
 
         # ── Stage 2.5: Injection smell-test on crawled parameterized endpoints ──
@@ -2719,7 +2719,7 @@ Report:"""
         except Exception as e:
             print(f"[ULTRON] stored-XSS probe skipped: {e}")
 
-        # ── Stage 3: CVE → exploit lookup (critical/high only, capped) ──
+        # ── Stage 3: CVE -> exploit lookup (critical/high only, capped) ──
         exploits_map = {}
         cve_findings = [f for f in findings if f["cve"] and f["severity"] in ("critical", "high")]
         for f in cve_findings[:5]:
@@ -3463,7 +3463,7 @@ Report:"""
         # Preferred path (#9): crawl4ai render+clean-markdown if installed (better extraction);
         # returns '' when absent -> we fall back to safe_get + MarkItDown + nav-strip below.
         text = self._clean_writeup_text(self._crawl4ai_markdown(url), limit=max_chars)
-        # fetch → clean text (safe_get validates every redirect hop; MarkItDown → markdown)
+        # fetch -> clean text (safe_get validates every redirect hop; MarkItDown -> markdown)
         from core.url_guard import safe_get
         import tempfile as _tf, os as _os
         if len(text.strip()) < 120:
@@ -3497,7 +3497,7 @@ Report:"""
             return {"success": False, "message": "Writeup text too short / not extractable "
                                                  "(JS-heavy page and Playwright unavailable?).", "data": {}}
 
-        # distil → JSON techniques (local LLM, deterministic)
+        # distil -> JSON techniques (local LLM, deterministic)
         prompt = (
             "Extract the reusable attack techniques from this bug-bounty writeup for a pentest "
             "playbook. Output ONLY a JSON array (no prose). Each item: "
@@ -3659,7 +3659,7 @@ Report:"""
         if not target:
             return {"success": False, "message": "Nothing to scan. Give a file path, hash, URL, or domain.", "data": {}}
 
-        # Determine target type → VT v3 endpoint
+        # Determine target type -> VT v3 endpoint
         endpoint = None
         label = target
         kind = None
@@ -3869,7 +3869,7 @@ Report:"""
             if changed:
                 diff = new_pocs - old_pocs
                 sign = "+" if diff > 0 else ""
-                updates.append(f"{cid}: PoC count changed {old_pocs} → {new_pocs} ({sign}{diff})")
+                updates.append(f"{cid}: PoC count changed {old_pocs} -> {new_pocs} ({sign}{diff})")
             else:
                 updates.append(f"{cid}: No change ({new_pocs} PoCs)")
 
@@ -3890,7 +3890,7 @@ Report:"""
         return {"success": True, "message": f"Stopped tracking {cve_id}.", "data": {}}
 
     # =====================================
-    # CVE → ASSET CORRELATION (Phase 51 #9)
+    # CVE -> ASSET CORRELATION (Phase 51 #9)
     # =====================================
     def correlate(self) -> dict:
         """Cross-link tracked CVEs against services found in scan history.
@@ -3942,7 +3942,7 @@ Report:"""
         for f in findings:
             svc = ", ".join(f["services"])
             lines.append(
-                f"  {f['cve_id']} ({f['severity']}, CVSS {f['cvss']}) → "
+                f"  {f['cve_id']} ({f['severity']}, CVSS {f['cvss']}) -> "
                 f"{f['target']} running {svc}"
             )
 
@@ -4079,7 +4079,7 @@ Report:"""
     # DNS LOOKUP (Phase 42)
     # =====================================
     def dns_lookup(self, target: str) -> dict:
-        """Forward (hostname→IP) and reverse (IP→hostname) DNS. Pure stdlib socket."""
+        """Forward (hostname->IP) and reverse (IP->hostname) DNS. Pure stdlib socket."""
         import ipaddress
         if not target:
             return {"success": False, "message": "Target missing.", "data": {}}
@@ -4095,7 +4095,7 @@ Report:"""
                 hostname, _, _ = socket.gethostbyaddr(target)
                 return {
                     "success": True,
-                    "message": f"Reverse DNS: {target} → {hostname}",
+                    "message": f"Reverse DNS: {target} -> {hostname}",
                     "data": {"ip": target, "hostname": hostname, "type": "reverse"}
                 }
             else:
@@ -4104,7 +4104,7 @@ Report:"""
                 ip_str = ", ".join(ip_list)
                 return {
                     "success": True,
-                    "message": f"DNS: {target} → {ip_str}",
+                    "message": f"DNS: {target} -> {ip_str}",
                     "data": {"hostname": target, "ips": ip_list, "type": "forward"}
                 }
         except socket.herror:
@@ -4189,7 +4189,7 @@ Report:"""
         return {"success": False, "message": f"{tool_id} failed: {err}", "data": res}
 
     def setup_scope(self, text: str) -> dict:
-        """Paste a bug-bounty program policy → parse it (local LLM) → set up the hunt:
+        """Paste a bug-bounty program policy -> parse it (local LLM) -> set up the hunt:
         writes data/scope.json (in/out domains, enforced) + data/roe.json (out-of-scope vuln
         types filtered from findings, rate limit applied to tools, rules to remember).
         Then run 'bug bounty <in-scope-target>' — it'll respect all of this."""
