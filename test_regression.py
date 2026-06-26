@@ -1743,6 +1743,28 @@ run_test("Ultron: authz engine (session/mutator/IDOR)", _authz_engine)
 run_test("Router: 'idor check <url> as A vs B'", _route("idor check http://t/a?id=1 as userA vs userB", "ultron", "idor_check"))
 run_test("Router: 'session list'", _route("session list", "ultron", "session_list"))
 
+def _confidence_ladder_and_guard():
+    from core import session_manager as sm
+    U = _ult.ultron_agent
+    # B4 confidence ladder
+    g = U._validate_finding({"template": "sqli-error-based", "severity": "high",
+                             "url": "http://t/p?id=1", "cve": "", "validated": True}, {})
+    if g.get("confidence") not in ("reproduced", "supported"): return f"B4 validated finding -> {g.get('confidence')}"
+    gc = U._validate_finding({"template": "idor-bola", "severity": "high",
+                              "url": "http://t/a?id=1", "cve": "", "validated": False}, {})
+    if gc.get("confidence") != "candidate": return f"B4 unvalidated report-worthy -> {gc.get('confidence')} (want candidate)"
+    # B5 destructive guard
+    if not _ult._is_destructive("http://t/account/delete?id=1"): return "B5 delete path not flagged destructive"
+    if not _ult._is_destructive("http://t/api/user/1", "DELETE"): return "B5 DELETE method not flagged"
+    if _ult._is_destructive("http://t/api/orders/5"): return "B5 benign GET wrongly flagged destructive"
+    sm.clear(); sm.set_session("userA", cookie="uid=1")
+    r = U.replay_as("userA", "http://t/reset-password?u=victim")          # destructive, no force
+    if not r.get("data", {}).get("blocked"): return "B5 replay didn't refuse destructive request"
+    sm.clear()
+    return True
+
+run_test("Ultron: confidence ladder + destructive guard (B4/B5)", _confidence_ladder_and_guard)
+
 # ── Target monitor (mapper-lite: snapshot/diff/watch/alert) ──
 def _monitor_diff():
     u = _ult.ultron_agent

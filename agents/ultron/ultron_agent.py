@@ -329,6 +329,21 @@ _SQLI_TIME = ("' AND SLEEP(5)-- -", "1 AND SLEEP(5)-- -", "';SELECT pg_sleep(5)-
               "1) AND SLEEP(5)-- -")
 # Stored-XSS marker (distinct from reflected) — injected once, hunted on OTHER pages.
 _STORED_MARK = "jvz9stored"
+# B5 destructive-endpoint guard: don't auto-fire state-changing requests on a live target
+# (delete / reset / payment / logout / invite) without explicit opt-in — protects real targets
+# from side effects + alert fatigue during multi-user replay.
+_DESTRUCTIVE_PATH = re.compile(
+    r"delete|remove|destroy|purge|drop|reset|logout|signout|sign-out|deactivate|disable|"
+    r"cancel|revoke|password|passwd|payment|pay\b|charge|transfer|withdraw|refund|checkout|"
+    r"invite|send|email|sms|otp|verify|2fa|wipe|truncate", re.I)
+
+
+def _is_destructive(url: str, method: str = "GET") -> bool:
+    """A request that likely changes server state / fires a notification / costs money."""
+    if (method or "GET").upper() in ("DELETE", "PUT", "PATCH"):
+        return True
+    from urllib.parse import urlsplit
+    return bool(_DESTRUCTIVE_PATH.search(urlsplit(url or "").path))
 
 
 def _http_get(url: str, timeout: int = 8, headers: dict = None, allow_redirects: bool = True):
@@ -2455,8 +2470,19 @@ Report:"""
 
         # report only if it clears the bar (>=3 of 7), or any confirmed crit/high
         report = score >= 3 or (sev in ("critical", "high") and f.get("validated") is True)
+        # B4 confidence ladder — a finding is not "confirmed" off one signal. Cross-principal
+        # bugs (IDOR/BOLA) and unreproduced anomalies are CANDIDATES needing human confirmation;
+        # a directly-reproduced high-severity signal is the strongest we claim locally.
+        if f.get("validated") is True and score >= 5:
+            confidence = "reproduced"      # probed + reproduced + corroborated
+        elif f.get("validated") is True:
+            confidence = "supported"       # a direct signal, but thin corroboration
+        elif report:
+            confidence = "candidate"       # report-worthy lead, NOT yet proven (e.g. IDOR needs 2 accounts)
+        else:
+            confidence = "weak"
         return {"report": report, "score": score, "tier": self._PAYOUT_TIER.get(sev, "P5"),
-                "reasons": reasons,
+                "reasons": reasons, "confidence": confidence,
                 "drop": None if report else f"failed quality gate ({score}/7)"}
 
     def _format_bb_report(self, target, findings, exploits_map, pipeline_data, validated):
@@ -2502,7 +2528,8 @@ Report:"""
                 if f.get("url"):
                     lines.append(f"- **Location:** {f['url']}")
                 lines.append(f"- **Status:** {'Confirmed live' if f.get('validated') else 'Reported by scanner (unconfirmed)'}")
-                lines.append(f"- **Confidence:** {g['score']}/7 quality checks passed")
+                lines.append(f"- **Confidence:** {g.get('confidence', 'candidate').upper()} "
+                             f"({g['score']}/7 quality checks)")
                 if f.get("evidence"):
                     lines.append(f"- **Evidence:** {f['evidence']}")
                 if f.get("cve"):
@@ -3620,12 +3647,19 @@ Report:"""
                                  for n, v in s.items()]
         return {"success": True, "message": "\n".join(lines), "data": {"sessions": s}}
 
-    def replay_as(self, name: str, url: str, method: str = "GET", body: str = "") -> dict:
-        """Fire a request AS a named principal (their cookie/token). The replay primitive."""
+    def replay_as(self, name: str, url: str, method: str = "GET", body: str = "", force: bool = False) -> dict:
+        """Fire a request AS a named principal (their cookie/token). The replay primitive.
+        Destructive requests (delete/reset/payment/logout/invite or DELETE/PUT) are REFUSED
+        unless force=True — multi-user replay must not trigger side effects on a live target."""
         from core import session_manager as sm
         h = sm.headers_for(name)
         if h is None:
             return {"success": False, "message": f"No session '{name}'. Set it first.", "data": {}}
+        if _is_destructive(url, method) and not force:
+            return {"success": False, "data": {"blocked": True},
+                    "message": f"REFUSED: {method} {url} looks destructive (state-changing / costs money / "
+                               f"sends a notification). Replaying it as '{name}' could harm a live target. "
+                               f"Pass force=True only if you're certain it's safe + authorized."}
         try:
             if method.upper() in ("POST", "PUT", "PATCH"):
                 import json as _json
