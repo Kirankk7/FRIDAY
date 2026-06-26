@@ -3593,6 +3593,118 @@ Report:"""
                            f"(tagged verify). Source: {index_url}",
                 "data": {"added": total_added, "articles": ok, "per": per, "index": index_url}}
 
+    # =====================================
+    # MULTI-USER AUTHZ (Tier-1: session_manager B1 + request_mutator B2 + IDOR oracle B3)
+    # The state engine — replay a request as different principals to find IDOR/BOLA/BAC,
+    # the highest-frequency real-bounty class the single-session probes can't reach.
+    # =====================================
+    def session_set(self, name: str, cookie: str = "", bearer: str = "", role: str = "user") -> dict:
+        """Register a named principal (anon/userA/userB/admin) from a cookie you already have
+        (browser/login capture) or a bearer token. The basis for multi-user authz testing."""
+        from core import session_manager as sm
+        headers = {"Authorization": f"Bearer {bearer}"} if bearer else None
+        if not name:
+            return {"success": False, "message": "Give a session name (e.g. userA).", "data": {}}
+        sm.set_session(name, cookie=cookie, headers=headers, role=role)
+        return {"success": True, "data": {"name": name, "role": role},
+                "message": f"Session '{name}' set (role={role}). Now: idor check <url> as {name} vs <other>."}
+
+    def session_list(self) -> dict:
+        from core import session_manager as sm
+        s = sm.list_sessions()
+        if not s:
+            return {"success": True, "data": {"sessions": {}},
+                    "message": "No sessions set. Use: session set userA cookie <cookie>."}
+        lines = ["Sessions:"] + [f"  {n} (role={v.get('role')}) "
+                                 f"{'cookie' if v.get('cookie') else ''}{' +bearer' if v.get('headers') else ''}"
+                                 for n, v in s.items()]
+        return {"success": True, "message": "\n".join(lines), "data": {"sessions": s}}
+
+    def replay_as(self, name: str, url: str, method: str = "GET", body: str = "") -> dict:
+        """Fire a request AS a named principal (their cookie/token). The replay primitive."""
+        from core import session_manager as sm
+        h = sm.headers_for(name)
+        if h is None:
+            return {"success": False, "message": f"No session '{name}'. Set it first.", "data": {}}
+        try:
+            if method.upper() in ("POST", "PUT", "PATCH"):
+                import json as _json
+                try:
+                    jb = _json.loads(body) if body else None
+                except Exception:
+                    jb = None
+                r = _http_post(url, json_body=jb, data=(None if jb else (body or None)), headers=h)
+            else:
+                r = _http_get(url, headers=h)
+            return {"success": True,
+                    "message": f"[{name}] {method} {url} -> HTTP {r.status_code}, {len(r.text or '')}b",
+                    "data": {"status": r.status_code, "len": len(r.text or ""), "body": (r.text or "")[:400]}}
+        except Exception as e:
+            return {"success": False, "message": f"replay failed: {str(e)[:80]}", "data": {}}
+
+    def idor_check(self, url: str, owner: str = "userA", attacker: str = "userB") -> dict:
+        """BOLA/IDOR oracle (B3): fetch an owner-specific resource as the OWNER, then as the
+        ATTACKER (same URL + id-swapped variants), with an ANON control. Flags when the attacker
+        gets the owner's resource AND anon is denied (the anon control kills the 'it's just public'
+        false positive). Findings are CANDIDATES (validated=False) — confirm the leaked data is
+        truly the other user's with your two real accounts. Authorized targets only."""
+        from core import session_manager as sm, request_mutator as rm
+        ho, ha = sm.headers_for(owner), sm.headers_for(attacker)
+        if ho is None or ha is None:
+            return {"success": False, "data": {},
+                    "message": f"Set both sessions first: 'session set {owner} cookie ..' and "
+                               f"'session set {attacker} cookie ..'."}
+
+        def fetch(u, h):
+            try:
+                r = _http_get(u, headers=h or {})
+                return r.status_code, len(r.text or ""), (r.text or "")
+            except Exception:
+                return None, 0, ""
+
+        so, lo, bo = fetch(url, ho)
+        if so != 200 or lo < 1:
+            return {"success": True, "data": {"findings": []},
+                    "message": f"Owner '{owner}' didn't get a 200 resource at {url} (HTTP {so}) — "
+                               f"nothing to test. Point at a resource the owner can read."}
+
+        def _close(a, b):
+            return abs(a - b) <= max(40, int(lo * 0.05))
+
+        findings = []
+        # (1) same-URL BOLA: attacker reads the owner's resource; anon cannot.
+        sa, la, ba = fetch(url, ha)
+        sn, ln, _ = fetch(url, {})
+        anon_denied = not (sn == 200 and _close(ln, lo))
+        bola = sa == 200 and _close(la, lo) and anon_denied
+        if bola:
+            findings.append({
+                "template": "idor-bola", "severity": "high", "url": url, "cve": None, "validated": False,
+                "evidence": f"'{attacker}' got HTTP 200/{la}b at {url} (owner saw 200/{lo}b) while anon was "
+                            f"denied (HTTP {sn}) — the attacker reads the owner's resource = broken object-level "
+                            f"authorization. CONFIRM the data is {owner}'s, not {attacker}'s own.",
+                "repro": [f"As {owner}: GET {url} -> 200/{lo}b", f"As {attacker}: GET {url} -> 200/{la}b",
+                          f"As anon: GET {url} -> {sn}", "Confirm with two real accounts that the data is the owner's"],
+            })
+            # (2) id-swap enumeration — ONLY meaningful when ownership ISN'T enforced (BOLA held);
+            #     otherwise the attacker swapping to THEIR OWN id legitimately returns 200 (= a false
+            #     positive). Gating enum behind BOLA makes it a corroborating signal, not a noisy one.
+            for var in rm.mutate_url(url)[:8]:
+                sv, lv, bv = fetch(var["url"], ha)
+                if sv == 200 and lv > 0 and bv != ba and bv != bo and _close(lv, lo):
+                    findings.append({
+                        "template": "idor-enum", "severity": "high", "url": var["url"], "cve": None, "validated": False,
+                        "evidence": f"As '{attacker}', {var['label']} returned a DIFFERENT 200/{lv}b record "
+                                    f"({var['why']}) on an endpoint with no ownership check — objects are enumerable "
+                                    f"across the id space.",
+                        "repro": [f"As {attacker}: GET {var['url']} -> 200/{lv}b (a different record)",
+                                  "Iterate the id to enumerate other users' objects; confirm ownership"],
+                    })
+                    break    # one enum signal per endpoint is enough
+        msg = (f"IDOR/BOLA: {len(findings)} candidate(s) at {url}." if findings
+               else f"No cross-principal access at {url} — attacker didn't get the owner's resource (good auth).")
+        return {"success": True, "message": msg, "data": {"findings": findings}}
+
     def target_dorks(self, target: str) -> dict:
         """Google dorks to recon a SPECIFIC target (TakSec set), with the target substituted in."""
         import json as _json
@@ -4390,6 +4502,18 @@ Report:"""
 
             elif action == "ingest_feed":
                 return self.ingest_feed(parameters.get("url", target) or input_text)
+
+            elif action == "session_set":
+                return self.session_set(parameters.get("name", ""), parameters.get("cookie", ""),
+                                        parameters.get("bearer", ""), parameters.get("role", "user"))
+            elif action == "session_list":
+                return self.session_list()
+            elif action == "replay_as":
+                return self.replay_as(parameters.get("name", ""), parameters.get("url", target),
+                                      parameters.get("method", "GET"), parameters.get("body", ""))
+            elif action == "idor_check":
+                return self.idor_check(parameters.get("url", target), parameters.get("owner", "userA"),
+                                       parameters.get("attacker", "userB"))
 
             elif action == "target_dorks":
                 return self.target_dorks(parameters.get("target", target))

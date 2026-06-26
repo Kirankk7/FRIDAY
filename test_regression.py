@@ -1685,6 +1685,64 @@ def _ingest_feed_links():
 run_test("Ultron: ingest_feed link extraction", _ingest_feed_links)
 run_test("Router: 'ingest feed <url>'", _route("ingest feed https://pentester.land/list", "ultron", "ingest_feed"))
 
+# Tier-1 multi-user authz: session_manager (B1) + request_mutator (B2) + IDOR oracle (B3).
+def _authz_engine():
+    from core import session_manager as sm, request_mutator as rm
+    U = _ult.ultron_agent
+    # B1 session manager
+    sm.clear()
+    sm.set_session("userA", cookie="uid=1", role="user")
+    sm.set_session("userB", cookie="uid=2", role="user")
+    if sm.headers_for("userA") != {"Cookie": "uid=1"}: return "B1 headers_for wrong"
+    if "userB" not in sm.list_sessions(): return "B1 list missing userB"
+    if sm.headers_for("nope") is not None: return "B1 unknown session not None"
+    # B2 mutator
+    uv = rm.mutate_url("http://t/api/orders/5?ref=9")
+    if not any("/4" in v["url"] or "/6" in v["url"] for v in uv): return "B2 path id-swap missing"
+    bv = rm.mutate_body("http://t/p", "POST", '{"user_id":7,"is_admin":false}', "application/json")
+    labels = {v["label"] for v in bv}
+    if not any("drop user_id" in l for l in labels): return "B2 owner-drop missing"
+    if not any("toggle is_admin" in l for l in labels): return "B2 role-toggle missing"
+    if not any("mass-assign" in l for l in labels): return "B2 mass-assign missing"
+    # B3 oracle — mock the 3-way fetch
+    class _R:
+        def __init__(s, t, c=200): s.text = t; s.status_code = c; s.headers = {}
+    OWNER = "alice private data here padded out to a stable length 0123456789"
+    def g_open(url, timeout=8, headers=None, allow_redirects=True):   # NO ownership check (BOLA)
+        ck = (headers or {}).get("Cookie", "")
+        if not ck: return _R("login required", 401)                  # anon denied
+        import urllib.parse as up
+        rid = up.urlsplit(url).query
+        if "id=1" in rid: return _R(OWNER)                           # anyone with a cookie reads id=1
+        return _R("bob other data padded out to a stable length 0123456789")  # id=2 -> different record
+    sv_o = _ult._http_get; _ult._http_get = g_open
+    try:
+        tp = U.idor_check("http://t/account?id=1", "userA", "userB")
+    finally:
+        _ult._http_get = sv_o
+    tt = {f["template"] for f in tp["data"]["findings"]}
+    if "idor-bola" not in tt: return f"B3 BOLA not flagged: {tt}"
+    # FP: ownership enforced -> attacker denied on owner's id -> no finding
+    def g_enf(url, timeout=8, headers=None, allow_redirects=True):
+        ck = (headers or {}).get("Cookie", "")
+        if not ck: return _R("login", 401)
+        uid = ck.split("uid=")[-1][:1]
+        import urllib.parse as up
+        rid = up.urlsplit(url).query.split("id=")[-1][:1]
+        return _R(OWNER if uid == rid else "forbidden", 200 if uid == rid else 403)
+    _ult._http_get = g_enf
+    try:
+        fp = U.idor_check("http://t/account_safe?id=1", "userA", "userB")
+    finally:
+        _ult._http_get = sv_o
+    sm.clear()
+    if fp["data"]["findings"]: return f"B3 FP: enforced-ownership flagged {[f['template'] for f in fp['data']['findings']]}"
+    return True
+
+run_test("Ultron: authz engine (session/mutator/IDOR)", _authz_engine)
+run_test("Router: 'idor check <url> as A vs B'", _route("idor check http://t/a?id=1 as userA vs userB", "ultron", "idor_check"))
+run_test("Router: 'session list'", _route("session list", "ultron", "session_list"))
+
 # ── Target monitor (mapper-lite: snapshot/diff/watch/alert) ──
 def _monitor_diff():
     u = _ult.ultron_agent
