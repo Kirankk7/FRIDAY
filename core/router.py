@@ -164,6 +164,7 @@ def route_single_intent(
     text: str
 ):
 
+    text_raw = (text or "").strip()        # original case — for case-sensitive captures (cookies, URLs, tokens)
     text = (
         text.lower()
         .strip()
@@ -764,6 +765,29 @@ def route_single_intent(
                   r"learn from(?: this)? (?:list|index|feed))\s+(https?://\S+)", text)
     if _m:
         return {"tool": "ultron", "action": "ingest_feed", "parameters": {"url": _m.group(1).strip()}, "confidence": 0.95}
+    # multi-user authz (Tier-1): session set/list, replay-as, idor check. Match on text_raw
+    # (original case) so cookies / tokens / URLs aren't lowercased.
+    _m = re.match(r"(?:session set|set session)\s+(\w+)\s+cookie\s+(.+)", text_raw, re.I)
+    if _m:
+        return {"tool": "ultron", "action": "session_set",
+                "parameters": {"name": _m.group(1), "cookie": _m.group(2).strip()}, "confidence": 0.96}
+    _m = re.match(r"(?:session set|set session)\s+(\w+)\s+bearer\s+(.+)", text_raw, re.I)
+    if _m:
+        return {"tool": "ultron", "action": "session_set",
+                "parameters": {"name": _m.group(1), "bearer": _m.group(2).strip()}, "confidence": 0.96}
+    if text in ("session list", "list sessions", "sessions"):
+        return {"tool": "ultron", "action": "session_list", "parameters": {}, "confidence": 0.97}
+    _m = re.match(r"(?:idor check|check idor|bola check|idor)\s+(https?://\S+)"
+                  r"(?:\s+as\s+(\w+))?(?:\s+(?:vs|versus|against)\s+(\w+))?", text_raw, re.I)
+    if _m:
+        p = {"url": _m.group(1)}
+        if _m.group(2): p["owner"] = _m.group(2)
+        if _m.group(3): p["attacker"] = _m.group(3)
+        return {"tool": "ultron", "action": "idor_check", "parameters": p, "confidence": 0.95}
+    _m = re.match(r"replay\s+(https?://\S+)\s+as\s+(\w+)", text_raw, re.I)
+    if _m:
+        return {"tool": "ultron", "action": "replay_as",
+                "parameters": {"url": _m.group(1), "name": _m.group(2)}, "confidence": 0.95}
     _m = re.match(r"(?:ingest writeup|ingest this writeup|learn(?: from)?(?: this)?(?: writeup)?|"
                   r"read(?: this)? writeup|study writeup)\s+(https?://\S+)", text)
     if _m:
