@@ -788,6 +788,11 @@ def route_single_intent(
     if _m:
         return {"tool": "ultron", "action": "replay_as",
                 "parameters": {"url": _m.group(1), "name": _m.group(2)}, "confidence": 0.95}
+    _m = re.match(r"(?:graphql hunt|hunt graphql|graphql)\s+(https?://\S+)(?:\s+as\s+(\w+))?", text_raw, re.I)
+    if _m:
+        p = {"url": _m.group(1)}
+        if _m.group(2): p["as_user"] = _m.group(2)
+        return {"tool": "ultron", "action": "graphql_hunt", "parameters": p, "confidence": 0.95}
     _m = re.match(r"(?:ingest writeup|ingest this writeup|learn(?: from)?(?: this)?(?: writeup)?|"
                   r"read(?: this)? writeup|study writeup)\s+(https?://\S+)", text)
     if _m:

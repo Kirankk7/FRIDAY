@@ -1765,6 +1765,40 @@ def _confidence_ladder_and_guard():
 
 run_test("Ultron: confidence ladder + destructive guard (B4/B5)", _confidence_ladder_and_guard)
 
+def _graphql_hunter():
+    import json as _json
+    U = _ult.ultron_agent
+    class _R:
+        def __init__(s, t): s.text = t; s.status_code = 200; s.headers = {}
+    SCHEMA = _json.dumps({"data": {"__schema": {
+        "queryType": {"fields": [{"name": "me"}, {"name": "users"}]},
+        "mutationType": {"fields": [{"name": "updateProfile"}, {"name": "deleteUser"}, {"name": "grantAdmin"}]},
+        "types": [{"name": "User", "kind": "OBJECT"}]}}})
+    sv = _ult._http_post
+    # introspection ENABLED -> introspection + privileged-mutation findings
+    _ult._http_post = lambda url, data=None, json_body=None, timeout=8, headers=None: _R(SCHEMA)
+    try:
+        r = U.graphql_hunt("http://t/graphql")
+    finally:
+        _ult._http_post = sv
+    tt = {f["template"] for f in r["data"]["findings"]}
+    if "graphql-introspection" not in tt: return "introspection-enabled not flagged"
+    if "graphql-privileged-mutation" not in tt: return "privileged mutations not flagged"
+    if "deleteUser" not in r["data"]["privileged"] or "grantAdmin" not in r["data"]["privileged"]:
+        return f"privileged set wrong: {r['data']['privileged']}"
+    # introspection DISABLED -> graceful, no findings
+    _ult._http_post = lambda url, data=None, json_body=None, timeout=8, headers=None: _R('{"errors":[{"message":"off"}]}')
+    try:
+        r2 = U.graphql_hunt("http://t/graphql")
+    finally:
+        _ult._http_post = sv
+    if r2["data"].get("introspection") is not False or r2["data"]["findings"]:
+        return "disabled introspection mishandled"
+    return True
+
+run_test("Ultron: graphql hunter (Tier-2)", _graphql_hunter)
+run_test("Router: 'graphql hunt <url> as B'", _route("graphql hunt http://t/graphql as userB", "ultron", "graphql_hunt"))
+
 # ── Target monitor (mapper-lite: snapshot/diff/watch/alert) ──
 def _monitor_diff():
     u = _ult.ultron_agent
