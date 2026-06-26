@@ -2199,46 +2199,50 @@ Report:"""
             import requests  # noqa: F401
         except Exception:
             return []
-        views = [u for u in (urls or []) if urlsplit(u).scheme in ("http", "https")][:max_urls]
-        out, tested = [], 0
-        for u in (urls or []):
-            if tested >= max_urls:
-                break
+        cand = [u for u in (urls or []) if urlsplit(u).scheme in ("http", "https")][:max_urls]
+        views = cand
+        # Pass 1: inject a GLOBALLY-UNIQUE marker per (url,param) — a per-URL idx collides across
+        # URLs (url-A's stored marker then mis-attributes to url-B), so use a running counter.
+        planted, n = {}, 0
+        for u in cand:
             try:
                 parts = urlsplit(u)
                 qs = parse_qsl(parts.query, keep_blank_values=True)
-                if not qs or parts.scheme not in ("http", "https"):
+                if not qs:
                     continue
-                tested += 1
                 for idx, (k, v) in enumerate(qs[:4]):
-                    mark = f"{_STORED_MARK}{idx}<x>"
+                    mark = f"{_STORED_MARK}{n}<x>"; n += 1
                     q = qs.copy(); q[idx] = (k, mark)
                     iurl = urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(q), ""))
                     time.sleep(0.1)
                     try:
-                        _http_get(iurl, headers=_hdrs)            # step 1: submit
+                        _http_get(iurl, headers=_hdrs)
                     except Exception:
                         continue
-                    for vu in views:                             # step 2: hunt on OTHER pages
-                        if vu.split("?")[0] == u.split("?")[0]:
-                            continue                             # skip same endpoint (= reflection)
-                        try:
-                            rr = _http_get(vu, headers=_hdrs)
-                        except Exception:
-                            continue
-                        if mark in (rr.text or ""):
-                            out.append({
-                                "template": "xss-stored", "severity": "high",
-                                "url": vu, "cve": None, "validated": True,
-                                "evidence": f"Marker injected via {k} at {u.split('?')[0]} appeared UNENCODED at "
-                                            f"{vu} — input is stored and rendered as markup on another page.",
-                                "repro": [f"Step 1: GET {iurl}",
-                                          f"Step 2: GET {vu}  -> find '{mark}' (brackets intact)",
-                                          "Escalate to <script>/<img onerror> under authorization"],
-                            })
-                            break
+                    planted[mark] = {"src": u.split("?")[0], "param": k, "iurl": iurl}
             except Exception:
                 continue
+        # Pass 2: fetch each view ONCE (was N*M*N requests — now N injects + N views), flag a
+        # marker that surfaces UNENCODED on a DIFFERENT page than where it was injected (= stored).
+        out = []
+        for vu in views:
+            try:
+                body = _http_get(vu, headers=_hdrs).text or ""
+            except Exception:
+                continue
+            vbase = vu.split("?")[0]
+            for mark, info in planted.items():
+                if mark in body and info["src"] != vbase:
+                    out.append({
+                        "template": "xss-stored", "severity": "high",
+                        "url": vu, "cve": None, "validated": True,
+                        "evidence": f"Marker injected via {info['param']} at {info['src']} appeared UNENCODED "
+                                    f"at {vu} — input is stored and rendered as markup on another page.",
+                        "repro": [f"Step 1: GET {info['iurl']}",
+                                  f"Step 2: GET {vu}  -> find '{mark}' (brackets intact)",
+                                  "Escalate to <script>/<img onerror> under authorization"],
+                    })
+                    break
         if out:
             print(f"[ULTRON] stored-XSS probe flagged {len(out)} candidate(s).")
         return out
