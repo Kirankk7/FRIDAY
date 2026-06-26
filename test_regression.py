@@ -1114,6 +1114,27 @@ def _gate_report_filters_noise():
     return True if "Filtered by Validation Gate" in rpt and "tls-version" in rpt \
         and "Reportable findings: **1**" in rpt else "noise not filtered in report"
 
+def _report_is_cp1252_safe():
+    # dogfood: the report/test-plan must be printable on a Windows cp1252 console (the
+    # friday-recon CLI prints it) — no U+2192/checkmark/box chars. em-dash is cp1252-OK.
+    U = _ult.ultron_agent
+    findings = [
+        {"template": "sqli-error-based", "severity": "high", "url": "https://t.com/p?id=1'",
+         "cve": "", "validated": True, "evidence": "DB error after quote", "repro": ["GET ...", "see error"]},
+        {"template": "tls-version", "severity": "low", "url": "https://t.com", "cve": "", "validated": False},
+    ]
+    for f in findings:
+        f["_gate"] = U._validate_finding(f, {})
+    rpt = U._format_bb_report("t.com", findings, {},
+                              {"urls": ["https://t.com/p?id=1", "https://t.com/login"]}, True)
+    try:
+        rpt.encode("cp1252")
+    except UnicodeEncodeError as e:
+        return f"report has cp1252-unsafe char (CLI console crash): {e}"
+    return True
+
+run_test("Ultron: report is cp1252-printable", _report_is_cp1252_safe)
+
 run_test("Ultron: bug-bounty nuclei parser",   _bb_nuclei_parser)
 run_test("Ultron: bug-bounty report formatter", _bb_report_formatter)
 run_test("Gate: keeps confirmed critical+CVE",  _gate_keeps_real_finding)
