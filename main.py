@@ -1,3 +1,12 @@
+import sys
+# cp1252 console guard — never let a non-ASCII char (emoji, arrow, a target's accented
+# title/payload/writeup text) crash output on a Windows console. The root fix.
+try:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+except Exception:
+    pass
+
 from core.brain import process_input
 from core.voice import listen, speak_async
 from core.personality import get_intro, get_ack
