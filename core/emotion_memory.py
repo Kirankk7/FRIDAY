@@ -12,7 +12,7 @@ def load_emotions():
         try:
             data = json.load(f)
 
-            # 🔥 FIX: ensure it's a list
+            # [hot] FIX: ensure it's a list
             if isinstance(data, list):
                 return data
             else:

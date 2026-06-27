@@ -366,7 +366,7 @@ def run_skill(
         if pending_result:
 
             print(
-                "⏳ Pending "
+                "[pending] Pending "
                 "workflow used"
             )
 

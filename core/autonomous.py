@@ -44,7 +44,7 @@ def autonomous_run(user_input, max_steps=3):
 
         context += "\n".join(results)
 
-        # 🔥 decide if done
+        # [hot] decide if done
         decision_prompt = f"""
 User goal: {user_input}
 
@@ -67,7 +67,7 @@ Answer ONLY:
 
         steps_done += 1
 
-    # 🔥 final response
+    # [hot] final response
     final_prompt = f"""
 User goal: {user_input}
 

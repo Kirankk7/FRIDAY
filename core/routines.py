@@ -3,11 +3,11 @@ Phase 43 — Macro / Routine system.
 
 Record a named sequence of voice commands, then replay them on demand.
 
-    "create routine morning"   → starts recording
-    "check my tasks"           → captured (not executed)
-    "what's the weather"       → captured
-    "stop recording"           → saves routine 'morning'
-    "run routine morning"      → executes both, in order
+    "create routine morning"   -> starts recording
+    "check my tasks"           -> captured (not executed)
+    "what's the weather"       -> captured
+    "stop recording"           -> saves routine 'morning'
+    "run routine morning"      -> executes both, in order
 
 Recording state lives here; brain.process_input(_stream) checks is_recording()
 at the top and routes captured commands here instead of executing them.

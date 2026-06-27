@@ -25,7 +25,7 @@ def call_llm(prompt):
         return ""
 
 
-# 🔥 TOOL FUNCTIONS
+# [hot] TOOL FUNCTIONS
 
 def chat_tool(input_text):
     return call_llm(f"""
@@ -54,7 +54,7 @@ def system_info_tool(_):
     return f"System: {platform.system()} {platform.version()}"
 
 
-# 🔥 TOOL REGISTRY
+# [hot] TOOL REGISTRY
 
 TOOLS = {
     "chat": {

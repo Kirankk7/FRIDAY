@@ -22,7 +22,7 @@ _lock = threading.Lock()
 # SCHEDULE PARSING
 # ─────────────────────────────────────────
 _TIME_PATTERNS = [
-    # "every morning" → 09:00 daily
+    # "every morning" -> 09:00 daily
     (r"every morning",         "daily", "09:00"),
     (r"every evening",         "daily", "18:00"),
     (r"every night",           "daily", "22:00"),

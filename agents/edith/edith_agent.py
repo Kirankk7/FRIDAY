@@ -4,7 +4,7 @@ import uuid
 import sqlite3
 import datetime
 
-# Phase 34 — EDITH long-term memory migrated JSON → SQLite.
+# Phase 34 — EDITH long-term memory migrated JSON -> SQLite.
 # Same public API + return shapes; durable, indexed, no full-file rewrites.
 os.makedirs("data", exist_ok=True)
 DB_PATH = "data/edith_memory.db"

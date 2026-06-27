@@ -57,7 +57,7 @@ def load_memory():
 
     except Exception as e:
         print(
-            f"🔴 Memory "
+            f"[*] Memory "
             f"load error: "
             f"{e}"
         )
@@ -91,7 +91,7 @@ def save_memory(
 
     except Exception as e:
         print(
-            f"🔴 Memory "
+            f"[*] Memory "
             f"save error: "
             f"{e}"
         )
@@ -136,7 +136,7 @@ def save_tool_context(
     }
 
     print(
-        "🧠 SAVING TOOL CONTEXT:",
+        "[brain] SAVING TOOL CONTEXT:",
         fresh_memory[
             "tool_context"
         ]
@@ -166,7 +166,7 @@ def get_tool_context(
     )
 
     print(
-        "🧠 LOADED CONTEXT:",
+        "[brain] LOADED CONTEXT:",
         context
     )
 
@@ -214,7 +214,7 @@ def save_pending_action(
     }
 
     print(
-        "⏳ Pending action:",
+        "[pending] Pending action:",
         memory[
             "pending_action"
         ]
@@ -241,7 +241,7 @@ def get_pending_action():
     )
 
     print(
-        "⏳ Loaded pending:",
+        "[pending] Loaded pending:",
         pending
     )
 
@@ -262,7 +262,7 @@ def clear_pending_action():
     ] = None
 
     print(
-        "✅ Pending "
+        "[ok] Pending "
         "action cleared"
     )
 

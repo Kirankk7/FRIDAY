@@ -6,10 +6,10 @@ Model: parakeet-tdt_ctc-110m (downloaded to NeMo cache by _dl_parakeet_stage1.py
 Runs on CPU (PyTorch in this env is CPU-only; faster-whisper uses CTranslate2 CUDA separately).
 
 Windows notes:
-- numba/llvmlite crash → mock before any NeMo import
-- numba.__version__ must exist or RNNT loss init fails → set to "0.59.0"
-- NeMo's from_pretrained(HF path) crashes (Winsock bug) → use restore_from(local .nemo file)
-- NeMo's from_pretrained(NGC) also crashes → download via requests first (see _dl_parakeet_stage1.py)
+- numba/llvmlite crash -> mock before any NeMo import
+- numba.__version__ must exist or RNNT loss init fails -> set to "0.59.0"
+- NeMo's from_pretrained(HF path) crashes (Winsock bug) -> use restore_from(local .nemo file)
+- NeMo's from_pretrained(NGC) also crashes -> download via requests first (see _dl_parakeet_stage1.py)
 """
 
 import os

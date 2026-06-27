@@ -25,7 +25,7 @@ _speech_q              = _queue.Queue()
 _speech_worker_started = False
 _speech_worker_lock    = threading.Lock()
 
-# ─── Agent → edge-tts voice mapping ───────────────────────────────────────────
+# ─── Agent -> edge-tts voice mapping ───────────────────────────────────────────
 AGENT_VOICES = {
     "friday":   "en-US-JennyNeural",    # FRIDAY — warm, natural
     "athena":   "en-US-AriaNeural",     # ATHENA — clear, analytical
@@ -266,7 +266,7 @@ def speak_async(text: str, agent: str = None):
             print(f"[voice] edge-tts error ({voice}, {len(text)} chars): {e}")
             return
 
-    # WAV (Kokoro) → winsound: native Windows MM API, works in any process context
+    # WAV (Kokoro) -> winsound: native Windows MM API, works in any process context
     if filename.endswith(".wav"):
         try:
             import winsound
@@ -280,7 +280,7 @@ def speak_async(text: str, agent: str = None):
                 pass
         return
 
-    # MP3 (edge-tts fallback) → pygame
+    # MP3 (edge-tts fallback) -> pygame
     if not ensure_mixer():
         print("[voice] retrying audio init...")
         time.sleep(1)

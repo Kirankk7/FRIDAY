@@ -5,11 +5,11 @@ Makes JARVIS reach OUT instead of only answering. Called from the scheduler's
 30s loop; uses internal timers so each check runs at its own cadence. Every
 alert goes through core.notify.push (HUD now, Telegram/email later).
 
-  · due reminders        → fire even when you're not chatting
-  · morning digest       → once/day: tasks / reminders / events
-  · defensive delta      → opt-in: new listening ports / suspicious processes
-  · CVE watchlist        → new critical/high entries since last check
-  · target monitor       → opt-in: re-recon watched targets, alert on change
+  · due reminders        -> fire even when you're not chatting
+  · morning digest       -> once/day: tasks / reminders / events
+  · defensive delta      -> opt-in: new listening ports / suspicious processes
+  · CVE watchlist        -> new critical/high entries since last check
+  · target monitor       -> opt-in: re-recon watched targets, alert on change
 """
 
 import time
