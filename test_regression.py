@@ -3551,3 +3551,32 @@ print(f"\n{GREEN}{BOLD}Report saved:{RESET} {report_file}")
 print(f"Open with: start {report_file}\n")
 
 sys.exit(0 if _fail == 0 else 1)
+
+
+# 40-day chaining dogfood regressions (JARVIS app-path seam bugs, 2026-06-28)
+def _chain_seam_bugs():
+    import core.router as _rt, core.executor as _ex, core.brain as _br, inspect
+    U = _ult.ultron_agent
+    # Bug: report KeyError on a malformed finding (missing template/severity/url)
+    bad = [{"template": "sqli-error-based"}, {"severity": "high", "url": "http://t/x"}, {}]
+    for f in bad:
+        f["_gate"] = U._validate_finding(f, {})
+    U._format_bb_report("t", bad, {}, {"urls": []}, False)          # must not KeyError
+    # Bug: fast_route lowercased input -> killed case for cookies/URLs/session names
+    r = _rt.fast_route("session set userA cookie PHPSESSID=AbC123")
+    if r.get("parameters", {}).get("cookie") != "PHPSESSID=AbC123":
+        return f"fast_route lost cookie case: {r.get('parameters')}"
+    r2 = _rt.fast_route("idor check http://t/a?id=1 as userA vs userB")
+    if r2.get("parameters", {}).get("owner") != "userA":
+        return f"fast_route lost session-name case: {r2.get('parameters')}"
+    # Bug: cp1252-unsafe chars in the app-path OUTPUT (brain/executor/router prints)
+    for mod in (_br, _ex):
+        for ln in inspect.getsource(mod).splitlines():
+            if ("print" in ln or "f\"" in ln) and not ln.lstrip().startswith("#"):
+                for ch in ln:
+                    if ord(ch) > 127:
+                        try: ch.encode("cp1252")
+                        except Exception: return f"cp1252-unsafe char {hex(ord(ch))} in {mod.__name__} output"
+    return True
+
+run_test("App-path: chain-seam bugs (report/route-case/cp1252)", _chain_seam_bugs)
