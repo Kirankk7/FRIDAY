@@ -164,7 +164,7 @@ def process_input(
 
         except Exception as e:
             print(
-                f"🔴 Fast path "
+                f"[brain] Fast path "
                 f"error: {e}"
             )
 
@@ -292,7 +292,7 @@ User:
     )
 
     print(
-        f"🧠 Brain "
+        f"[brain] "
         f"response: "
         f"{response[:100]}"
         f"..."

@@ -32,7 +32,7 @@ def execute_plan(plan):
 
         print(
             f"[STEP] "
-            f"{tool} → "
+            f"{tool} -> "
             f"{action}"
         )
 

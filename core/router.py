@@ -2432,8 +2432,11 @@ def fast_route(
                 0.99
             }
 
+    # fall through to the full router — pass the ORIGINAL input (not the lowercased `text`)
+    # so route_single_intent's text_raw can preserve case for cookies / URLs / session names
+    # (idor/replay/session-set/graphql). Lowercasing here broke "userA" -> "usera".
     return route_single_intent(
-        text
+        user_input
     )
 
 
