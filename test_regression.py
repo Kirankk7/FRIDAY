@@ -3554,6 +3554,27 @@ sys.exit(0 if _fail == 0 else 1)
 
 
 # 40-day chaining dogfood regressions (JARVIS app-path seam bugs, 2026-06-28)
+
+def _test_rate_gate():
+    """The program rate-limiter must pace EVERY request seam (crawl/probe/idor) to roe.rate_limit_rps
+    — the compliance guard for strict bug-bounty caps (e.g. 1win = 5 req/s)."""
+    import os, json, time, importlib
+    os.makedirs("data", exist_ok=True)
+    bak = open("data/roe.json", encoding="utf-8").read() if os.path.exists("data/roe.json") else None
+    try:
+        json.dump({"rate_limit_rps": 5}, open("data/roe.json", "w", encoding="utf-8"))
+        import agents.ultron.ultron_agent as u
+        u._RATE_LAST[0] = 0.0
+        t = time.time()
+        for _ in range(6):
+            u._rate_gate("https://public.example.com/x")     # public host, capped at 5/s
+        dt = time.time() - t
+        assert dt >= 0.9, f"rate gate did not pace (6 reqs @5rps took {dt:.2f}s, want >=1.0s)"
+    finally:
+        if bak is not None: open("data/roe.json", "w", encoding="utf-8").write(bak)
+        elif os.path.exists("data/roe.json"): os.remove("data/roe.json")
+    return True
+
 def _chain_seam_bugs():
     import core.router as _rt, core.executor as _ex, core.brain as _br, inspect
     U = _ult.ultron_agent
@@ -3579,4 +3600,5 @@ def _chain_seam_bugs():
                         except Exception: return f"cp1252-unsafe char {hex(ord(ch))} in {mod.__name__} output"
     return True
 
+run_test("Rate gate: paces requests to roe.rate_limit_rps", _test_rate_gate)
 run_test("App-path: chain-seam bugs (report/route-case/cp1252)", _chain_seam_bugs)
