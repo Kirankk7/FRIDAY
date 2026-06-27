@@ -169,7 +169,7 @@ class VeronicaAgent:
             if website:
 
                 print(
-                    f"🌐 Website fallback: "
+                    f"[web] Website fallback: "
                     f"{app}"
                 )
 
@@ -257,7 +257,7 @@ class VeronicaAgent:
                 self.current_browser = app
 
                 print(
-                    f"🌐 Active browser: "
+                    f"[web] Active browser: "
                     f"{app}"
                 )
 
@@ -401,7 +401,7 @@ class VeronicaAgent:
             )
 
             print(
-                f"🌐 Using browser: "
+                f"[web] Using browser: "
                 f"{browser}"
             )
 

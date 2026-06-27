@@ -7,8 +7,8 @@ Webhook trigger is reachable at {N8N_BASE_URL}/webhook/{path}.
 
 Setup (one-time):
     docker run -it --rm -p 5678:5678 -v n8n_data:/home/node/.n8n n8nio/n8n
-    → open http://localhost:5678 → build a workflow → add a Webhook trigger
-    → JARVIS triggers it with "run workflow <path>".
+    -> open http://localhost:5678 -> build a workflow -> add a Webhook trigger
+    -> JARVIS triggers it with "run workflow <path>".
 
 Graceful when n8n isn't running — never crashes, returns a clear message.
 """

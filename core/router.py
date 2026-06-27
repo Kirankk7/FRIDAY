@@ -12,7 +12,7 @@ from core.folder_memory import (
 def safe_fallback():
 
     print(
-        "⚠ SAFE FALLBACK USED"
+        "[router] SAFE FALLBACK USED"
     )
 
     return {
@@ -69,7 +69,7 @@ def suggest_clarification(text: str):
     """Return a clarify decision if text looks command-ish but didn't route. Else None."""
     t = text.lower().strip()
 
-    # Too short → let normal chat handle it
+    # Too short -> let normal chat handle it
     if len(t) < 3:
         return None
 
@@ -83,7 +83,7 @@ def suggest_clarification(text: str):
     if re.match(r"^(i|i'm|im|i've|ive|my|we|he|she|they|it|that|this|there|you|your)\b", t):
         return None
 
-    # Question words that aren't command-shaped → let chat/LLM handle
+    # Question words that aren't command-shaped -> let chat/LLM handle
     if re.match(r"^(why|how come|do you think|what do you think|tell me a)\b", t):
         return None
 
@@ -679,7 +679,7 @@ def route_single_intent(
     if _m:
         return {"tool": "ultron", "action": "full_pipeline", "parameters": {"target": _m.group(1).strip()}, "confidence": 0.99}
 
-    # Phase 54 — bug-bounty workflow (recon → hunt → validate → report)
+    # Phase 54 — bug-bounty workflow (recon -> hunt -> validate -> report)
     _m = re.match(r"(?:bug bounty|bugbounty|full hunt(?: on)?|hunt|bug hunt(?: on)?|run bug bounty on?)\s+(?!notes?\b|methodology\b|playbook\b)(.+)", text)
     if _m:
         return {"tool": "ultron", "action": "bug_bounty", "parameters": {"target": _m.group(1).strip()}, "confidence": 0.98}
@@ -837,7 +837,7 @@ def route_single_intent(
                                "args": (_m.group(2) or "").strip()},
                 "confidence": 0.96}
 
-    # multi-page BFS crawl (follow links → full param surface across sub-pages) — before katana
+    # multi-page BFS crawl (follow links -> full param surface across sub-pages) — before katana
     _m = re.match(r"(?:multi[\s-]?page[\s-]?crawl|crawl[\s-]?site|site[\s-]?crawl|deep[\s-]?crawl|crawl\s+site|crawl\s+all\s+pages)\s+(?:on\s+)?(.+)", text)
     if _m:
         return {"tool": "ultron", "action": "crawl_site", "parameters": {"target": _m.group(1).strip()}, "confidence": 0.96}
@@ -851,7 +851,7 @@ def route_single_intent(
     if _m:
         return {"tool": "ultron", "action": "content_discovery", "parameters": {"target": _m.group(1).strip()}, "confidence": 0.98}
 
-    # SPA render-crawl (headless browser → capture JS app's API surface)
+    # SPA render-crawl (headless browser -> capture JS app's API surface)
     _m = re.match(r"(?:spa[\s-]?crawl|render[\s-]?crawl|(?:crawl|render)\s+spa|js[\s-]?crawl)\s+(?:on\s+)?(.+)", text)
     if _m:
         return {"tool": "ultron", "action": "spa_crawl", "parameters": {"target": _m.group(1).strip()}, "confidence": 0.98}
@@ -936,7 +936,7 @@ def route_single_intent(
     if text in ("list tracked cves", "show tracked cves", "cve watchlist", "tracked cves", "my cves", "show cves"):
         return {"tool": "ultron", "action": "cve_list", "parameters": {}, "confidence": 0.99}
 
-    # ── CVE → asset correlation (Phase 51 #9) ──
+    # ── CVE -> asset correlation (Phase 51 #9) ──
     if text in (
         "correlate cves", "correlate threats", "threat correlation",
         "am i affected", "am i exposed", "check my exposure", "check exposure",
@@ -1061,7 +1061,7 @@ def route_single_intent(
         if _lead in algo_map:
             algo = algo_map[_lead]
             target = target[len(target.split()[0]):].strip()
-        if target.lower().startswith("of "):   # "hash sha256 OF mypassword" → drop the "of"
+        if target.lower().startswith("of "):   # "hash sha256 OF mypassword" -> drop the "of"
             target = target[3:].strip()
         return {"tool": "ultron", "action": "hash_target", "parameters": {"target": target, "algorithm": algo}, "confidence": 0.95}
 
@@ -1283,7 +1283,7 @@ def route_single_intent(
     # =====================================
     # VISION — NEWS / FACTUAL QUICK SEARCH
     # Catches "check X", "when is X", "find out X", etc.
-    # Bypasses LLM router → fast RSS response instead of full Athena report.
+    # Bypasses LLM router -> fast RSS response instead of full Athena report.
     # =====================================
     _news_m = re.match(
         r"^(?:check|look up|lookup|find out|when is|when are|when will|"
@@ -1595,7 +1595,7 @@ def route_single_intent(
                 "list open windows", "show open windows", "open windows"):
         return {"tool": "terminator", "action": "list_windows", "parameters": {}, "confidence": 0.97}
 
-    # focus / switch to a WINDOW (tab variants handled earlier → veronica)
+    # focus / switch to a WINDOW (tab variants handled earlier -> veronica)
     _m = re.match(r"(?:focus|switch to|bring(?: up)?|go to|activate)\s+(?:the\s+)?(.+?)\s+window", text)
     if _m:
         return {"tool": "terminator", "action": "focus_window", "parameters": {"title": _m.group(1).strip()}, "confidence": 0.95}
@@ -2105,7 +2105,7 @@ def route_single_intent(
     ):
         return {"tool": "self_improvement", "action": "directive", "parameters": {}, "confidence": 0.99}
 
-    # "what did the/that <noun> find/say/return" → recall by keyword
+    # "what did the/that <noun> find/say/return" -> recall by keyword
     _m = re.match(r"what did (?:the |that |my )?(\w+) (?:find|say|return|show|report|give)", text)
     if _m:
         return {"tool": "system", "action": "recall_result",

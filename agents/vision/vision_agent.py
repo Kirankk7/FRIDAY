@@ -357,7 +357,7 @@ Answer:"""
             "who", "what", "their", "in"
         }
         words = query.lower().split()
-        # Strip possessives: "portugal's" → "portugal", "man's" → "man"
+        # Strip possessives: "portugal's" -> "portugal", "man's" -> "man"
         clean_words = [re.sub(r"'s?$", "", w) for w in words]
         name_words = [w for w in clean_words if w and w not in _stop]
         subject = " ".join(name_words).strip()
@@ -474,7 +474,7 @@ Answer:"""
                 return {"success": False,
                         "message": f"Flight {flight_no} not currently airborne / not found.", "data": {}}
             details = (
-                f"Flight {flight_no}: {getattr(match,'origin_airport_iata','?')} → "
+                f"Flight {flight_no}: {getattr(match,'origin_airport_iata','?')} -> "
                 f"{getattr(match,'destination_airport_iata','?')}, "
                 f"alt {getattr(match,'altitude','?')}ft, "
                 f"speed {getattr(match,'ground_speed','?')}kts, "

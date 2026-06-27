@@ -16,4 +16,4 @@ def is_browser_enabled() -> bool:
 def set_browser_enabled(value: bool) -> None:
     global _browser_enabled
     _browser_enabled = value
-    print(f"[runtime_flags] BROWSER_ENABLED → {value}")
+    print(f"[runtime_flags] BROWSER_ENABLED -> {value}")

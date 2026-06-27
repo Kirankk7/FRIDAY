@@ -160,7 +160,7 @@ def run_cognitive_loop(
             )
 
         # ==========================
-        # NEWS CONTEXT → spoken LLM summary
+        # NEWS CONTEXT -> spoken LLM summary
         # ==========================
         if response and response.startswith("__NEWS_CONTEXT__"):
             ctx = response.replace("__NEWS_CONTEXT__", "").strip()
@@ -298,7 +298,7 @@ def run_cognitive_loop_stream(
             response = results[0] if results else "Done."
 
         # ==========================
-        # NEWS CONTEXT → fast spoken LLM summary (streaming)
+        # NEWS CONTEXT -> fast spoken LLM summary (streaming)
         # ==========================
         if response and response.startswith("__NEWS_CONTEXT__"):
             # Parse headlines block, synthesize spoken answer via LLM stream
@@ -317,7 +317,7 @@ def run_cognitive_loop_stream(
             response = "".join(full)
 
         # ==========================
-        # DEAD RESPONSE → LLM stream
+        # DEAD RESPONSE -> LLM stream
         # ==========================
         elif not response or len(response.strip()) < 2 or response.strip().lower() in _dead:
             llm_input = enriched_input if enriched_input else user_input

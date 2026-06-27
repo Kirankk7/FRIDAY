@@ -29,7 +29,7 @@ if not log.handlers:
     log.propagate = False
 
 
-# ── stdout/stderr tee → routes print() lines into the logger ──────────────────
+# ── stdout/stderr tee -> routes print() lines into the logger ──────────────────
 class _StreamToLogger:
     """Wrap a stream: echo to console AND emit complete lines to the logger."""
 
@@ -69,7 +69,7 @@ _tee_installed = False
 
 
 def install_tee():
-    """Redirect stdout→INFO, stderr→ERROR through the logger. Idempotent."""
+    """Redirect stdout->INFO, stderr->ERROR through the logger. Idempotent."""
     global _tee_installed
     if _tee_installed:
         return

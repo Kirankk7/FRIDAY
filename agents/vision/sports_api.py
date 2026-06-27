@@ -140,7 +140,7 @@ def _find_team(name: str, api_key: str) -> tuple:
     if name_lower in _TEAM_IDS:
         return _TEAM_IDS[name_lower], name.title()
 
-    # Word-level partial match — "man united" → ["man","united"] both in "manchester united"
+    # Word-level partial match — "man united" -> ["man","united"] both in "manchester united"
     query_words = name_lower.split()
     for known, tid in _TEAM_IDS.items():
         # All query words must appear in the known name (as substrings of words or whole words)
@@ -148,7 +148,7 @@ def _find_team(name: str, api_key: str) -> tuple:
         if all(any(qw in kw for kw in known_words) for qw in query_words):
             return tid, known.title()
 
-    # Prefix match — "port" → "porto" or "portugal" (only if unique)
+    # Prefix match — "port" -> "porto" or "portugal" (only if unique)
     matches = [(k, v) for k, v in _TEAM_IDS.items() if k.startswith(name_lower)]
     if len(matches) == 1:
         return matches[0][1], matches[0][0].title()

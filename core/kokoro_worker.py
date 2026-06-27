@@ -5,9 +5,9 @@ Spawned by voice.py as a subprocess — completely isolated from CTranslate2 (Wh
 Reads JSON requests from stdin, writes JSON results to stdout.
 
 Protocol:
-  startup → prints {"status":"ready"}
-  request → {"text":"...", "filename":"...", "agent":"..."}
-  response← {"ok": true/false}
+  startup -> prints {"status":"ready"}
+  request -> {"text":"...", "filename":"...", "agent":"..."}
+  response<- {"ok": true/false}
 """
 
 import os

@@ -24,7 +24,7 @@ ultron:
   - log_check()                             — check system logs for suspicious entries
   - export_html()                           — export last report as HTML to Desktop
   - full_pipeline(target: str)              — full 5-stage pipeline: nmap+subfinder+httpx+nuclei+katana+screenshot
-  - bug_bounty(target: str)                 — full bug-bounty hunt: recon → parse findings → CVE/exploit lookup → validate → PoC report
+  - bug_bounty(target: str)                 — full bug-bounty hunt: recon -> parse findings -> CVE/exploit lookup -> validate -> PoC report
   - katana_crawl(target: str)               — crawl target URLs with Katana
   - take_screenshot(target: str)            — headless screenshot of a URL
   - find_exploits(cve_id: str)              — search GitHub + NVD + Exploit-DB for CVE PoCs

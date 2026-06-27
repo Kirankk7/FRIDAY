@@ -1,6 +1,6 @@
 """
 Phase 21 — Echo Agent (real implementation)
-LLM generates Python tool code → validates → registers into tools_registry.
+LLM generates Python tool code -> validates -> registers into tools_registry.
 """
 
 import os

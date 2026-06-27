@@ -1,7 +1,7 @@
 """
 Phase 28 — Fully Autonomous Voice Pipeline
 
-Wake word detected → record command → STT → brain → sentence-chunked TTS → repeat.
+Wake word detected -> record command -> STT -> brain -> sentence-chunked TTS -> repeat.
 No browser, no push-to-talk. Runs as a daemon thread.
 
 Usage:
@@ -158,7 +158,7 @@ class VoiceLoop:
 
     # ── Barge-in monitor (Phase 51 #10) ────────────────────────────────────
     def _monitor_barge(self):
-        """Run while JARVIS speaks. Sustained mic speech → trip barge + stop TTS."""
+        """Run while JARVIS speaks. Sustained mic speech -> trip barge + stop TTS."""
         try:
             import sounddevice as sd
             from config import BARGE_RMS_THRESHOLD, BARGE_SUSTAIN_CHUNKS
@@ -223,7 +223,7 @@ class VoiceLoop:
             try:
                 # Brief acknowledgement beep via speak
                 # (short enough to not feel laggy)
-                # speak_async("Yes?")   ← optional, uncomment if desired
+                # speak_async("Yes?")   <- optional, uncomment if desired
 
                 wav_path = _record_command()
                 if not wav_path:
@@ -246,7 +246,7 @@ class VoiceLoop:
                         speak_async("Didn't catch that, boss.")
                         continue
 
-                    # Process → speak, with barge-in (interrupt + relisten loop)
+                    # Process -> speak, with barge-in (interrupt + relisten loop)
                     try:
                         from config import BARGE_IN_ENABLED
                     except Exception:

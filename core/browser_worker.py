@@ -22,7 +22,7 @@ class BrowserWorker:
         self.last_results = []
 
         # Phase 20 — tab registry
-        self.pages = {}        # label (str) → Page
+        self.pages = {}        # label (str) -> Page
         self.active_label = None
 
     def start(self):
@@ -40,7 +40,7 @@ class BrowserWorker:
         self.worker_thread.start()
 
         print(
-            "🌐 Browser Worker Started"
+            "[web] Browser Worker Started"
         )
 
     def stop(self):
@@ -608,7 +608,7 @@ class BrowserWorker:
                 }
 
             msg = "\n".join(
-                f"{l['text']} → {l['href']}"
+                f"{l['text']} -> {l['href']}"
                 for l in links
             )
 
@@ -691,7 +691,7 @@ class BrowserWorker:
                     t = pg.title() or pg.url
                 except Exception:
                     t = "(closed)"
-                marker = " ◀ active" if lbl == self.active_label else ""
+                marker = " < active" if lbl == self.active_label else ""
                 lines.append(f"  {lbl}: {t}{marker}")
 
             msg = "Open tabs:\n" + "\n".join(lines)

@@ -106,7 +106,7 @@ class AthenaAgent:
                 return {"success": True, "message": f"No repos found for '{query}'.", "data": {}}
             lines = []
             for it in items[:n]:
-                lines.append(f"{it['full_name']} ⭐{it['stargazers_count']:,} — {(it.get('description') or '')[:80]}")
+                lines.append(f"{it['full_name']} {it['stargazers_count']:,} — {(it.get('description') or '')[:80]}")
             return {"success": True,
                     "message": f"Top GitHub repos for '{query}':\n" + "\n".join(lines),
                     "data": {"repos": [it["full_name"] for it in items]}}

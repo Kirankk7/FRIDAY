@@ -23,7 +23,7 @@ class BrowserAgent:
     # =====================================
     def ensure_started(self):
 
-        # Browser off → raise so every caller's try/except returns a clean
+        # Browser off -> raise so every caller's try/except returns a clean
         # message instead of blocking forever on a worker that never started.
         if not is_browser_enabled():
             raise RuntimeError(

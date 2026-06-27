@@ -20,7 +20,7 @@ _lock_b = threading.Lock()
 
 SAMPLE_RATE = 24000
 
-# Agent → (voice_id, lang_code)
+# Agent -> (voice_id, lang_code)
 KOKORO_VOICES = {
     "friday":   ("af_heart",   "a"),   # warm American female
     "athena":   ("af_sky",     "a"),   # clear analytical female
@@ -60,7 +60,7 @@ def _get_pipeline(lang_code: str):
 def synthesize(text: str, agent: str = "default") -> bytes:
     """
     Synthesize text to WAV bytes.
-    Returns raw WAV bytes (24 kHz mono float32 → 16-bit PCM).
+    Returns raw WAV bytes (24 kHz mono float32 -> 16-bit PCM).
     """
     voice_id, lang_code = KOKORO_VOICES.get(agent, DEFAULT_VOICE)
 
@@ -76,7 +76,7 @@ def synthesize(text: str, agent: str = "default") -> bytes:
 
     audio_np = np.concatenate(chunks)
 
-    # Convert float32 → int16 PCM WAV in-memory
+    # Convert float32 -> int16 PCM WAV in-memory
     import soundfile as sf
     buf = io.BytesIO()
     sf.write(buf, audio_np, SAMPLE_RATE, format="WAV", subtype="PCM_16")
