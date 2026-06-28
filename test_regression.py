@@ -2156,6 +2156,40 @@ run_test("Router: 'find exploits for CVE-2021-44228'", _route("find exploits for
 run_test("Router: 'bug bounty example.com' → bug_bounty", _route("bug bounty example.com", "ultron", "bug_bounty"))
 run_test("Router: 'hunt example.com' → bug_bounty",       _route("hunt example.com", "ultron", "bug_bounty"))
 
+# Crypto / encoding toolkit (deterministic, case-preserving payloads)
+def _crypto_route(text, op):
+    def _():
+        r = route_single_intent(text)
+        if r.get("tool") != "crypto":
+            return f"Expected tool=crypto, got {r.get('tool')}"
+        got = r.get("parameters", {}).get("op")
+        return True if got == op else f"Expected op={op}, got {got}"
+    return _
+
+def _crypto_ops_roundtrip():
+    from core import crypto_tools as ct
+    if ct.execute("base64_decode", "SGVsbG8=")["result"] != "Hello":
+        return "base64_decode wrong"
+    if ct.execute("base64_encode", "Hello")["result"] != "SGVsbG8=":
+        return "base64_encode wrong"
+    if ct.execute("md5_hash", "hello")["result"] != "5d41402abc4b2a76b9719d911017c592":
+        return "md5 wrong"
+    if ct.execute("rot13", "uryyb")["result"] != "hello":
+        return "rot13 wrong"
+    if "admin" not in ct.execute("jwt_decode", "eyJhbGciOiJIUzI1NiJ9.eyJ1c2VyIjoiYWRtaW4ifQ.x")["result"]:
+        return "jwt_decode wrong"
+    if not ct.execute("zzz_nope", "x")["error"]:
+        return "unknown op should error"
+    return True
+
+run_test("Router: 'base64 decode SGVsbG8=' (case kept)", _crypto_route("base64 decode SGVsbG8=", "base64_decode"))
+run_test("Router: 'decode base64 X' → base64_decode",    _crypto_route("decode base64 SGVsbG8=", "base64_decode"))
+run_test("Router: 'md5 hello' → md5_hash",               _crypto_route("md5 hello", "md5_hash"))
+run_test("Router: 'jwt decode <token>' → jwt_decode",    _crypto_route("jwt decode eyJhbGci.eyJ1.x", "jwt_decode"))
+run_test("Router: 'rot13 uryyb' → rot13",                _crypto_route("rot13 uryyb", "rot13"))
+run_test("Router: 'decode <token>' → auto_decode",       _crypto_route("decode aGVsbG8=", "auto_decode"))
+run_test("Crypto: core ops round-trip + error",          _crypto_ops_roundtrip)
+
 # Phase 36 — HackingTool fleet
 run_test("Router: 'ht search subdomain' → ht_search",     _route("ht search subdomain", "ultron", "ht_search"))
 run_test("Router: 'search hacking tools holehe' → ht_search", _route("search hacking tools holehe", "ultron", "ht_search"))

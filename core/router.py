@@ -1041,6 +1041,49 @@ def route_single_intent(
                 "how charged is my laptop", "battery charge"):
         return {"tool": "system", "action": "battery_status", "parameters": {}, "confidence": 0.99}
 
+    # ── Crypto / encoding toolkit (deterministic; payload captured case-sensitively) ──
+    _CSCHEME = {"base64": "base64", "b64": "base64", "base32": "base32", "base58": "base58",
+                "hex": "hex", "url": "url", "html": "html", "unicode": "unicode",
+                "rot13": "rot13", "morse": "morse", "caesar": "caesar", "jwt": "jwt"}
+
+    def _crypto_op(scheme, verb):
+        base = _CSCHEME[scheme]
+        if base == "rot13":
+            return "rot13" if verb == "encode" else "rot13_decode"
+        return f"{base}_{verb}"
+
+    _scheme_alt = "base64|b64|base32|base58|hex|url|html|unicode|rot13|morse|caesar|jwt"
+    # "md5 X" / "sha256 hash of X"
+    _m = re.match(r"(md5|sha1|sha256|sha512)\s+(?:hash\s+(?:of\s+)?|of\s+)?(.+)$", text_raw, re.I)
+    if _m:
+        return {"tool": "crypto", "action": "crypto",
+                "parameters": {"op": f"{_m.group(1).lower()}_hash", "input": _m.group(2)},
+                "confidence": 0.97}
+    # "base64 decode SGVsbG8="
+    _m = re.match(rf"({_scheme_alt})\s+(encode|decode)\s+(.+)$", text_raw, re.I)
+    if _m:
+        return {"tool": "crypto", "action": "crypto",
+                "parameters": {"op": _crypto_op(_m.group(1).lower(), _m.group(2).lower()),
+                               "input": _m.group(3)}, "confidence": 0.97}
+    # "decode base64 SGVsbG8=" (optional this/the)
+    _m = re.match(rf"(encode|decode)\s+(?:this\s+|the\s+)?({_scheme_alt})\s+(.+)$", text_raw, re.I)
+    if _m:
+        return {"tool": "crypto", "action": "crypto",
+                "parameters": {"op": _crypto_op(_m.group(2).lower(), _m.group(1).lower()),
+                               "input": _m.group(3)}, "confidence": 0.97}
+    # "rot13 uryyb" shorthand (self-inverse)
+    _m = re.match(r"rot13\s+(.+)$", text_raw, re.I)
+    if _m:
+        return {"tool": "crypto", "action": "crypto",
+                "parameters": {"op": "rot13", "input": _m.group(1)}, "confidence": 0.95}
+    if text in ("crypto ops", "list crypto", "list crypto ops", "crypto tools", "encoding tools"):
+        return {"tool": "crypto", "action": "list_ops", "parameters": {}, "confidence": 0.97}
+    # bare "decode <single-token>" -> auto-detect (no scheme matched above)
+    _m = re.match(r"(?:auto[\s-]?decode|decode this|decode)\s+(\S+)\s*$", text_raw, re.I)
+    if _m:
+        return {"tool": "crypto", "action": "crypto",
+                "parameters": {"op": "auto_decode", "input": _m.group(1)}, "confidence": 0.9}
+
     # DNS lookup — only when target is domain/IP shaped (avoids grabbing "look up <topic>")
     _dns_m = re.match(r"(?:dns lookup|look ?up|nslookup|resolve|who owns|reverse dns|ip of|ip for)\s+(\S+)", text)
     if _dns_m:
