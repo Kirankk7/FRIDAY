@@ -12,6 +12,7 @@ from agents.self_improvement.self_improvement_agent import self_improvement_agen
 from agents.terminator.terminator_agent import terminator_agent
 from agents.automation.n8n_agent import n8n_agent
 from agents.automation.routines_agent import routines_agent
+from agents.crypto.crypto_agent import crypto_agent
 from core.scheduler import scheduler
 
 
@@ -31,6 +32,7 @@ TOOLS = {
     "terminator": terminator_agent,
     "n8n": n8n_agent,
     "routines": routines_agent,
+    "crypto": crypto_agent,
 }
 
 
