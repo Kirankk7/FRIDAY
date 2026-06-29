@@ -135,11 +135,20 @@ def main():
     ap.add_argument("--inproc", action="store_true")
     ap.add_argument("--quiet", action="store_true")
     ap.add_argument("--heavy", action="store_true", help="include heavy (network/scan) inputs")
+    ap.add_argument("--record", default="", help="record run_id; dumps replies to "
+                    "data/chat_replies/<run_id>.jsonl for review by chat_review.py")
     args = ap.parse_args()
 
     rows = load_corpus()
     if not args.heavy:
         rows = [r for r in rows if not r.get("heavy")]
+
+    rec_path = None
+    if args.record:
+        rec_dir = os.path.join(ROOT, "data", "chat_replies")
+        os.makedirs(rec_dir, exist_ok=True)
+        rec_path = os.path.join(rec_dir, f"{args.record}.jsonl")
+        open(rec_path, "w", encoding="utf-8").close()       # truncate
     if not args.inproc:
         import requests
         try:
@@ -151,14 +160,23 @@ def main():
     results, fails = [], 0
     for row in rows:
         msg = _expand(row["input"])
+        t0 = time.time()
         if args.inproc:
             answer, agent, status = drive_inproc(msg, args.timeout)
         else:
             answer, agent, status = drive_live(args.base, msg, args.timeout)
+        latency_ms = int((time.time() - t0) * 1000)
         verdict, reason = classify(row, answer, agent, status)
         if verdict == "FAIL":
             fails += 1
         results.append((verdict, row["kind"], row["input"][:38], reason))
+        if rec_path:
+            with open(rec_path, "a", encoding="utf-8") as f:
+                f.write(json.dumps({
+                    "input": row["input"], "kind": row["kind"], "agent": agent,
+                    "reply": answer, "status": status, "verdict": verdict,
+                    "latency_ms": latency_ms, "expect": row.get("expect", {}),
+                }, ensure_ascii=False) + "\n")
         if not args.quiet:
             mark = {"PASS": "OK ", "FAIL": "XX ", "WARN": "?? "}[verdict]
             print(f"{mark} [{row['kind']:6}] {row['input'][:38]:38} -> {reason}")

@@ -452,7 +452,13 @@ Answer:"""
         try:
             from deep_translator import GoogleTranslator
             out = GoogleTranslator(source="auto", target=tgt).translate(text)
-            return {"success": True, "message": out, "data": {"target": tgt, "original": text}}
+            if not out or not out.strip():
+                return {"success": False,
+                        "message": f"Couldn't translate '{text}' to {tgt} — got an empty result back.",
+                        "data": {"target": tgt, "original": text}}
+            return {"success": True,
+                    "message": f"In {tgt}, that's: {out}",
+                    "data": {"target": tgt, "original": text, "translation": out}}
         except Exception as e:
             return {"success": False, "message": f"Translation failed: {e}", "data": {}}
 

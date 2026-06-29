@@ -2248,6 +2248,40 @@ def _friday_rejects_empty():
 
 run_test("Friday: add_task/goal/note reject empty text (S23 fix)", _friday_rejects_empty)
 
+# Composer (Step G of polish pass) — gate logic (no LLM call, all deterministic)
+def _composer_gates():
+    from core import composer
+    import config
+    saved = getattr(config, "COMPOSER_ENABLED", False)
+    try:
+        # OFF by default = never polish (no LLM cost on every reply)
+        config.COMPOSER_ENABLED = False
+        big = "foo bar baz qux " * 80  # >600 chars, no periods
+        if composer.should_polish(big):
+            return "off-default should NOT polish"
+        if composer.polish_if_needed(big) != big:
+            return "off-default should return original"
+        # ON: long+flagged -> polish; short or unflagged -> don't
+        config.COMPOSER_ENABLED = True
+        if not composer.should_polish(big):
+            return "on+long+wall should polish"
+        if composer.should_polish("Task added, boss: buy milk"):
+            return "on+short+conv should NOT polish"
+        if composer.should_polish("normal sentence ending in period. " * 30):
+            return "on+long+well-punctuated should NOT polish (no flag)"
+        # flag classes
+        if "raw_path" not in composer._flags("C:/path/file.txt"):
+            return "path-only should flag raw_path"
+        if "json_dump" not in composer._flags('{"a":1}'):
+            return "json should flag json_dump"
+        if "generic" not in composer._flags("Done."):
+            return "Done. should flag generic"
+        return True
+    finally:
+        config.COMPOSER_ENABLED = saved
+
+run_test("Composer: gate logic (off-default, length+flag rules)", _composer_gates)
+
 # Phase 36 — HackingTool fleet
 run_test("Router: 'ht search subdomain' → ht_search",     _route("ht search subdomain", "ultron", "ht_search"))
 run_test("Router: 'search hacking tools holehe' → ht_search", _route("search hacking tools holehe", "ultron", "ht_search"))

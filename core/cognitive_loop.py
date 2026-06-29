@@ -327,7 +327,13 @@ def run_cognitive_loop_stream(
                 yield token
             response = "".join(full)
         else:
-            yield clean_response(response)
+            # Tool returned a one-shot reply. If it's a long raw dump (file list, scan
+            # report, JSON blob), gated composer narrates it Siri/Gemini-style. Bypassed
+            # for short/conversational replies (vast majority). config.COMPOSER_ENABLED
+            # gates the LLM call; never raises (composer returns original on any error).
+            from core import composer
+            cleaned = clean_response(response)
+            yield composer.polish_if_needed(cleaned, user_input=user_input)
 
         reflection = reflect_on_response(user_input, response)
         save_reflection(reflection)

@@ -40,6 +40,12 @@ AUTOTUNE_ENABLED = os.getenv("AUTOTUNE_ENABLED", "1") not in ("0", "false", "Fal
 # Off by default — it doubles latency on those long calls. Set to 1 to enable.
 CRITIC_ENABLED = os.getenv("CRITIC_ENABLED", "0") not in ("0", "false", "False")
 
+# ── Polish pass (gated LLM-rewrap for raw-dump tool replies) ──
+# Fires ONLY on long replies (>600 chars) with raw-data signals (paths/JSON/walls).
+# Short conversational replies bypass (vast majority). Off by default — adds one
+# extra LLM call to the offending replies only. Toggle live: no restart needed.
+COMPOSER_ENABLED = os.getenv("COMPOSER_ENABLED", "0") not in ("0", "false", "False")
+
 # WHISPER STT CONFIG (Phase 17)
 WHISPER_MODEL   = "base"    # tiny/base/small/medium — base is good balance on RTX 4060
 WHISPER_DEVICE  = "cuda"    # cuda or cpu

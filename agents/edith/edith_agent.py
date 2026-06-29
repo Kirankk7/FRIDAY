@@ -102,7 +102,11 @@ class EdithAgent:
             return {"success": False, "message": f"EDITH save error: {e}", "data": {}}
 
         label_str = f' as "{label}"' if label else ""
-        return {"success": True, "message": f"Locked in{label_str}, boss.",
+        preview = content.strip()
+        if len(preview) > 60:
+            preview = preview[:57] + "..."
+        return {"success": True,
+                "message": f"Locked in{label_str}, boss: {preview}",
                 "data": {"entry": entry}}
 
     def search_memory(self, query: str) -> dict:
@@ -136,10 +140,11 @@ class EdithAgent:
 
         lines = []
         for e in results:
-            label_str = f'[{e["label"]}] ' if e.get("label") else ""
+            label_str = f"({e['label']}) " if e.get("label") else ""
             ts = (e.get("timestamp") or "")[:10]
-            lines.append(f"{label_str}{e['content'][:300]} ({ts})")
-        return {"success": True, "message": "\n\n".join(lines),
+            lines.append(f"  - {label_str}{e['content'][:300]} ({ts})")
+        return {"success": True,
+                "message": f"Found {len(results)} memory match(es) for '{query}':\n" + "\n".join(lines),
                 "data": {"results": results, "count": len(results)}}
 
     def get_by_label(self, label: str) -> dict:
@@ -175,10 +180,12 @@ class EdithAgent:
         rows = rows[::-1]  # chronological, matching old behavior
         lines = []
         for e in rows:
-            label_str = f'[{e["label"]}] ' if e.get("label") else ""
+            label_str = f"({e['label']}) " if e.get("label") else ""
             ts = (e.get("timestamp") or "")[:10]
-            lines.append(f"{label_str}{e['content'][:200]} ({ts})")
-        return {"success": True, "message": "\n\n".join(lines), "data": {"memories": rows}}
+            lines.append(f"  - {label_str}{e['content'][:200]} ({ts})")
+        return {"success": True,
+                "message": f"Last {len(rows)} memory entries:\n" + "\n".join(lines),
+                "data": {"memories": rows}}
 
     def run(self, input_text: str, action: str = None, parameters: dict = None) -> dict:
         try:
