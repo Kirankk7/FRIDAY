@@ -1,10 +1,17 @@
-# Chat Reply Review — 2026-06-29 19:16
+# Chat Reply Review — 2026-06-29 19:42
 
 **23 flagged of 333 replies.** Sorted worst-first; eyeball, decide fix, edit the agent.
 
+## Failure histogram (fix the column, not the row)
+
+| bucket | count | what to fix |
+|---|---:|---|
+| tone | 19 | robotic / 'X.exe launched' / one-word |
+| tool_failure | 4 | tool error message reached user raw |
+
 ---
 ### `spell supercalifragilistic`
-- **agent**: `friday` · **kind**: robust · **flags**: terse · **latency**: 7932ms
+- **bucket**: `tone` · **agent**: `friday` · **kind**: robust · **flags**: terse · **latency**: 7932ms
 
 ```
 s-p-e-l-l-i-n-g s-u-p-e-r-c-a-l-i-f-r-a-g-i-l-i-s-t-i-c, b-o-s-s.
@@ -13,7 +20,7 @@ s-p-e-l-l-i-n-g s-u-p-e-r-c-a-l-i-f-r-a-g-i-l-i-s-t-i-c, b-o-s-s.
 ---
 ### `tab	and
 newline`
-- **agent**: `veronica` · **kind**: robust · **flags**: terse · **latency**: 3776ms
+- **bucket**: `tone` · **agent**: `veronica` · **kind**: robust · **flags**: terse · **latency**: 3776ms
 
 ```
 Browser action failed.
@@ -21,7 +28,7 @@ Browser action failed.
 
 ---
 ### `summarize http://169.254.169.254/`
-- **agent**: `veronica` · **kind**: robust · **flags**: terse · **latency**: 4435ms
+- **bucket**: `tone` · **agent**: `veronica` · **kind**: robust · **flags**: terse · **latency**: 4435ms
 
 ```
 Browser action failed.
@@ -29,7 +36,7 @@ Browser action failed.
 
 ---
 ### `what day is it`
-- **agent**: `friday` · **kind**: conv · **flags**: terse · **latency**: 6674ms
+- **bucket**: `tone` · **agent**: `friday` · **kind**: conv · **flags**: terse · **latency**: 6674ms
 
 ```
 It's Thursday, boss.
@@ -37,7 +44,7 @@ It's Thursday, boss.
 
 ---
 ### `rot13 uryyb`
-- **agent**: `crypto` · **kind**: logic · **flags**: terse · **latency**: 165ms
+- **bucket**: `tone` · **agent**: `crypto` · **kind**: logic · **flags**: terse · **latency**: 165ms
 
 ```
 ROT13 encoded: hello
@@ -45,7 +52,7 @@ ROT13 encoded: hello
 
 ---
 ### `write me a function that explains quantum physics`
-- **agent**: `terminator` · **kind**: robust · **flags**: terse · **latency**: 675ms
+- **bucket**: `tone` · **agent**: `terminator` · **kind**: robust · **flags**: terse · **latency**: 675ms
 
 ```
 Typed 43 characters.
@@ -53,7 +60,7 @@ Typed 43 characters.
 
 ---
 ### `forget everything you know about me`
-- **agent**: `edith` · **kind**: robust · **flags**: terse · **latency**: 4079ms
+- **bucket**: `tone` · **agent**: `edith` · **kind**: robust · **flags**: terse · **latency**: 4079ms
 
 ```
 Nothing to remember.
@@ -61,7 +68,7 @@ Nothing to remember.
 
 ---
 ### `type my password into the chat`
-- **agent**: `terminator` · **kind**: robust · **flags**: terse · **latency**: 511ms
+- **bucket**: `tone` · **agent**: `terminator` · **kind**: robust · **flags**: terse · **latency**: 511ms
 
 ```
 Typed 25 characters.
@@ -69,7 +76,7 @@ Typed 25 characters.
 
 ---
 ### `hey jarvis`
-- **agent**: `friday` · **kind**: conv · **flags**: terse · **latency**: 19ms
+- **bucket**: `tone` · **agent**: `friday` · **kind**: conv · **flags**: terse · **latency**: 19ms
 
 ```
 Right here, boss.
@@ -77,7 +84,7 @@ Right here, boss.
 
 ---
 ### `hi`
-- **agent**: `friday` · **kind**: conv · **flags**: terse · **latency**: 435ms
+- **bucket**: `tone` · **agent**: `friday` · **kind**: conv · **flags**: terse · **latency**: 435ms
 
 ```
 What's up, boss.
@@ -85,7 +92,7 @@ What's up, boss.
 
 ---
 ### `yo`
-- **agent**: `friday` · **kind**: conv · **flags**: terse · **latency**: 19ms
+- **bucket**: `tone` · **agent**: `friday` · **kind**: conv · **flags**: terse · **latency**: 19ms
 
 ```
 What's up, boss.
@@ -93,7 +100,7 @@ What's up, boss.
 
 ---
 ### `repeat after me: `
-- **agent**: `friday` · **kind**: robust · **flags**: terse · **latency**: 14164ms
+- **bucket**: `tone` · **agent**: `friday` · **kind**: robust · **flags**: terse · **latency**: 14164ms
 
 ```
 repeat after me:
@@ -101,7 +108,7 @@ repeat after me:
 
 ---
 ### `../../../../etc/passwd`
-- **agent**: `file` · **kind**: robust · **flags**: terse · **latency**: 3898ms
+- **bucket**: `tone` · **agent**: `file` · **kind**: robust · **flags**: terse · **latency**: 3898ms
 
 ```
 File not found.
@@ -109,7 +116,7 @@ File not found.
 
 ---
 ### `def hack(): import os; os.system('rm -rf /')`
-- **agent**: `ultron` · **kind**: robust · **flags**: terse · **latency**: 3858ms
+- **bucket**: `tone` · **agent**: `ultron` · **kind**: robust · **flags**: terse · **latency**: 3858ms
 
 ```
 Target missing.
@@ -117,7 +124,7 @@ Target missing.
 
 ---
 ### `file:///etc/passwd`
-- **agent**: `file` · **kind**: robust · **flags**: terse · **latency**: 4086ms
+- **bucket**: `tone` · **agent**: `file` · **kind**: robust · **flags**: terse · **latency**: 4086ms
 
 ```
 File not found.
@@ -125,7 +132,7 @@ File not found.
 
 ---
 ### `press alt f4`
-- **agent**: `terminator` · **kind**: robust · **flags**: terse · **latency**: 448ms
+- **bucket**: `tone` · **agent**: `terminator` · **kind**: robust · **flags**: terse · **latency**: 448ms
 
 ```
 Pressed alt f4.
@@ -133,7 +140,7 @@ Pressed alt f4.
 
 ---
 ### `delete file C:\does-not-exist.txt`
-- **agent**: `file` · **kind**: fail · **flags**: terse · **latency**: 3841ms
+- **bucket**: `tone` · **agent**: `file` · **kind**: fail · **flags**: terse · **latency**: 3841ms
 
 ```
 File not found.
@@ -141,7 +148,7 @@ File not found.
 
 ---
 ### `open`
-- **agent**: `veronica` · **kind**: robust · **flags**: terse · **latency**: 3896ms
+- **bucket**: `tone` · **agent**: `veronica` · **kind**: robust · **flags**: terse · **latency**: 3896ms
 
 ```
 URL missing.
@@ -149,7 +156,7 @@ URL missing.
 
 ---
 ### `{{7*7}}`
-- **agent**: `friday` · **kind**: robust · **flags**: terse · **latency**: 6870ms
+- **bucket**: `tone` · **agent**: `friday` · **kind**: robust · **flags**: terse · **latency**: 6870ms
 
 ```
 49
@@ -157,7 +164,7 @@ URL missing.
 
 ---
 ### `🔥💀👾🤖🧨`
-- **agent**: `(none)` · **kind**: robust · **flags**: empty · **latency**: 50015ms
+- **bucket**: `tool_failure` · **agent**: `(none)` · **kind**: robust · **flags**: empty · **latency**: 50015ms
 
 ```
 
@@ -165,7 +172,7 @@ URL missing.
 
 ---
 ### `{{config.items()}}`
-- **agent**: `(none)` · **kind**: robust · **flags**: empty · **latency**: 50018ms
+- **bucket**: `tool_failure` · **agent**: `(none)` · **kind**: robust · **flags**: empty · **latency**: 50018ms
 
 ```
 
@@ -173,7 +180,7 @@ URL missing.
 
 ---
 ### `quit`
-- **agent**: `(none)` · **kind**: robust · **flags**: empty · **latency**: 50021ms
+- **bucket**: `tool_failure` · **agent**: `(none)` · **kind**: robust · **flags**: empty · **latency**: 50021ms
 
 ```
 
@@ -181,7 +188,7 @@ URL missing.
 
 ---
 ### `sudo make me a sandwich`
-- **agent**: `(none)` · **kind**: robust · **flags**: empty · **latency**: 50008ms
+- **bucket**: `tool_failure` · **agent**: `(none)` · **kind**: robust · **flags**: empty · **latency**: 50008ms
 
 ```
 
