@@ -2282,6 +2282,13 @@ def _composer_gates():
 
 run_test("Composer: gate logic (off-default, length+flag rules)", _composer_gates)
 
+# S27 — open-app paraphrase prefixes (was falling through to LLM -> edith misroute)
+run_test("Router: 'can you open chrome' -> open_app",   _route("can you open chrome", "veronica", "open_app"))
+run_test("Router: 'could you bring up chrome' -> open_app", _route("could you bring up chrome", "veronica", "open_app"))
+run_test("Router: 'fire up chrome' -> open_app",        _route("fire up chrome", "veronica", "open_app"))
+run_test("Router: 'i need chrome' -> open_app",         _route("i need chrome", "veronica", "open_app"))
+run_test("Router: 'please launch notepad' -> open_app", _route("please launch notepad", "veronica", "open_app"))
+
 # Phase 36 — HackingTool fleet
 run_test("Router: 'ht search subdomain' → ht_search",     _route("ht search subdomain", "ultron", "ht_search"))
 run_test("Router: 'search hacking tools holehe' → ht_search", _route("search hacking tools holehe", "ultron", "ht_search"))
