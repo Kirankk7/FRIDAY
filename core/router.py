@@ -192,6 +192,12 @@ def route_single_intent(
     if _PI.search(text):
         return {"tool": "chat", "action": "respond", "confidence": 0.99,
                 "parameters": {"task": "Not going to do that. My rules stay, boss — what do you actually need?"}}
+    # Template-injection / shell-meta markers in a bare input -> safe clarify, NEVER eval-route.
+    # Dogfood S32: '{{7*7}}' (SSTI marker) fell to LLM which returned '49' — looked like
+    # template eval. Treat these as adversarial, not commands.
+    if re.match(r"^\s*(?:\{\{[^}]*\}\}|\$\{[^}]*\}|<%[^%]*%>|\$\([^)]*\)|`[^`]*`)\s*$", text):
+        return {"tool": "chat", "action": "respond", "confidence": 0.99,
+                "parameters": {"task": "That looks like a template/injection marker — not running it. Tell me plainly what you'd like."}}
 
     # Exact-command fast path — O(1) before the regex chain (Phase 51 #7)
     _exact = _EXACT_ROUTES.get(text)
@@ -1710,15 +1716,33 @@ def route_single_intent(
     if _m:
         return {"tool": "terminator", "action": "get_window_text", "parameters": {"title": _m.group(1).strip()}, "confidence": 0.95}
 
-    # type text into focused window
-    _m = re.match(r"(?:type|type out|enter text|write)\s+(.+)", text)
+    # type text into focused window — REQUIRE explicit target ("into X") or quoted text.
+    # Was firing on "write me a function..." / "type my password into the chat" (treating chat
+    # questions as literal keystroke commands -> typed gibberish into whatever window was up).
+    # Dogfood S32 finding.
+    _m = re.match(r'(?:type|type out|enter text)\s+(?:"([^"]+)"|\'([^\']+)\'|(.+?))\s+(?:in|into)\s+(?:the\s+)?(.+)', text)
     if _m and not re.search(r"\b(?:task|note|goal|reminder|habit)\b", text):
-        return {"tool": "terminator", "action": "type_text", "parameters": {"text": _m.group(1).strip()}, "confidence": 0.9}
+        _content = _m.group(1) or _m.group(2) or _m.group(3)
+        return {"tool": "terminator", "action": "type_text",
+                "parameters": {"text": _content.strip(), "window": _m.group(4).strip()}, "confidence": 0.9}
 
-    # press a key combo
-    _m = re.match(r"(?:press|hit|send)\s+(.+)", text)
-    if _m and re.search(r"\b(ctrl|alt|shift|enter|tab|esc|escape|space|f\d|delete|backspace)\b", _m.group(1), re.IGNORECASE):
-        return {"tool": "terminator", "action": "press_keys", "parameters": {"keys": _m.group(1).strip()}, "confidence": 0.95}
+    # press a key combo — REQUIRE the press-shape to be SHORT (real shortcut form), and
+    # destructive combos (alt+f4, ctrl+w, ctrl+q, ctrl+shift+t) refuse without explicit confirm.
+    # Was: "press alt f4" -> closed whatever window was focused. Dogfood S32 finding.
+    _m = re.match(r"(?:press|hit|send)\s+(.+)$", text)
+    if _m and re.search(r"\b(ctrl|alt|shift|enter|tab|esc|escape|space|f\d+|delete|backspace)\b",
+                       _m.group(1), re.IGNORECASE):
+        _keys = _m.group(1).strip()
+        # only treat as a shortcut if it's short (no full sentence after the modifier)
+        if len(_keys.split()) <= 4:
+            # destructive: refuse with confirm-required
+            if re.search(r"\balt\s*[\+ ]?\s*f4\b|\bctrl\s*[\+ ]?\s*[wq]\b|\bctrl\s*[\+ ]?\s*shift\s*[\+ ]?\s*t\b",
+                         _keys, re.IGNORECASE):
+                return {"tool": "chat", "action": "respond", "confidence": 0.99,
+                        "parameters": {"task": f"That's a destructive shortcut ({_keys}) — refusing. "
+                                               f"Say 'force press {_keys}' if you really mean it."}}
+            return {"tool": "terminator", "action": "press_keys",
+                    "parameters": {"keys": _keys}, "confidence": 0.95}
 
     # click a named element in a window: "click X in Y"
     _m = re.match(r"click\s+(?:the\s+)?(.+?)\s+(?:button\s+)?in\s+(?:the\s+)?(.+)", text)
