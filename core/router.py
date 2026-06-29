@@ -623,26 +623,8 @@ def route_single_intent(
     # LIST FILES
     # =====================================
     if text in ("list files", "list my files", "list my documents", "list documents", "show my files"):
-
-        if remembered_folder:
-
-            return {
-
-                "tool":
-                "file",
-
-                "action":
-                "list_files",
-
-                "parameters": {
-
-                    "path":
-                    remembered_folder
-                },
-
-                "confidence":
-                0.99
-            }
+        return {"tool": "file", "action": "list_files",
+                "parameters": {"path": remembered_folder or ""}, "confidence": 0.97}
 
     # =====================================
     # SEARCHES
@@ -682,7 +664,7 @@ def route_single_intent(
         return {"tool": "ultron", "action": "full_pipeline", "parameters": {"target": _m.group(1).strip()}, "confidence": 0.99}
 
     # Phase 54 — bug-bounty workflow (recon -> hunt -> validate -> report)
-    _m = re.match(r"(?:bug bounty|bugbounty|full hunt(?: on)?|hunt|bug hunt(?: on)?|run bug bounty on?)\s+(?!notes?\b|methodology\b|playbook\b)(.+)", text)
+    _m = re.match(r"(?:bug bounty(?: on)?|bugbounty|full hunt(?: on)?|hunt(?: on)?|bug hunt(?: on)?|run bug bounty on?)\s+(?!notes?\b|methodology\b|playbook\b)(.+)", text)
     if _m:
         return {"tool": "ultron", "action": "bug_bounty", "parameters": {"target": _m.group(1).strip()}, "confidence": 0.98}
 
@@ -1628,8 +1610,17 @@ def route_single_intent(
     # TAB MANAGEMENT (Phase 20)
     # =====================================
     # list tabs
-    if text in ("list tabs", "show tabs", "what tabs", "what tabs do i have", "tabs", "show open tabs"):
+    if text in ("list tabs", "show tabs", "what tabs", "what tabs do i have", "tabs", "show open tabs",
+                "list my tabs", "list my browser tabs", "my tabs", "browser tabs", "show my tabs"):
         return {"tool": "veronica", "action": "list_tabs", "parameters": {}, "confidence": 0.99}
+
+    # go to / visit / navigate to a URL or domain -> open in browser
+    _m = re.match(r"(?:go to|visit|navigate to|browse to|open up)\s+((?:https?://)?[\w-]+(?:\.[\w-]+)+(?:/\S*)?)$",
+                  text_raw, re.IGNORECASE)
+    if _m:
+        url = _m.group(1).strip()
+        return {"tool": "veronica", "action": "open_url",
+                "parameters": {"url": url if url.startswith("http") else "https://" + url}, "confidence": 0.96}
 
     # new tab — "open X in a new tab" / "open new tab"
     _m = re.match(r"open (.+?) in (?:a )?new tab", text)
@@ -1672,6 +1663,10 @@ def route_single_intent(
     _m = re.match(r"(?:focus|switch to|bring(?: up)?|go to|activate)\s+(?:the\s+)?(.+?)\s+window", text)
     if _m:
         return {"tool": "terminator", "action": "focus_window", "parameters": {"title": _m.group(1).strip()}, "confidence": 0.95}
+    # "focus chrome" / "focus on notepad" — single app name, no "window" suffix
+    _m = re.match(r"focus(?:\s+on)?\s+(?:the\s+)?(\w[\w.-]*)$", text)
+    if _m:
+        return {"tool": "terminator", "action": "focus_window", "parameters": {"title": _m.group(1).strip()}, "confidence": 0.9}
 
     # read a window's text
     _m = re.match(r"(?:read|what'?s in|get text from|show me)\s+(?:the\s+)?(.+?)\s+window", text)
@@ -1865,8 +1860,8 @@ def route_single_intent(
         hrs = amount if "hour" in unit else 0
         return {"tool": "friday", "action": "set_reminder", "parameters": {"text": msg, "minutes": mins, "hours": hrs}, "confidence": 0.99}
 
-    # "remind me to X" (default 30 min)
-    _m = re.match(r"remind me (?:to )?(.+)", text)
+    # "remind me to X" / "set a reminder to X" (default 30 min)
+    _m = re.match(r"(?:remind me (?:to )?|set (?:a |an )?reminder (?:to |for )?|create (?:a )?reminder (?:to )?)(.+)", text)
     if _m and not any(x in text for x in ["know about", "remember about"]):
         return {"tool": "friday", "action": "set_reminder", "parameters": {"text": _m.group(1).strip(), "minutes": 30}, "confidence": 0.99}
 
