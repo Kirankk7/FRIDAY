@@ -2405,6 +2405,22 @@ def _scan_target_guard():
 
 run_test("Router: 'scan <vague>' clarifies vs nmap-real-target (S35)", _scan_target_guard)
 
+# S36 — emoji/symbol-only input must NOT reach LLM router (was -> nmap_scan -> hang)
+def _emoji_symbol_guard():
+    from core.router import route_single_intent as R
+    for c in ("\U0001F525\U0001F480\U0001F47E", "!@#$%^&*()", "✅❌⚠"):
+        r = R(c) or {}
+        if r.get("tool") != "chat":
+            return f"emoji/symbol {c!r} routed to {r.get('tool')}/{r.get('action')} (should be chat)"
+    # genuine language (CJK/Arabic) must NOT be caught — falls through to LLM (None here)
+    for c in ("你好世界", "hello world"):
+        r = R(c)
+        if r and r.get("tool") == "chat" and "Not sure what you mean" in r.get("parameters", {}).get("task", ""):
+            return f"false-positive on language {c!r}"
+    return True
+
+run_test("Router: emoji/symbol-only -> chat, not LLM-misroute (S36)", _emoji_symbol_guard)
+
 # Phase 36 — HackingTool fleet
 run_test("Router: 'ht search subdomain' → ht_search",     _route("ht search subdomain", "ultron", "ht_search"))
 run_test("Router: 'search hacking tools holehe' → ht_search", _route("search hacking tools holehe", "ultron", "ht_search"))

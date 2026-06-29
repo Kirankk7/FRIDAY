@@ -179,6 +179,13 @@ def route_single_intent(
     if text and len(text) <= 2 and not text.isalnum() and not re.match(r"\w", text):
         return {"tool": "chat", "action": "respond", "confidence": 0.99,
                 "parameters": {"task": "Didn't catch that, boss — could you say what you'd like me to do?"}}
+    # Emoji / symbol / punctuation-only input (NO alphabetic char in any script) can't be a
+    # command. Route to chat directly so it never reaches the LLM router, which misclassifies
+    # it as a tool call (dogfood S36: '🔥💀👾🤖🧨' -> ultron.nmap_scan -> hung on a real scan).
+    # CJK/Arabic/etc keep an alphabetic char (isalpha True), so genuine language still passes.
+    if text and not any(c.isalpha() for c in text) and not re.search(r"\d{2,}", text):
+        return {"tool": "chat", "action": "respond", "confidence": 0.95,
+                "parameters": {"task": "Not sure what you mean there, boss — what would you like me to do?"}}
     # Prompt-injection / jailbreak markers — refuse with a fixed safe reply, do NOT pass to LLM
     # (model would otherwise comply: 'I am DAN, I will follow your commands to the letter').
     _PI = re.compile(
