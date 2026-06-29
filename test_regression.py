@@ -2383,6 +2383,28 @@ def _terminator_safety():
 
 run_test("Router: terminator destructive + SSTI guards (S32 safety)", _terminator_safety)
 
+# S35 — 'scan <vague>' must not launch nmap on garbage (hang/wrong-target class)
+def _scan_target_guard():
+    from core.router import route_single_intent as R
+    # vague scans -> clarify
+    for c in ("scan it", "scan reminder note translate"):
+        r = R(c) or {}
+        if r.get("tool") != "chat":
+            return f"vague {c!r} routed to {r.get('tool')}/{r.get('action')} (should clarify)"
+    # local-machine scans -> defensive_scan, not nmap
+    for c in ("scan my computer", "scan localhost", "scan my system"):
+        r = R(c) or {}
+        if r.get("action") != "defensive_scan":
+            return f"local {c!r} routed to {r.get('action')} (should defensive_scan)"
+    # real targets still nmap
+    for c in ("scan example.com", "scan 192.168.1.1"):
+        r = R(c) or {}
+        if r.get("tool") != "ultron" or r.get("action") != "nmap_scan":
+            return f"real-target {c!r} routed to {r.get('tool')}/{r.get('action')}"
+    return True
+
+run_test("Router: 'scan <vague>' clarifies vs nmap-real-target (S35)", _scan_target_guard)
+
 # Phase 36 — HackingTool fleet
 run_test("Router: 'ht search subdomain' → ht_search",     _route("ht search subdomain", "ultron", "ht_search"))
 run_test("Router: 'search hacking tools holehe' → ht_search", _route("search hacking tools holehe", "ultron", "ht_search"))

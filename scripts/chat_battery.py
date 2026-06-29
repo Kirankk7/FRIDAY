@@ -183,6 +183,14 @@ def main():
                     save_memory_safe(mem)
             except Exception:
                 pass
+            try:
+                # reset last-agent/action so a prior heavy row doesn't leak into the next
+                # row's recorded action (was showing action='full_pipeline' on 'hello').
+                from core import state
+                state.set_last_agent("friday")
+                state.set_last_action("")
+            except Exception:
+                pass
 
     results, fails = [], 0
     for row in rows:
