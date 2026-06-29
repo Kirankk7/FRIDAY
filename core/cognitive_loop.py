@@ -288,6 +288,11 @@ def run_cognitive_loop_stream(
                 full.append(token)
                 yield token
             response = "".join(full)
+            # Backstop (S36b) — the chat LLM path can also yield nothing (model hiccup under
+            # load, e.g. 'what should i eat for dinner' -> ''). Never go silent.
+            if not response.strip():
+                response = "Hmm, I blanked on that one, boss — mind asking again?"
+                yield response
             reflection = reflect_on_response(user_input, response)
             save_reflection(reflection)
             return

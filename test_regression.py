@@ -2421,6 +2421,25 @@ def _emoji_symbol_guard():
 
 run_test("Router: emoji/symbol-only -> chat, not LLM-misroute (S36)", _emoji_symbol_guard)
 
+# S36b/c — empty-reply backstop: chat path must never yield pure silence even if the LLM
+# stream returns nothing (model hiccup under load). Mock ask_llm_stream -> empty.
+def _empty_reply_backstop():
+    import core.cognitive_loop as cl
+    saved = cl.ask_llm_stream
+    try:
+        cl.ask_llm_stream = lambda *a, **k: iter([])   # LLM yields nothing
+        # 'what should i eat for dinner' -> chat path -> empty LLM -> backstop must fire
+        out = "".join(cl.run_cognitive_loop_stream("what should i eat for dinner"))
+        if not out.strip():
+            return "chat path went SILENT on empty LLM output (backstop missing)"
+        return True
+    except Exception as e:
+        return f"backstop test error: {str(e)[:60]}"
+    finally:
+        cl.ask_llm_stream = saved
+
+run_test("Chat: empty-LLM backstop never goes silent (S36b/c)", _empty_reply_backstop)
+
 # Phase 36 — HackingTool fleet
 run_test("Router: 'ht search subdomain' → ht_search",     _route("ht search subdomain", "ultron", "ht_search"))
 run_test("Router: 'search hacking tools holehe' → ht_search", _route("search hacking tools holehe", "ultron", "ht_search"))
