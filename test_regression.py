@@ -2219,6 +2219,22 @@ run_test("Router: 'did manchester united win' → sports", _route("did mancheste
 run_test("Router: 'manchester united score' → sports",   _route("manchester united score", "vision", "sports_query"))
 run_test("Router: 'show me hacker news' → hackernews (no hijack)", _route("show me hacker news", "vision", "hackernews"))
 
+# S18 — bug_bounty unknown-scope must refuse FAST (was multi-minute auto-scan)
+def _bb_unknown_refuses_fast():
+    import time as _t
+    t = _t.time()
+    r = _ult.ultron_agent.bug_bounty("def-not-in-scope-evil.example")
+    dt = _t.time() - t
+    if dt > 5:
+        return f"unknown-scope took {dt:.1f}s — should refuse instantly"
+    if r.get("success"):
+        return f"unknown-scope unexpectedly succeeded: {r.get('message','')[:60]}"
+    if "scope" not in (r.get("message", "").lower()):
+        return f"refusal lacks scope context: {r.get('message','')[:80]}"
+    return True
+
+run_test("Ultron: bug_bounty unknown-scope refuses fast (S18 P2 fix)", _bb_unknown_refuses_fast)
+
 # Phase 36 — HackingTool fleet
 run_test("Router: 'ht search subdomain' → ht_search",     _route("ht search subdomain", "ultron", "ht_search"))
 run_test("Router: 'search hacking tools holehe' → ht_search", _route("search hacking tools holehe", "ultron", "ht_search"))
