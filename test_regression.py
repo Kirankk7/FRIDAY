@@ -2214,6 +2214,10 @@ run_test("Router: 'list my browser tabs' → veronica",     _route("list my brow
 run_test("Router: 'focus chrome' → terminator",           _route("focus chrome", "terminator", "focus_window"))
 run_test("Router: 'list my documents' → file",            _route("list my documents", "file", "list_files"))
 run_test("Router: 'set a reminder to call mom tomorrow' → friday", _route("set a reminder to call mom tomorrow", "friday", "set_reminder"))
+# S17 — sports + show-me hijack fix
+run_test("Router: 'did manchester united win' → sports", _route("did manchester united win", "vision", "sports_query"))
+run_test("Router: 'manchester united score' → sports",   _route("manchester united score", "vision", "sports_query"))
+run_test("Router: 'show me hacker news' → hackernews (no hijack)", _route("show me hacker news", "vision", "hackernews"))
 
 # Phase 36 — HackingTool fleet
 run_test("Router: 'ht search subdomain' → ht_search",     _route("ht search subdomain", "ultron", "ht_search"))

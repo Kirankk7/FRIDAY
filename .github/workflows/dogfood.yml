@@ -1,0 +1,42 @@
+name: dogfood-nightly
+
+on:
+  schedule:
+    - cron: "17 5 * * *"     # 05:17 UTC daily
+  workflow_dispatch:
+
+jobs:
+  coverage:
+    runs-on: ubuntu-latest
+    env:
+      JARVIS_CI: "1"
+      PYTHONUTF8: "1"
+      SDL_VIDEODRIVER: "dummy"
+      SDL_AUDIODRIVER: "dummy"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install CI dependencies (slim)
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-ci.txt
+
+      - name: Coverage ledger (registry-driven all-agent smoke)
+        run: python scripts/coverage.py
+
+      - name: Upload COVERAGE.md
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-ledger
+          path: COVERAGE.md
+          if-no-files-found: ignore
+
+  # Chat battery + probe-lab dogfood need Ollama / a live probe-lab process
+  # and stay LOCAL — they're already wired into scripts/dogfood_all.py.
+  # CI here only enforces the "everything dispatches" invariant.

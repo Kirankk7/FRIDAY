@@ -197,9 +197,12 @@ def route_single_intent(
       # =====================================
     # SHOW FILE TYPES
     # =====================================
-    if text.startswith(
-        "show me "
-    ):
+    # File-type intercept — ONLY for actual file categories ("show me pdfs/images/videos/
+    # documents"). Plain "show me X" must fall through (was hijacking "show me hacker news"
+    # etc -> chat/respond, an over-grab found in dogfood S17).
+    _show_me_cats = {"pdfs", "images", "videos", "documents", "pdf", "image", "video", "document"}
+    _show_me_cat = text[8:].strip() if text.startswith("show me ") else ""
+    if _show_me_cat in _show_me_cats:
 
         if not remembered_files:
 
@@ -1302,6 +1305,19 @@ def route_single_intent(
             r"what|show)\b",
             text, re.IGNORECASE
         )
+
+    # "did <team> win", "<team> score" — broaden, but only when likely a sports team
+    # (multi-word capitalized in raw / known sports tokens). Avoid generic "the test score".
+    if not _sports_kw:
+        _sports_kw = re.match(r"^did\s+[a-z][a-z\s]{2,30}\s+(?:win|lose|draw)\b", text, re.IGNORECASE)
+    if not _sports_kw and re.search(r"\b(?:united|city|fc|football\s+club|madrid|barca|chelsea|"
+                                    r"liverpool|arsenal|tottenham|psg|juventus|bayern|dortmund)\b.{0,20}"
+                                    r"\b(?:score|result)s?\b", text, re.IGNORECASE):
+        _sports_kw = True
+    # "show me hacker news" — already covered by hackernews block but the literal "show me X news"
+    # ends up here; route news intents away from sports.
+    if _sports_kw and re.search(r"\bhacker\s*news\b|\btech\s+news\b", text, re.IGNORECASE):
+        _sports_kw = False
 
     if _sports_kw:
         # Strip common query prefixes to get clean sports query
