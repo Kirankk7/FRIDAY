@@ -460,7 +460,15 @@ Answer:"""
                     "message": f"In {tgt}, that's: {out}",
                     "data": {"target": tgt, "original": text, "translation": out}}
         except Exception as e:
-            return {"success": False, "message": f"Translation failed: {e}", "data": {}}
+            msg = str(e)
+            # deep-translator dumps the full 100+ supported-languages dict on any error.
+            # Keep just the first line (the cause), drop the catalog after it.
+            msg = msg.split("\n", 1)[0]
+            if "supported languages" in msg.lower():
+                msg = msg.rstrip(": .") + " (unsupported language code)"
+            if len(msg) > 200:
+                msg = msg[:200] + "..."
+            return {"success": False, "message": f"Translation failed: {msg}", "data": {}}
 
     def track_flight(self, flight_no: str) -> dict:
         """Live flight tracking via FlightRadar24 (no key)."""

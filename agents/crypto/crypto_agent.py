@@ -16,9 +16,16 @@ class CryptoAgent:
 
             if action == "list_ops":
                 ops = crypto_tools.list_operations()
-                lines = [f"  {n} — {info['description']}" for n, info in ops.items()]
+                # speech_cleaner collapses newlines to spaces, so a literal dump becomes a
+                # wall. Summarize by category + give a few examples — full list still in data.
+                by_cat = {}
+                for n, info in ops.items():
+                    by_cat.setdefault(info["category"], []).append(n)
+                pieces = [f"{cat}: {len(names)} ({', '.join(names[:3])}{'...' if len(names)>3 else ''})"
+                          for cat, names in sorted(by_cat.items())]
                 return {"success": True,
-                        "message": f"{len(ops)} crypto ops:\n" + "\n".join(lines),
+                        "message": f"{len(ops)} crypto ops across {len(by_cat)} categories. "
+                                   + " | ".join(pieces),
                         "data": {"operations": ops}}
 
             if action == "crypto":
