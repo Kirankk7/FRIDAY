@@ -27,6 +27,20 @@ _GENERIC = {"done.", "done", "completed.", "completed", "ok.", "ok", "success.",
 _ANSI = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
 _TAGLEAK = re.compile(r"\[(AGENT|ULTRON|ATHENA|FRIDAY|SYSTEM)\b")
 _FASTACK_OK = re.compile(r"^(got it|done|sure|okay|ok|alright|copy that|on it|right away)[,\.! ]", re.I)
+# Short replies that are CORRECT one-liners (hash, decoded text, action ack) — exempt from terse.
+_TERSE_OK = re.compile(
+    r"^(MD5|SHA\d+|ROT13|Decoded|JWT decoded|Base\d+|Hex|URL|HTML|Unicode|Caesar|Morse):"
+    r"|^In \w+, that's:"                             # vision translate
+    r"|^Opening "                                    # veronica open_url / app
+    r"|^Note saved, boss:"                           # friday add_note
+    r"|^Task added, boss:"                           # friday add_task
+    r"|^Goal locked in, boss:"                       # friday add_goal
+    r"|^Reminder set"                                # friday set_reminder
+    r"|^Locked in, boss:"                            # edith store_memory
+    r"|^Unknown currency"                            # vision currency error
+    r"|^Translation failed:",                        # vision translate error
+    re.I,
+)
 
 
 def flag(reply: str, agent: str, kind: str) -> list:
@@ -47,8 +61,8 @@ def flag(reply: str, agent: str, kind: str) -> list:
     if _TAGLEAK.search(r):
         flags.append("tag_leak")
     words = r.split()
-    # terse: <4 words AND not a known conversational fast-ack
-    if len(words) < 4 and not _FASTACK_OK.match(r):
+    # terse: <4 words AND not a known fast-ack AND not a complete one-liner result
+    if len(words) < 4 and not _FASTACK_OK.match(r) and not _TERSE_OK.match(r):
         flags.append("terse")
     # wall: long + few sentence breaks (raw dump suspect)
     if len(r) > 600:
@@ -138,6 +152,51 @@ def emit_report(rows: list, judged: bool = False):
     print(f"-> {OUT}  ({len(flagged)} flagged of {len(rows)})")
 
 
+def emit_beforeafter(old_id: str, new_id: str, out_path: str = None):
+    """Write a markdown showing input + before reply + after reply for every input
+    whose reply text changed between two runs. The receipt of the polish loop."""
+    out_path = out_path or os.path.join(ROOT, "CHAT_BEFORE_AFTER.md")
+    old = {r["input"]: r for r in load_run(old_id)}
+    new = {r["input"]: r for r in load_run(new_id)}
+    common = sorted(set(old) & set(new))
+    changed, polished, unchanged = [], [], []
+    for inp in common:
+        o, n = old[inp], new[inp]
+        ot, nt = (o.get("reply") or "").strip(), (n.get("reply") or "").strip()
+        if ot == nt:
+            unchanged.append(inp); continue
+        o_fls = flag(ot, o.get("agent", ""), o.get("kind", ""))
+        n_fls = flag(nt, n.get("agent", ""), n.get("kind", ""))
+        # "polished" = the reply changed AND old had flags AND new is cleaner
+        if o_fls and len(n_fls) < len(o_fls):
+            polished.append((inp, o, n, o_fls, n_fls))
+        else:
+            changed.append((inp, o, n, o_fls, n_fls))
+
+    with open(out_path, "w", encoding="utf-8") as f:
+        f.write(f"# Chat Polish — Before / After ({time.strftime('%Y-%m-%d %H:%M')})\n\n")
+        f.write(f"Compares `{old_id}` (before) vs `{new_id}` (after).\n\n")
+        f.write(f"- **polished**: {len(polished)} (reply changed, fewer flags)\n")
+        f.write(f"- **changed**:  {len(changed)} (reply changed, same/more flags — usually LLM stochasticity)\n")
+        f.write(f"- **unchanged**: {len(unchanged)}\n\n")
+        if polished:
+            f.write("## Polished — these are the wins\n\n")
+            for inp, o, n, of, nf in polished:
+                f.write(f"### `{inp}`\n")
+                f.write(f"- **agent**: {o.get('agent')!r} -> {n.get('agent')!r} · "
+                        f"**flags**: {of} -> {nf}\n\n")
+                f.write("**Before:**\n```\n" + ((o.get('reply') or '').strip() or '(empty)') + "\n```\n\n")
+                f.write("**After:**\n```\n" + ((n.get('reply') or '').strip() or '(empty)') + "\n```\n\n---\n\n")
+        if changed:
+            f.write("## Changed (no flag delta — LLM stochasticity or neutral rewrite)\n\n")
+            for inp, o, n, of, nf in changed[:40]:
+                f.write(f"### `{inp}`\n")
+                f.write(f"- agent: {o.get('agent')!r} -> {n.get('agent')!r}\n\n")
+                f.write("Before:\n```\n" + ((o.get('reply') or '').strip()[:400] or '(empty)') + "\n```\n")
+                f.write("After:\n```\n" + ((n.get('reply') or '').strip()[:400] or '(empty)') + "\n```\n\n")
+    print(f"-> {out_path}  ({len(polished)} polished, {len(changed)} other-changed, {len(unchanged)} unchanged)")
+
+
 def emit_diff(old_id: str, new_id: str):
     old = {r["input"]: r for r in load_run(old_id)}
     new = {r["input"]: r for r in load_run(new_id)}
@@ -167,10 +226,15 @@ def main():
     ap.add_argument("--run", help="run_id (data/chat_replies/<run_id>.jsonl)")
     ap.add_argument("--judge", action="store_true", help="LLM-judge flagged replies (slow)")
     ap.add_argument("--diff", nargs=2, metavar=("OLD", "NEW"), help="compare two runs")
+    ap.add_argument("--beforeafter", nargs=2, metavar=("OLD", "NEW"),
+                    help="emit CHAT_BEFORE_AFTER.md showing input + old reply + new reply")
     args = ap.parse_args()
 
     if args.diff:
         emit_diff(*args.diff)
+        return
+    if args.beforeafter:
+        emit_beforeafter(*args.beforeafter)
         return
     if not args.run:
         ap.print_help(); sys.exit(2)

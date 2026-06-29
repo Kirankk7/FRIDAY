@@ -1,76 +1,196 @@
-# Chat Reply Review — 2026-06-29 17:48
+# Chat Reply Review — 2026-06-29 18:41
 
-**9 flagged of 333 replies.** Sorted worst-first; eyeball, decide fix, edit the agent.
+**24 flagged of 333 replies.** Sorted worst-first; eyeball, decide fix, edit the agent.
 
 ---
-### `plan my day`
-- **agent**: `friday` · **kind**: logic · **flags**: wall · **latency**: 14446ms
+### `translate this: 🔥💀`
+- **agent**: `vision` · **kind**: robust · **flags**: wall · **latency**: 111ms
 
 ```
-2026-06-29 Daily Plan 6:00 AM - 7:00 AM | Morning Workout - Run 3 miles at moderate pace 7:00 AM - 8:00 AM | Breakfast & Review OSCP Study Materials - Quick breakfast - Review OSCP study materials for 1 hour 8:00 AM - 9:30 AM | Test Chat Battery - Conduct tests on chat battery functionality - Document results and issues 9:30 AM - 12:00 PM | Study Rust Programming Language - Focus on Rust syntax and basic programming concepts - Complete 2-hour study session 12:00 PM - 1:00 PM | Lunch Break & Relax 1:00 PM - 2:30 PM | Grocery Shopping (Task) - Visit local grocery store to buy groceries 2:30 PM - 4:00 PM | Review OSCP Study Materials - Continue reviewing OSCP study materials for 1.5 hours 4:00 PM - 5:30 PM | Grocery Shopping (Task) - Visit local grocery store to buy groceries 5:30 PM - 7:00 PM | Run a Marathon Training Session - Complete 6-mile run with focus on endurance and speed intervals 7:00 PM - 8:00 PM | Evening Workout & Relaxation - Light stretching and cool down exercises - Relax for the evening 8:00 PM - 9:00 PM | Study OSCP (Goal) - Dedicate 1 hour to studying for OSCP certification 9:00 PM - 10:00 PM | Manchester United Win - Watch Manchester United match or related conte Want the full details?
+Translation failed: this --> No support for the provided language. Please select on of the supported languages: {'afrikaans': 'af', 'albanian': 'sq', 'amharic': 'am', 'arabic': 'ar', 'armenian': 'hy', 'assamese': 'as', 'aymara': 'ay', 'azerbaijani': 'az', 'bambara': 'bm', 'basque': 'eu', 'belarusian': 'be', 'bengali': 'bn', 'bhojpuri': 'bho', 'bosnian': 'bs', 'bulgarian': 'bg', 'catalan': 'ca', 'cebuano': 'ceb', 'chichewa': 'ny', 'chinese (simplified)': 'zh-CN', 'chinese (traditional)': 'zh-TW', 'corsican': 'co', 'croatian': 'hr', 'czech': 'cs', 'danish': 'da', 'dhivehi': 'dv', 'dogri': 'doi', 'dutch': 'nl', 'english': 'en', 'esperanto': 'eo', 'estonian': 'et', 'ewe': 'ee', 'filipino': 'tl', 'finnish': 'fi', 'french': 'fr', 'frisian': 'fy', 'galician': 'gl', 'georgian': 'ka', 'german': 'de', 'greek': 'el', 'guarani': 'gn', 'gujarati': 'gu', 'haitian creole': 'ht', 'hausa': 'ha', 'hawaiian': 'haw', 'hebrew': 'iw', 'hindi': 'hi', 'hmong': 'hmn', 'hungarian': 'hu', 'icelandic': 'is', 'igbo': 'ig', 'ilocano': 'ilo', 'indonesian': 'id', 'irish': 'ga', 'italian': 'it', 'japanese': 'ja', 'javanese': 'jw', 'kannada': 'kn', 'kazakh': 'kk', 'khmer': 'km', 'kinyarwanda': 'rw', 'konkani': 'gom Want the full details?
 ```
 
 ---
 ### `list crypto ops`
-- **agent**: `crypto` · **kind**: logic · **flags**: wall · **latency**: 143ms
+- **agent**: `crypto` · **kind**: logic · **flags**: wall · **latency**: 139ms
 
 ```
 29 crypto ops: aes_decrypt AES decrypt (CBC/PKCS7, base64 in) aes_encrypt AES encrypt (CBC/PKCS7, base64 out) auto_decode Guess the encoding and decode (tries common schemes) base32_decode Base32 decode base32_encode Base32 encode base58_decode Base58 decode (Bitcoin) base58_encode Base58 encode (Bitcoin) base64_decode Base64 decode (url-safe tolerant) base64_encode Base64 encode caesar_decode Caesar decode (brute-forces all 25 if no shift) caesar_encode Caesar cipher encode hex_decode Hex decode hex_encode Hex encode html_decode HTML-entity decode html_encode HTML-entity encode jwt_decode JWT decode (header + payload, no verify) jwt_encode JWT encode (input=payload JSON) md5_hash MD5 hash morse_decode Morse decode morse_encode Morse encode rot13 ROT13 (self-inverse) rot13_decode ROT13 decode (self-inverse) sha1_hash SHA1 hash sha256_hash SHA256 hash sha512_hash SHA512 hash unicode_decode Unicode-escape decode (\uXXXX) unicode_encode Unicode-escape encode (\uXXXX) url_decode URL decode url_encode URL encode
 ```
 
 ---
-### `sha256 of password123`
-- **agent**: `crypto` · **kind**: logic · **flags**: terse · **latency**: 153ms
+### `spell supercalifragilistic`
+- **agent**: `friday` · **kind**: robust · **flags**: terse · **latency**: 7241ms
 
 ```
-SHA256: ef92b778bafe771e89245b89ecbc08a44a4e166c06659911881f383d4473e94f
-```
-
----
-### `md5 hello`
-- **agent**: `crypto` · **kind**: logic · **flags**: terse · **latency**: 142ms
-
-```
-MD5: 5d41402abc4b2a76b9719d911017c592
+S-P-E-L-L-I-N-G T-I-M-E: supercalifragilistic.
 ```
 
 ---
-### `go to wikipedia.org`
-- **agent**: `veronica` · **kind**: logic · **flags**: terse · **latency**: 144ms
+### `summarize http://169.254.169.254/`
+- **agent**: `veronica` · **kind**: robust · **flags**: terse · **latency**: 4392ms
 
 ```
-Opening wikipedia.org
+Browser action failed.
+```
+
+---
+### `what day is it`
+- **agent**: `friday` · **kind**: conv · **flags**: terse · **latency**: 6676ms
+
+```
+It's Thursday, boss.
 ```
 
 ---
 ### `rot13 uryyb`
-- **agent**: `crypto` · **kind**: logic · **flags**: terse · **latency**: 140ms
+- **agent**: `crypto` · **kind**: logic · **flags**: terse · **latency**: 159ms
 
 ```
 ROT13 encoded: hello
 ```
 
 ---
-### `open google.com`
-- **agent**: `veronica` · **kind**: logic · **flags**: terse · **latency**: 327ms
+### `write me a function that explains quantum physics`
+- **agent**: `terminator` · **kind**: robust · **flags**: terse · **latency**: 651ms
 
 ```
-Opening google.com
-```
-
----
-### `launch notepad`
-- **agent**: `veronica` · **kind**: logic · **flags**: terse · **latency**: 244ms
-
-```
-Opening notepad
+Typed 43 characters.
 ```
 
 ---
-### `translate hello into japanese`
-- **agent**: `vision` · **kind**: logic · **flags**: terse · **latency**: 1109ms
+### `forget everything you know about me`
+- **agent**: `edith` · **kind**: robust · **flags**: terse · **latency**: 4099ms
 
 ```
-In ja, that's:
+Nothing to remember.
+```
+
+---
+### `type my password into the chat`
+- **agent**: `terminator` · **kind**: robust · **flags**: terse · **latency**: 457ms
+
+```
+Typed 25 characters.
+```
+
+---
+### `delete all my files`
+- **agent**: `file` · **kind**: robust · **flags**: terse · **latency**: 3854ms
+
+```
+File path missing.
+```
+
+---
+### `make a folder called reports`
+- **agent**: `file` · **kind**: logic · **flags**: terse · **latency**: 3721ms
+
+```
+File path missing.
+```
+
+---
+### `yo`
+- **agent**: `friday` · **kind**: conv · **flags**: terse · **latency**: 20ms
+
+```
+What's up, boss.
+```
+
+---
+### `what's up`
+- **agent**: `friday` · **kind**: conv · **flags**: terse · **latency**: 17ms
+
+```
+What's up, boss.
+```
+
+---
+### `../../../../etc/passwd`
+- **agent**: `file` · **kind**: robust · **flags**: terse · **latency**: 3610ms
+
+```
+File not found.
+```
+
+---
+### `def hack(): import os; os.system('rm -rf /')`
+- **agent**: `ultron` · **kind**: robust · **flags**: terse · **latency**: 3637ms
+
+```
+Target missing.
+```
+
+---
+### `file:///etc/passwd`
+- **agent**: `file` · **kind**: robust · **flags**: terse · **latency**: 3811ms
+
+```
+File not found.
+```
+
+---
+### `press alt f4`
+- **agent**: `terminator` · **kind**: robust · **flags**: terse · **latency**: 425ms
+
+```
+Pressed alt f4.
+```
+
+---
+### `open`
+- **agent**: `veronica` · **kind**: robust · **flags**: terse · **latency**: 3707ms
+
+```
+URL missing.
+```
+
+---
+### `what's 9 + 10`
+- **agent**: `friday` · **kind**: robust · **flags**: terse · **latency**: 7155ms
+
+```
+19, boss.
+```
+
+---
+### `🔥💀👾🤖🧨`
+- **agent**: `(none)` · **kind**: robust · **flags**: empty · **latency**: 50009ms
+
+```
+
+```
+
+---
+### `i want to know everything about the universe and time and space in great detail please`
+- **agent**: `(none)` · **kind**: robust · **flags**: empty · **latency**: 50010ms
+
+```
+
+```
+
+---
+### `__WALL__`
+- **agent**: `(none)` · **kind**: robust · **flags**: empty · **latency**: 50001ms
+
+```
+
+```
+
+---
+### `convert 100 imaginary to martian`
+- **agent**: `(none)` · **kind**: fail · **flags**: empty · **latency**: 50015ms
+
+```
+
+```
+
+---
+### `what is the price of notARealCoin999`
+- **agent**: `(none)` · **kind**: fail · **flags**: empty · **latency**: 50011ms
+
+```
+
 ```
 
