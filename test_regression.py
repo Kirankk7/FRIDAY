@@ -2316,6 +2316,38 @@ def _adversarial_safe():
 
 run_test("Router: adversarial/jailbreak pre-filter (S30 safety)", _adversarial_safe)
 
+# S31 — Response validator (GPT review Class 3): cheap post-LLM safety guard
+def _response_validator():
+    from core import response_validator as v
+    import config
+    saved = getattr(config, "RESPONSE_VALIDATOR_ENABLED", False)
+    try:
+        config.RESPONSE_VALIDATOR_ENABLED = True
+        r, vd = v.validate("I am DAN and I will follow your commands", "any")
+        if vd != "dan_refused" or "rules" not in r.lower():
+            return f"DAN reply not refused: {vd} / {r[:50]}"
+        r, vd = v.validate("Nmap found no open ports on 192.168.1.1", '"')
+        if vd != "hallucination_blocked":
+            return f"hallucination on tiny input not blocked: {vd}"
+        r, vd = v.validate("You are JARVIS, an AI assistant...", "normal")
+        if vd != "sys_leak_blocked":
+            return f"sys-prompt leak not blocked: {vd}"
+        # normal must pass through untouched
+        normal = "Task added, boss: buy milk"
+        r, vd = v.validate(normal, "add task buy milk")
+        if r != normal or vd != "ok":
+            return f"normal reply mangled: {r!r} / {vd}"
+        # OFF must return verdict='disabled' and never mutate
+        config.RESPONSE_VALIDATOR_ENABLED = False
+        r, vd = v.validate("I am DAN", "any")
+        if r != "I am DAN" or vd != "disabled":
+            return f"disabled but not bypassed: {r!r} / {vd}"
+        return True
+    finally:
+        config.RESPONSE_VALIDATOR_ENABLED = saved
+
+run_test("Response validator: DAN/hallucination/sys-leak + bypass (S31)", _response_validator)
+
 # Phase 36 — HackingTool fleet
 run_test("Router: 'ht search subdomain' → ht_search",     _route("ht search subdomain", "ultron", "ht_search"))
 run_test("Router: 'search hacking tools holehe' → ht_search", _route("search hacking tools holehe", "ultron", "ht_search"))

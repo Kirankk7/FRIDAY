@@ -46,6 +46,12 @@ CRITIC_ENABLED = os.getenv("CRITIC_ENABLED", "0") not in ("0", "false", "False")
 # extra LLM call to the offending replies only. Toggle live: no restart needed.
 COMPOSER_ENABLED = os.getenv("COMPOSER_ENABLED", "0") not in ("0", "false", "False")
 
+# ── Response validator (post-LLM safety guard) ──
+# Catches DAN jailbreak compliance, hallucinated tool output on tiny inputs,
+# and system-prompt leaks via cheap regex rules. NO LLM call. Off by default
+# because the router pre-filter handles most cases; turn on for belt-and-suspenders.
+RESPONSE_VALIDATOR_ENABLED = os.getenv("RESPONSE_VALIDATOR_ENABLED", "0") not in ("0", "false", "False")
+
 # WHISPER STT CONFIG (Phase 17)
 WHISPER_MODEL   = "base"    # tiny/base/small/medium — base is good balance on RTX 4060
 WHISPER_DEVICE  = "cuda"    # cuda or cpu

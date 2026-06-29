@@ -327,12 +327,14 @@ def run_cognitive_loop_stream(
                 yield token
             response = "".join(full)
         else:
-            # Tool returned a one-shot reply. If it's a long raw dump (file list, scan
-            # report, JSON blob), gated composer narrates it Siri/Gemini-style. Bypassed
-            # for short/conversational replies (vast majority). config.COMPOSER_ENABLED
-            # gates the LLM call; never raises (composer returns original on any error).
-            from core import composer
+            # Tool returned a one-shot reply. Two gated post-layers:
+            # 1. response_validator (S30 GPT review): catches DAN compliance / hallucinated
+            #    tool output / system-prompt leak via cheap regex rules. Never raises.
+            # 2. composer: long raw-dump narrator. Off by default; fires only when len>600
+            #    AND flagged. Both config-gated; bypassed when disabled or input is clean.
+            from core import composer, response_validator
             cleaned = clean_response(response)
+            cleaned, _ = response_validator.validate(cleaned, user_input=user_input)
             yield composer.polish_if_needed(cleaned, user_input=user_input)
 
         reflection = reflect_on_response(user_input, response)

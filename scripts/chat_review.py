@@ -127,15 +127,35 @@ def emit_report(rows: list, judged: bool = False):
         -(len(r.get("reply", ""))),
     ))
 
+    # Bucket each flagged row into a failure category — turns N unique bugs into a
+    # histogram pointing at architectural fix-sites.
+    from collections import Counter
+    bucket_counts = Counter()
+    for r in flagged:
+        exp = r.get("expect") or {}
+        misroute = bool(exp.get("agent") and r.get("agent") and r["agent"] != exp["agent"])
+        r["_bucket"] = bucket_for(r["flags"], agent_change=misroute)
+        bucket_counts[r["_bucket"]] += 1
+
     with open(OUT, "w", encoding="utf-8") as f:
         f.write(f"# Chat Reply Review — {time.strftime('%Y-%m-%d %H:%M')}\n\n")
         f.write(f"**{len(flagged)} flagged of {len(rows)} replies.** "
                 f"Sorted worst-first; eyeball, decide fix, edit the agent.\n\n")
+        f.write("## Failure histogram (fix the column, not the row)\n\n")
+        f.write("| bucket | count | what to fix |\n|---|---:|---|\n")
+        for name, desc, _keys in _FAIL_BUCKETS:
+            n = bucket_counts.get(name, 0)
+            if n:
+                f.write(f"| {name} | {n} | {desc} |\n")
+        if bucket_counts.get("other"):
+            f.write(f"| other | {bucket_counts['other']} | uncategorised |\n")
+        f.write("\n")
         if not flagged:
             f.write("No flagged replies — all clean.\n")
         for r in flagged:
             f.write(f"---\n### `{r['input']}`\n")
-            f.write(f"- **agent**: `{r.get('agent') or '(none)'}` · **kind**: {r.get('kind','?')} · "
+            f.write(f"- **bucket**: `{r.get('_bucket','other')}` · **agent**: `{r.get('agent') or '(none)'}` · "
+                    f"**kind**: {r.get('kind','?')} · "
                     f"**flags**: {', '.join(r['flags']) or '-'} · "
                     f"**latency**: {r.get('latency_ms', 0)}ms\n")
             if r.get("judge"):
@@ -150,6 +170,30 @@ def emit_report(rows: list, judged: bool = False):
             f.write(f"\n```\n{reply}\n```\n\n")
 
     print(f"-> {OUT}  ({len(flagged)} flagged of {len(rows)})")
+
+
+# GPT review (S30) — bucket each flag into 7 failure categories so a few hundred
+# tests produce a histogram pointing at the architectural class to fix, not 17 unique
+# bugs. "Fix one class -> kill a column" instead of "fix one row at a time."
+_FAIL_BUCKETS = [
+    ("routing",        "misroute / wrong_agent / wrong_tool",        ("wrong_agent",)),
+    ("context_leak",   "reply references unrelated prior turn",      ("context_leak",)),
+    ("prompt_inject",  "DAN / jailbreak compliance leaked through",  ("dan", "sys_leak")),
+    ("hallucination",  "invented tool output / fake CVE / fake URL", ("hallucination",)),
+    ("tone",           "robotic / 'X.exe launched' / one-word",       ("terse", "generic")),
+    ("formatting",     "raw JSON dump / path-only / long wall",       ("json_dump", "raw_path", "wall", "ansi_leak", "tag_leak")),
+    ("tool_failure",   "tool error message reached user raw",         ("empty",)),
+]
+
+
+def bucket_for(flags: list, agent_change: bool = False) -> str:
+    """Map a flag-set to one of 7 fixed buckets. 'routing' wins if agent was wrong."""
+    if agent_change:
+        return "routing"
+    for name, _desc, keys in _FAIL_BUCKETS:
+        if any(k in flags for k in keys):
+            return name
+    return "other"
 
 
 _IDEALS_PATH = os.path.join(ROOT, "data", "chat_ideals.jsonl")
