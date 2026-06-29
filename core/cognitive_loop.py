@@ -268,6 +268,20 @@ def run_cognitive_loop_stream(
         # CHAT — real token stream
         # ==========================
         if tool == "chat":
+            # Pre-filter direct-reply: router pre-filters (S30/S32 safety guards) set a fixed
+            # task string they want shown VERBATIM, not LLM-rephrased (otherwise the model
+            # ignores my refusal and complies anyway -> the DAN/SSTI/destructive-key bugs).
+            # Honor it when present.
+            _direct = (parameters or {}).get("task", "")
+            if _direct and isinstance(_direct, str):
+                set_last_agent("chat")
+                try:
+                    from core.state import set_last_action
+                    set_last_action("respond")
+                except Exception:
+                    pass
+                yield _direct
+                return
             llm_input = enriched_input if enriched_input else user_input
             full = []
             for token in ask_llm_stream(llm_input):
