@@ -29,8 +29,26 @@ class CryptoAgent:
                 extra = {k: v for k, v in parameters.items() if k not in ("op", "input")}
                 res = crypto_tools.execute(op, payload, **extra)
                 if res.get("success"):
-                    return {"success": True, "message": res.get("result", ""),
-                            "data": {"op": op, "result": res.get("result", "")}}
+                    result = res.get("result", "")
+                    # Narrate the result instead of returning the raw hash/decoded bytes alone.
+                    # Operation-class -> human prefix.
+                    if op.endswith("_hash"):
+                        label = op.replace("_hash", "").upper()
+                        msg = f"{label}: {result}"
+                    elif op.endswith("_encode") or op == "rot13":
+                        scheme = op.replace("_encode", "").replace("rot13", "ROT13").upper()
+                        msg = f"{scheme} encoded: {result}"
+                    elif op.endswith("_decode"):
+                        scheme = op.replace("_decode", "").upper()
+                        msg = f"Decoded ({scheme}): {result}"
+                    elif op == "jwt_decode":
+                        msg = f"JWT decoded:\n{result}"
+                    elif op == "auto_decode":
+                        msg = f"Best guess:\n{result}"
+                    else:
+                        msg = f"{op}: {result}"
+                    return {"success": True, "message": msg,
+                            "data": {"op": op, "result": result}}
                 return {"success": False, "message": res.get("error", "crypto op failed"),
                         "data": {"op": op}}
 

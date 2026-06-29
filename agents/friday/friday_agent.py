@@ -176,7 +176,10 @@ def add_note(text: str) -> dict:
     if len(data["notes"]) > 200:
         data["notes"] = data["notes"][-200:]
     _save(data)
-    return {"success": True, "message": "Note saved, boss.", "data": {"note": note}}
+    preview = text.strip()
+    if len(preview) > 70:
+        preview = preview[:67] + "..."
+    return {"success": True, "message": f"Note saved, boss: {preview}", "data": {"note": note}}
 
 
 def list_notes(n: int = 5) -> dict:

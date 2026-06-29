@@ -312,9 +312,13 @@ class VeronicaAgent:
                 .strip()
             )
 
-            friendly_message = (
-                "Opening website"
-            )
+            # show the host name so the user knows WHICH site is opening
+            try:
+                from urllib.parse import urlparse
+                _host = urlparse(url if "://" in url else f"https://{url}").hostname or url
+            except Exception:
+                _host = url
+            friendly_message = f"Opening {_host}"
 
                       # ==============================
             # YOUTUBE SEARCH
