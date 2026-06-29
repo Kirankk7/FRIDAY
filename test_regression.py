@@ -2208,6 +2208,12 @@ run_test("Router: 'log my weight 75kg' → friday",         _route("log my weigh
 run_test("Router: 'what are my reminders' → friday",      _route("what are my reminders", "friday", "list_reminders"))
 run_test("Router: 'list my routines' → routines",         _route("list my routines", "routines", "list_routines"))
 run_test("Router: 'what facts do you know about me' → personal", _route("what facts do you know about me", "personal", "get_all"))
+# S12 — browser/terminator/file/reminder NL
+run_test("Router: 'go to wikipedia.org' → veronica",      _route("go to wikipedia.org", "veronica", "open_url"))
+run_test("Router: 'list my browser tabs' → veronica",     _route("list my browser tabs", "veronica", "list_tabs"))
+run_test("Router: 'focus chrome' → terminator",           _route("focus chrome", "terminator", "focus_window"))
+run_test("Router: 'list my documents' → file",            _route("list my documents", "file", "list_files"))
+run_test("Router: 'set a reminder to call mom tomorrow' → friday", _route("set a reminder to call mom tomorrow", "friday", "set_reminder"))
 
 # Phase 36 — HackingTool fleet
 run_test("Router: 'ht search subdomain' → ht_search",     _route("ht search subdomain", "ultron", "ht_search"))
