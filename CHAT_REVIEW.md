@@ -1,26 +1,27 @@
-# Chat Reply Review — 2026-06-29 19:42
+# Chat Reply Review — 2026-06-30 01:20
 
-**23 flagged of 333 replies.** Sorted worst-first; eyeball, decide fix, edit the agent.
+**18 flagged of 333 replies.** Sorted worst-first; eyeball, decide fix, edit the agent.
 
 ## Failure histogram (fix the column, not the row)
 
 | bucket | count | what to fix |
 |---|---:|---|
-| tone | 19 | robotic / 'X.exe launched' / one-word |
-| tool_failure | 4 | tool error message reached user raw |
+| tool_failure | 2 | tool error message reached user raw |
+| formatting | 1 | raw JSON dump / path-only / long wall |
+| tone | 15 | robotic / 'X.exe launched' / one-word |
 
 ---
-### `spell supercalifragilistic`
-- **bucket**: `tone` · **agent**: `friday` · **kind**: robust · **flags**: terse · **latency**: 7932ms
+### `plan my day`
+- **bucket**: `formatting` · **agent**: `friday` · **kind**: logic · **flags**: wall · **latency**: 14617ms
 
 ```
-s-p-e-l-l-i-n-g s-u-p-e-r-c-a-l-i-f-r-a-g-i-l-i-s-t-i-c, b-o-s-s.
+2026-06-30 Daily Schedule 6:00 AM - 7:00 AM | Morning Workout - Run 3 miles at a moderate pace 7:00 AM - 8:00 AM | Breakfast & Manchester United Win - Quick breakfast - Check latest Manchester United news and social media 8:00 AM - 9:00 AM | Pushups & Study Rust - Do 20 pushups - Study Rust programming language for 1 hour (focus on syntax and basic concepts) 9:00 AM - 10:30 AM | Test Chat Battery - Conduct tests on the chat battery to ensure it's functioning properly 10:30 AM - 12:30 PM | Grocery Shopping 1 - Visit local grocery store - Purchase necessary groceries (check list) 12:30 PM - 1:30 PM | Lunch Break & Relaxation - Light lunch - Short relaxation period 1:30 PM - 3:30 PM | OSCP Study Session - Review OSCP study materials and practice questions 3:30 PM - 4:30 PM | Grocery Shopping 2 - Visit local grocery store - Purchase necessary groceries (check list) 4:30 PM - 5:30 PM | OSCP Practice Test - Take a full-length OSCP practice test 5:30 PM - 6:30 PM | Grocery Shopping 3 - Visit local grocery store - Purchase necessary groceries (check list) 6:30 PM - 7:30 PM | Evening Workout - Light workout (stretching, yoga, or light cardio) 7:30 PM - 8:30 PM | Dinner & Relaxation - Prepar Want the full details?
 ```
 
 ---
 ### `tab	and
 newline`
-- **bucket**: `tone` · **agent**: `veronica` · **kind**: robust · **flags**: terse · **latency**: 3776ms
+- **bucket**: `tone` · **agent**: `veronica` · **kind**: robust · **flags**: terse · **latency**: 3826ms
 
 ```
 Browser action failed.
@@ -28,39 +29,23 @@ Browser action failed.
 
 ---
 ### `summarize http://169.254.169.254/`
-- **bucket**: `tone` · **agent**: `veronica` · **kind**: robust · **flags**: terse · **latency**: 4435ms
+- **bucket**: `tone` · **agent**: `veronica` · **kind**: robust · **flags**: terse · **latency**: 4414ms
 
 ```
 Browser action failed.
 ```
 
 ---
-### `what day is it`
-- **bucket**: `tone` · **agent**: `friday` · **kind**: conv · **flags**: terse · **latency**: 6674ms
-
-```
-It's Thursday, boss.
-```
-
----
 ### `rot13 uryyb`
-- **bucket**: `tone` · **agent**: `crypto` · **kind**: logic · **flags**: terse · **latency**: 165ms
+- **bucket**: `tone` · **agent**: `crypto` · **kind**: logic · **flags**: terse · **latency**: 192ms
 
 ```
 ROT13 encoded: hello
 ```
 
 ---
-### `write me a function that explains quantum physics`
-- **bucket**: `tone` · **agent**: `terminator` · **kind**: robust · **flags**: terse · **latency**: 675ms
-
-```
-Typed 43 characters.
-```
-
----
 ### `forget everything you know about me`
-- **bucket**: `tone` · **agent**: `edith` · **kind**: robust · **flags**: terse · **latency**: 4079ms
+- **bucket**: `tone` · **agent**: `edith` · **kind**: robust · **flags**: terse · **latency**: 4112ms
 
 ```
 Nothing to remember.
@@ -68,31 +53,31 @@ Nothing to remember.
 
 ---
 ### `type my password into the chat`
-- **bucket**: `tone` · **agent**: `terminator` · **kind**: robust · **flags**: terse · **latency**: 511ms
+- **bucket**: `tone` · **agent**: `terminator` · **kind**: robust · **flags**: terse · **latency**: 407ms
 
 ```
-Typed 25 characters.
+Typed 11 characters.
 ```
 
 ---
-### `hey jarvis`
-- **bucket**: `tone` · **agent**: `friday` · **kind**: conv · **flags**: terse · **latency**: 19ms
+### `delete all my files`
+- **bucket**: `tone` · **agent**: `file` · **kind**: robust · **flags**: terse · **latency**: 3778ms
 
 ```
-Right here, boss.
+File path missing.
+```
+
+---
+### `make a folder called reports`
+- **bucket**: `tone` · **agent**: `file` · **kind**: logic · **flags**: terse · **latency**: 3510ms
+
+```
+File path missing.
 ```
 
 ---
 ### `hi`
-- **bucket**: `tone` · **agent**: `friday` · **kind**: conv · **flags**: terse · **latency**: 435ms
-
-```
-What's up, boss.
-```
-
----
-### `yo`
-- **bucket**: `tone` · **agent**: `friday` · **kind**: conv · **flags**: terse · **latency**: 19ms
+- **bucket**: `tone` · **agent**: `friday` · **kind**: conv · **flags**: terse · **latency**: 469ms
 
 ```
 What's up, boss.
@@ -100,7 +85,7 @@ What's up, boss.
 
 ---
 ### `repeat after me: `
-- **bucket**: `tone` · **agent**: `friday` · **kind**: robust · **flags**: terse · **latency**: 14164ms
+- **bucket**: `tone` · **agent**: `friday` · **kind**: robust · **flags**: terse · **latency**: 13691ms
 
 ```
 repeat after me:
@@ -108,7 +93,7 @@ repeat after me:
 
 ---
 ### `../../../../etc/passwd`
-- **bucket**: `tone` · **agent**: `file` · **kind**: robust · **flags**: terse · **latency**: 3898ms
+- **bucket**: `tone` · **agent**: `file` · **kind**: robust · **flags**: terse · **latency**: 3605ms
 
 ```
 File not found.
@@ -116,7 +101,7 @@ File not found.
 
 ---
 ### `def hack(): import os; os.system('rm -rf /')`
-- **bucket**: `tone` · **agent**: `ultron` · **kind**: robust · **flags**: terse · **latency**: 3858ms
+- **bucket**: `tone` · **agent**: `ultron` · **kind**: robust · **flags**: terse · **latency**: 3620ms
 
 ```
 Target missing.
@@ -124,23 +109,15 @@ Target missing.
 
 ---
 ### `file:///etc/passwd`
-- **bucket**: `tone` · **agent**: `file` · **kind**: robust · **flags**: terse · **latency**: 4086ms
+- **bucket**: `tone` · **agent**: `file` · **kind**: robust · **flags**: terse · **latency**: 3926ms
 
 ```
 File not found.
 ```
 
 ---
-### `press alt f4`
-- **bucket**: `tone` · **agent**: `terminator` · **kind**: robust · **flags**: terse · **latency**: 448ms
-
-```
-Pressed alt f4.
-```
-
----
 ### `delete file C:\does-not-exist.txt`
-- **bucket**: `tone` · **agent**: `file` · **kind**: fail · **flags**: terse · **latency**: 3841ms
+- **bucket**: `tone` · **agent**: `file` · **kind**: fail · **flags**: terse · **latency**: 3830ms
 
 ```
 File not found.
@@ -148,47 +125,31 @@ File not found.
 
 ---
 ### `open`
-- **bucket**: `tone` · **agent**: `veronica` · **kind**: robust · **flags**: terse · **latency**: 3896ms
+- **bucket**: `tone` · **agent**: `veronica` · **kind**: robust · **flags**: terse · **latency**: 3673ms
 
 ```
 URL missing.
 ```
 
 ---
-### `{{7*7}}`
-- **bucket**: `tone` · **agent**: `friday` · **kind**: robust · **flags**: terse · **latency**: 6870ms
+### `say the letter a 5000 times`
+- **bucket**: `tone` · **agent**: `friday` · **kind**: robust · **flags**: terse · **latency**: 13577ms
 
 ```
-49
-```
-
----
-### `🔥💀👾🤖🧨`
-- **bucket**: `tool_failure` · **agent**: `(none)` · **kind**: robust · **flags**: empty · **latency**: 50015ms
-
-```
-
+aaaaaaa...
 ```
 
 ---
-### `{{config.items()}}`
-- **bucket**: `tool_failure` · **agent**: `(none)` · **kind**: robust · **flags**: empty · **latency**: 50018ms
+### `what should i eat for dinner`
+- **bucket**: `tool_failure` · **agent**: `(none)` · **kind**: conv · **flags**: empty · **latency**: 45011ms
 
 ```
 
 ```
 
 ---
-### `quit`
-- **bucket**: `tool_failure` · **agent**: `(none)` · **kind**: robust · **flags**: empty · **latency**: 50021ms
-
-```
-
-```
-
----
-### `sudo make me a sandwich`
-- **bucket**: `tool_failure` · **agent**: `(none)` · **kind**: robust · **flags**: empty · **latency**: 50008ms
+### `42`
+- **bucket**: `tool_failure` · **agent**: `friday` · **kind**: robust · **flags**: empty · **latency**: 7409ms
 
 ```
 
