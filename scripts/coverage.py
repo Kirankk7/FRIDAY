@@ -39,6 +39,9 @@ SAFE = {
     "scheduler.list_tasks": {},
     "self_improvement.stats": {},
     "ultron.security_summary": {}, "ultron.system_health": {},
+    "ultron.hash_target": {"target": "test", "algorithm": "sha256"},
+    "ultron.log_check": {}, "ultron.export_html": {},
+    "ultron.scan_localhost": {},  # passive port check (local only)
 }
 
 # Why each non-SAFE action is skipped (heuristic by category).

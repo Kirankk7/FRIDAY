@@ -152,6 +152,12 @@ def chat_stream():
         "message",
         ""
     )
+    # Cap input length — Werkzeug rejects URIs >~8KB with HTTP 414 BEFORE we ever
+    # see the request, but for client-side oversize / POST switches keep an in-app
+    # cap too. Practical chat is well under 2KB.
+    _MAX_INPUT = 4000
+    if user_input and len(user_input) > _MAX_INPUT:
+        user_input = user_input[:_MAX_INPUT]
 
     def generate():
         # Fire due reminders before processing — send as toast events

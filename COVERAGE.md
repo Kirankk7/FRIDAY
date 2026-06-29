@@ -1,6 +1,6 @@
-# JARVIS Functional Coverage — 2026-06-29 01:07
+# JARVIS Functional Coverage — 2026-06-29 13:25
 
-**46 working / 0 broken / 96 skipped  of 142 functionalities**
+**50 working / 0 broken / 92 skipped  of 142 functionalities**
 
 PASS = dispatched + well-formed result · SKIP = wired but not executed (destructive/network/desktop/needs-dep) · FAIL = wiring broken.
 
@@ -11,18 +11,18 @@ PASS = dispatched + well-formed result · SKIP = wired but not executed (destruc
 - [ ] `ultron.cve_track` — SKIP (needs network / live API)
 - [ ] `ultron.cve_untrack` — SKIP (destructive/state-change (not run in coverage))
 - [ ] `ultron.dns_lookup` — SKIP (active scan / heavy (local/OOS only, not in coverage))
-- [ ] `ultron.export_html` — SKIP (active scan / heavy (local/OOS only, not in coverage))
+- [x] `ultron.export_html` — PASS (ran (success=False): No report to export. Run a scan first.)
 - [ ] `ultron.file_scan` — SKIP (active scan / heavy (local/OOS only, not in coverage))
 - [ ] `ultron.find_exploits` — SKIP (active scan / heavy (local/OOS only, not in coverage))
 - [ ] `ultron.full_pipeline` — SKIP (active scan / heavy (local/OOS only, not in coverage))
 - [ ] `ultron.full_recon` — SKIP (active scan / heavy (local/OOS only, not in coverage))
-- [ ] `ultron.hash_target` — SKIP (active scan / heavy (local/OOS only, not in coverage))
+- [x] `ultron.hash_target` — PASS (ok)
 - [ ] `ultron.httpx_probe` — SKIP (active scan / heavy (local/OOS only, not in coverage))
 - [ ] `ultron.katana_crawl` — SKIP (active scan / heavy (local/OOS only, not in coverage))
-- [ ] `ultron.log_check` — SKIP (writes user/prod data (skip to avoid seeding))
+- [x] `ultron.log_check` — PASS (ok)
 - [ ] `ultron.nmap_scan` — SKIP (active scan / heavy (local/OOS only, not in coverage))
 - [ ] `ultron.nuclei_scan` — SKIP (active scan / heavy (local/OOS only, not in coverage))
-- [ ] `ultron.scan_localhost` — SKIP (active scan / heavy (local/OOS only, not in coverage))
+- [x] `ultron.scan_localhost` — PASS (ok)
 - [ ] `ultron.search_cve` — SKIP (needs network / live API)
 - [x] `ultron.security_summary` — PASS (ok)
 - [ ] `ultron.subfinder` — SKIP (active scan / heavy (local/OOS only, not in coverage))
