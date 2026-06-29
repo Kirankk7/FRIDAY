@@ -2198,6 +2198,17 @@ run_test("Router: 'cpu usage' → cpu_usage",               _route("cpu usage", 
 run_test("Router: 'how much ram am i using' → ram_usage",  _route("how much ram am i using", "system", "ram_usage"))
 run_test("Router: 'recall the last result' → recall",     _route("recall the last result", "system", "recall_result"))
 
+# Vision/friday/personal paraphrase routing (dogfood S10-S11 — were LLM-dependent fall-throughs)
+run_test("Router: 'what is the bitcoin price' → vision",  _route("what is the bitcoin price", "vision", "crypto_price"))
+run_test("Router: 'how much is 50 eur in usd' → vision",  _route("how much is 50 eur in usd", "vision", "currency_convert"))
+run_test("Router: 'what does hola mean in english' → vision", _route("what does hola mean in english", "vision", "translate"))
+run_test("Router: 'add a task buy groceries' → friday",   _route("add a task buy groceries", "friday", "add_task"))
+run_test("Router: 'set a goal to run a marathon' → friday", _route("set a goal to run a marathon", "friday", "add_goal"))
+run_test("Router: 'log my weight 75kg' → friday",         _route("log my weight 75kg", "friday", "log_health"))
+run_test("Router: 'what are my reminders' → friday",      _route("what are my reminders", "friday", "list_reminders"))
+run_test("Router: 'list my routines' → routines",         _route("list my routines", "routines", "list_routines"))
+run_test("Router: 'what facts do you know about me' → personal", _route("what facts do you know about me", "personal", "get_all"))
+
 # Phase 36 — HackingTool fleet
 run_test("Router: 'ht search subdomain' → ht_search",     _route("ht search subdomain", "ultron", "ht_search"))
 run_test("Router: 'search hacking tools holehe' → ht_search", _route("search hacking tools holehe", "ultron", "ht_search"))

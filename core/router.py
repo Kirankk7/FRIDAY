@@ -143,6 +143,7 @@ _EXACT_ROUTES = {
     "habit tracker": ("friday", "show_habits"), "habits": ("friday", "show_habits"),
     "list reminders": ("friday", "list_reminders"), "show reminders": ("friday", "list_reminders"),
     "my reminders": ("friday", "list_reminders"), "pending reminders": ("friday", "list_reminders"),
+    "what are my reminders": ("friday", "list_reminders"), "list my reminders": ("friday", "list_reminders"),
     # ── System / status ──
     "browser status": ("system", "browser_status"),
     "is browser enabled": ("system", "browser_status"),
@@ -152,6 +153,7 @@ _EXACT_ROUTES = {
     # ── routines / macros ──
     "list routines": ("routines", "list_routines"), "show routines": ("routines", "list_routines"),
     "my routines": ("routines", "list_routines"), "list macros": ("routines", "list_routines"),
+    "list my routines": ("routines", "list_routines"), "show my routines": ("routines", "list_routines"),
     "stop recording": ("routines", "stop_recording"), "end routine": ("routines", "stop_recording"),
     "finish routine": ("routines", "stop_recording"),
 }
@@ -620,7 +622,7 @@ def route_single_intent(
     # =====================================
     # LIST FILES
     # =====================================
-    if text == "list files":
+    if text in ("list files", "list my files", "list my documents", "list documents", "show my files"):
 
         if remembered_folder:
 
@@ -1777,11 +1779,12 @@ def route_single_intent(
     # =====================================
 
     # ── Tasks ──
-    _m = re.match(r"(?:add task|todo|add to (?:my )?(?:list|tasks?)):?\s+(.+)", text)
+    _m = re.match(r"(?:add (?:a )?task|todo|add to (?:my )?(?:list|tasks?)):?\s+(.+)", text)
     if _m:
         return {"tool": "friday", "action": "add_task", "parameters": {"text": _m.group(1).strip()}, "confidence": 0.99}
 
-    if text in ("list tasks", "show tasks", "my tasks", "what are my tasks", "show my tasks", "task list"):
+    if text in ("list tasks", "show tasks", "my tasks", "what are my tasks", "show my tasks", "task list",
+                "list my tasks", "todo list", "what's on my todo list", "whats on my todo list"):
         return {"tool": "friday", "action": "list_tasks", "parameters": {}, "confidence": 0.99}
 
     _m = re.match(r"(?:done|complete|finish|completed?|mark done)\s+(?:task\s+)?(.+)", text)
@@ -1793,11 +1796,11 @@ def route_single_intent(
         return {"tool": "friday", "action": "delete_task", "parameters": {"identifier": _m.group(1).strip()}, "confidence": 0.99}
 
     # ── Goals ──
-    _m = re.match(r"(?:add goal|my goal is|set goal|goal:)\s+(.+)", text)
+    _m = re.match(r"(?:add (?:a )?goal|my goal is|set (?:a )?goal|goal:)\s+(.+)", text)
     if _m:
         return {"tool": "friday", "action": "add_goal", "parameters": {"text": _m.group(1).strip()}, "confidence": 0.99}
 
-    if text in ("list goals", "show goals", "my goals", "what are my goals"):
+    if text in ("list goals", "show goals", "my goals", "what are my goals", "list my goals"):
         return {"tool": "friday", "action": "list_goals", "parameters": {}, "confidence": 0.99}
 
     _m = re.match(r"(?:achieved?|completed?) goal\s+(.+)", text)
@@ -1805,15 +1808,15 @@ def route_single_intent(
         return {"tool": "friday", "action": "complete_goal", "parameters": {"identifier": _m.group(1).strip()}, "confidence": 0.99}
 
     # ── Notes ──
-    _m = re.match(r"(?:add note|note:|note to self:?|write this down:?)\s+(.+)", text)
+    _m = re.match(r"(?:add (?:a )?note|note:|note to self:?|write this down:?)\s+(.+)", text)
     if _m:
         return {"tool": "friday", "action": "add_note", "parameters": {"text": _m.group(1).strip()}, "confidence": 0.99}
 
-    if text in ("list notes", "show notes", "my notes", "show my notes"):
+    if text in ("list notes", "show notes", "my notes", "show my notes", "list my notes"):
         return {"tool": "friday", "action": "list_notes", "parameters": {}, "confidence": 0.99}
 
     # ── Health tracking ──
-    _m = re.match(r"(?:log|track) weight\s+(.+)", text)
+    _m = re.match(r"(?:log|track) (?:my )?weight\s+(.+)", text)
     if _m:
         return {"tool": "friday", "action": "log_health", "parameters": {"metric": "weight", "value": _m.group(1).strip()}, "confidence": 0.99}
 
@@ -1913,7 +1916,8 @@ def route_single_intent(
     if text in ("show this week", "this week's schedule", "weekly schedule", "week calendar"):
         return {"tool": "friday", "action": "list_week_events", "parameters": {}, "confidence": 0.99}
 
-    if text in ("next event", "what's next", "whats next", "upcoming event"):
+    if text in ("next event", "what's next", "whats next", "upcoming event",
+                "what's my next event", "whats my next event", "my next event"):
         return {"tool": "friday", "action": "next_event", "parameters": {}, "confidence": 0.99}
 
     _m = re.match(r"(?:cancel|remove|delete) (?:event |meeting |appointment )?(.+)", text)
@@ -1937,7 +1941,8 @@ def route_single_intent(
     # =====================================
 
     # "what do you know about me" / "my details" / "about me"
-    if text in ("what do you know about me", "my details", "about me", "show my profile", "what do you know about yourself"):
+    if text in ("what do you know about me", "my details", "about me", "show my profile", "what do you know about yourself",
+                "what facts do you know about me", "what facts do you know", "my facts", "facts about me"):
         return {
             "tool": "personal",
             "action": "get_all",
