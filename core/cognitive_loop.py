@@ -340,6 +340,12 @@ def run_cognitive_loop_stream(
                 full.append(token)
                 yield token
             response = "".join(full)
+            # Backstop — an assistant must NEVER go silent. If the tool was empty AND the LLM
+            # also produced nothing (model hiccup / no-capability request like 'send an email'),
+            # emit a graceful fallback so the user always gets a reply. Dogfood S36.
+            if not response.strip():
+                response = "I'm not sure how to help with that one, boss — can you rephrase or give me a bit more?"
+                yield response
         else:
             # Tool returned a one-shot reply. Two gated post-layers:
             # 1. response_validator (S30 GPT review): catches DAN compliance / hallucinated
