@@ -152,12 +152,32 @@ def emit_report(rows: list, judged: bool = False):
     print(f"-> {OUT}  ({len(flagged)} flagged of {len(rows)})")
 
 
+_IDEALS_PATH = os.path.join(ROOT, "data", "chat_ideals.jsonl")
+
+
+def _load_ideals() -> dict:
+    if not os.path.exists(_IDEALS_PATH):
+        return {}
+    out = {}
+    with open(_IDEALS_PATH, "r", encoding="utf-8") as f:
+        for ln in f:
+            try:
+                r = json.loads(ln, strict=False)
+                if r.get("input") and r.get("ideal"):
+                    out[r["input"]] = r["ideal"]
+            except Exception:
+                pass
+    return out
+
+
 def emit_beforeafter(old_id: str, new_id: str, out_path: str = None):
-    """Write a markdown showing input + before reply + after reply for every input
-    whose reply text changed between two runs. The receipt of the polish loop."""
+    """Write a markdown showing input + before reply + after reply (+ ideal if known)
+    for every input whose reply text changed between two runs.
+    Ideals live in data/chat_ideals.jsonl as {input, ideal} — hand-author or LLM-suggest."""
     out_path = out_path or os.path.join(ROOT, "CHAT_BEFORE_AFTER.md")
     old = {r["input"]: r for r in load_run(old_id)}
     new = {r["input"]: r for r in load_run(new_id)}
+    ideals = _load_ideals()
     common = sorted(set(old) & set(new))
     changed, polished, unchanged = [], [], []
     for inp in common:
@@ -186,7 +206,10 @@ def emit_beforeafter(old_id: str, new_id: str, out_path: str = None):
                 f.write(f"- **agent**: {o.get('agent')!r} -> {n.get('agent')!r} · "
                         f"**flags**: {of} -> {nf}\n\n")
                 f.write("**Before:**\n```\n" + ((o.get('reply') or '').strip() or '(empty)') + "\n```\n\n")
-                f.write("**After:**\n```\n" + ((n.get('reply') or '').strip() or '(empty)') + "\n```\n\n---\n\n")
+                f.write("**After:**\n```\n" + ((n.get('reply') or '').strip() or '(empty)') + "\n```\n\n")
+                if ideals.get(inp):
+                    f.write(f"**Ideal target:**\n```\n{ideals[inp]}\n```\n\n")
+                f.write("---\n\n")
         if changed:
             f.write("## Changed (no flag delta — LLM stochasticity or neutral rewrite)\n\n")
             for inp, o, n, of, nf in changed[:40]:

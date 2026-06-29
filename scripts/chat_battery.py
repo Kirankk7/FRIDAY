@@ -157,15 +157,25 @@ def main():
             print(f"server not reachable at {args.base} — run `python app.py` or use --inproc")
             sys.exit(2)
 
-    # in-proc test isolation: cancel any leftover routine recording state between rows so a
-    # corpus entry like 'create a routine called X' doesn't capture subsequent inputs (dogfood
-    # finding: 10 inputs after a routine-create all landed in routines.add_command).
+    # in-proc test isolation between rows (dogfood S27 + S30):
+    # - routine recording mode: 'create a routine called X' otherwise captures every subsequent
+    #   input as a routine command.
+    # - chat memory history: terse inputs ('.', '"', empty) otherwise pick up prior turn's
+    #   context and the LLM hallucinates a continuation (e.g. '.' -> 'Drop the base64 string').
     def _reset_state():
         if args.inproc:
             try:
                 from core.routines import routine_manager
                 if routine_manager.is_recording():
                     routine_manager.cancel_recording()
+            except Exception:
+                pass
+            try:
+                from core.memory import load_memory, save_memory_safe
+                mem = load_memory()
+                if mem.get("history"):
+                    mem["history"] = []
+                    save_memory_safe(mem)
             except Exception:
                 pass
 
