@@ -157,8 +157,21 @@ def main():
             print(f"server not reachable at {args.base} — run `python app.py` or use --inproc")
             sys.exit(2)
 
+    # in-proc test isolation: cancel any leftover routine recording state between rows so a
+    # corpus entry like 'create a routine called X' doesn't capture subsequent inputs (dogfood
+    # finding: 10 inputs after a routine-create all landed in routines.add_command).
+    def _reset_state():
+        if args.inproc:
+            try:
+                from core.routines import routine_manager
+                if routine_manager.is_recording():
+                    routine_manager.cancel_recording()
+            except Exception:
+                pass
+
     results, fails = [], 0
     for row in rows:
+        _reset_state()
         msg = _expand(row["input"])
         t0 = time.time()
         if args.inproc:
