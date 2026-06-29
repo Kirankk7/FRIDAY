@@ -1708,7 +1708,7 @@ def route_single_intent(
     # =====================================
     # ROUTINES / MACROS (Phase 43)
     # =====================================
-    _m = re.match(r"(?:create|new|record|start|make)\s+(?:a\s+)?routine\s+(.+)", text)
+    _m = re.match(r"(?:create|new|record|start|make)\s+(?:a\s+)?routine\s+(?:called\s+|named\s+)?(.+)", text)
     if _m:
         return {"tool": "routines", "action": "create_routine",
                 "parameters": {"name": _m.group(1).strip()}, "confidence": 0.97}
