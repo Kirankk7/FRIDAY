@@ -678,7 +678,17 @@ def route_single_intent(
 
     if text.startswith("scan "):
         target = text.replace("scan ", "").strip()
-        return {"tool": "ultron", "action": "nmap_scan", "parameters": {"target": target}, "confidence": 0.99}
+        # "scan my computer / my system / my pc" -> local defensive scan, NOT nmap a target.
+        if re.search(r"\b(my (?:computer|system|pc|laptop|machine|network)|localhost|this (?:pc|machine))\b", target):
+            return {"tool": "ultron", "action": "defensive_scan", "parameters": {}, "confidence": 0.95}
+        # Only nmap when the target LOOKS like a host (domain / IP / host:port). Otherwise
+        # 'scan it' / 'scan reminder note translate' would launch a scan on garbage (hang/
+        # wrong-target). Dogfood S35.
+        if re.match(r"^(?:https?://)?(?:\d{1,3}(?:\.\d{1,3}){3}|[\w-]+(?:\.[\w-]+)+)(?::\d+)?(?:/\S*)?$", target):
+            return {"tool": "ultron", "action": "nmap_scan", "parameters": {"target": target}, "confidence": 0.99}
+        return {"tool": "chat", "action": "respond", "confidence": 0.95,
+                "parameters": {"task": f"Scan what exactly, boss? Give me a host or IP "
+                                       f"(e.g. 'scan example.com'), or say 'scan my computer' for a local check."}}
 
     if text.startswith("full scan ") or text.startswith("full recon "):
         target = text.replace("full scan ", "").replace("full recon ", "").strip()
