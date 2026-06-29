@@ -1030,16 +1030,24 @@ def route_single_intent(
     # PHASE 42 — QUICK WINS BATCH
     # =====================================
 
-    # Speed test
-    if text in ("test my internet speed", "speed test", "internet speed", "test internet speed",
-                "check internet speed", "how fast is my internet", "run speed test", "network speed test"):
-        return {"tool": "system", "action": "speed_test", "parameters": {}, "confidence": 0.99}
+    # Speed test — keyword match (tolerant of paraphrases, not just exact phrases)
+    if re.search(r"\b(?:speed[\s-]?test|internet speed|network speed|connection speed|"
+                 r"how fast is (?:my|the) (?:internet|wifi|connection|network)|"
+                 r"test (?:my )?(?:internet|connection|network|download) speed)\b", text):
+        return {"tool": "system", "action": "speed_test", "parameters": {}, "confidence": 0.98}
 
-    # Battery
-    if text in ("battery status", "check battery", "battery level", "how much battery",
-                "battery percentage", "battery", "check battery level", "battery life",
-                "how charged is my laptop", "battery charge"):
-        return {"tool": "system", "action": "battery_status", "parameters": {}, "confidence": 0.99}
+    # Battery — keyword match
+    if re.search(r"\bbatter(?:y|ies)\b|\bam i charging\b|\bhow charged\b", text):
+        return {"tool": "system", "action": "battery_status", "parameters": {}, "confidence": 0.98}
+
+    # CPU / RAM / system info / recall — keyword (were exact-only / missing -> LLM misroute)
+    if re.search(r"\b(?:cpu|processor)\s+(?:usage|load|utili[sz]ation|use)\b", text) or text in ("cpu", "cpu usage"):
+        return {"tool": "system", "action": "cpu_usage", "parameters": {}, "confidence": 0.97}
+    if re.search(r"\b(?:ram|memory)\s+(?:usage|used|use)\b|how much (?:ram|memory)", text):
+        return {"tool": "system", "action": "ram_usage", "parameters": {}, "confidence": 0.97}
+    # NOTE: "system info" intentionally NOT routed here — veronica.system_info owns it (legacy design).
+    if re.search(r"\brecall (?:the )?last result\b|\bwhat was the last result\b", text):
+        return {"tool": "system", "action": "recall_result", "parameters": {}, "confidence": 0.95}
 
     # ── Crypto / encoding toolkit (deterministic; payload captured case-sensitively) ──
     _CSCHEME = {"base64": "base64", "b64": "base64", "base32": "base32", "base58": "base58",
@@ -1194,6 +1202,26 @@ def route_single_intent(
     if text in ("crypto prices", "top crypto", "crypto market", "coin prices"):
         return {"tool": "vision", "action": "crypto_price",
                 "parameters": {"coins": "bitcoin,ethereum,solana,bnb,ripple"}, "confidence": 0.95}
+
+    # Broadened vision fallbacks — clear commands the strict patterns above miss, so they route
+    # deterministically instead of falling to the (unreliable, local-model) LLM router.
+    if re.search(rf"\b{_coin_re}\b.{{0,25}}\bprice\b|\bprice\b.{{0,25}}\b{_coin_re}\b|"
+                 rf"how much is\s+(?:the\s+)?{_coin_re}\b|{_coin_re}\s+(?:is\s+)?worth", text, re.IGNORECASE):
+        _cm = re.search(_coin_re, text, re.IGNORECASE)
+        return {"tool": "vision", "action": "crypto_price",
+                "parameters": {"coins": _cm.group(1)}, "confidence": 0.93}
+    _m = re.search(r"(\d[\d,]*\.?\d*)\s*([a-z]{3}|dollars?|euros?|pounds?|rupees?|yen|yuan)\s+"
+                   r"(?:to|in|into)\s+([a-z]{3}|dollars?|euros?|pounds?|rupees?|yen|yuan)\b", text, re.IGNORECASE)
+    if _m:
+        return {"tool": "vision", "action": "currency_convert",
+                "parameters": {"amount": float(_m.group(1).replace(",", "")),
+                               "from": _CCY.get(_m.group(2).lower(), _m.group(2).upper()),
+                               "to": _CCY.get(_m.group(3).lower(), _m.group(3).upper())}, "confidence": 0.93}
+    _m = re.search(r"what does\s+(.+?)\s+mean(?:\s+in\s+(\w+))?", text, re.IGNORECASE)
+    if _m:
+        return {"tool": "vision", "action": "translate",
+                "parameters": {"text": _m.group(1).strip().strip("'\""),
+                               "target": (_m.group(2) or "english").strip()}, "confidence": 0.92}
 
     # =====================================
     # FILE — READ / SUMMARIZE DOCUMENT (Phase 31 — MarkItDown)

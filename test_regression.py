@@ -2190,6 +2190,14 @@ run_test("Router: 'rot13 uryyb' → rot13",                _crypto_route("rot13 
 run_test("Router: 'decode <token>' → auto_decode",       _crypto_route("decode aGVsbG8=", "auto_decode"))
 run_test("Crypto: core ops round-trip + error",          _crypto_ops_roundtrip)
 
+# System-command paraphrase routing (dogfood S9 fix — were exact-only -> LLM misroute)
+run_test("Router: 'speed test my internet' → speed_test", _route("speed test my internet", "system", "speed_test"))
+run_test("Router: 'what is my battery level' → battery",  _route("what is my battery level", "system", "battery_status"))
+run_test("Router: 'am i charging' → battery",             _route("am i charging", "system", "battery_status"))
+run_test("Router: 'cpu usage' → cpu_usage",               _route("cpu usage", "system", "cpu_usage"))
+run_test("Router: 'how much ram am i using' → ram_usage",  _route("how much ram am i using", "system", "ram_usage"))
+run_test("Router: 'recall the last result' → recall",     _route("recall the last result", "system", "recall_result"))
+
 # Phase 36 — HackingTool fleet
 run_test("Router: 'ht search subdomain' → ht_search",     _route("ht search subdomain", "ultron", "ht_search"))
 run_test("Router: 'search hacking tools holehe' → ht_search", _route("search hacking tools holehe", "ultron", "ht_search"))
