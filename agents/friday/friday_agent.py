@@ -871,7 +871,10 @@ class FridayAgent:
                 return {"success": False, "message": "No Friday action specified.", "data": {}}
 
             if action == "add_task":
-                return add_task(parameters.get("text", input_text), parameters.get("priority", "normal"))
+                _t = (parameters.get("text", input_text) or "").strip()
+                if not _t:
+                    return {"success": False, "message": "Need task text, boss. e.g. 'add task buy milk'.", "data": {}}
+                return add_task(_t, parameters.get("priority", "normal"))
             elif action == "list_tasks":
                 return list_tasks()
             elif action == "complete_task":
@@ -880,14 +883,20 @@ class FridayAgent:
                 return delete_task(parameters.get("identifier", ""))
 
             elif action == "add_goal":
-                return add_goal(parameters.get("text", input_text))
+                _t = (parameters.get("text", input_text) or "").strip()
+                if not _t:
+                    return {"success": False, "message": "Need goal text, boss. e.g. 'add goal run a 5k'.", "data": {}}
+                return add_goal(_t)
             elif action == "list_goals":
                 return list_goals()
             elif action == "complete_goal":
                 return complete_goal(parameters.get("identifier", ""))
 
             elif action == "add_note":
-                return add_note(parameters.get("text", input_text))
+                _t = (parameters.get("text", input_text) or "").strip()
+                if not _t:
+                    return {"success": False, "message": "Need note text, boss. e.g. 'add note meeting moved'.", "data": {}}
+                return add_note(_t)
             elif action == "list_notes":
                 return list_notes(parameters.get("n", 5))
 

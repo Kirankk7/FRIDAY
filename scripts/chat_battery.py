@@ -55,6 +55,8 @@ def drive_live(base, msg, timeout):
     deadline = time.time() + timeout
     try:
         r = requests.get(url, stream=True, timeout=(5, timeout))
+        if r.status_code == 414:                  # URI too long = graceful reject (not a crash)
+            return "HTTP 414 (URI too long — graceful)", "", "ok"
         if r.status_code != 200:
             return f"HTTP {r.status_code}", "", "crash"
         for raw in r.iter_lines(decode_unicode=True):

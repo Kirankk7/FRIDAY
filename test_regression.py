@@ -2235,6 +2235,19 @@ def _bb_unknown_refuses_fast():
 
 run_test("Ultron: bug_bounty unknown-scope refuses fast (S18 P2 fix)", _bb_unknown_refuses_fast)
 
+# S23 — friday rejects empty text on add_task/goal/note (was silently polluting lists)
+def _friday_rejects_empty():
+    from core.tools_registry import execute_tool
+    for action in ("add_task", "add_goal", "add_note"):
+        r = execute_tool("friday", "", action, {"text": ""})
+        if r.get("success"):
+            return f"{action} accepted empty text"
+        if "need" not in (r.get("message", "").lower()):
+            return f"{action} bad refusal msg: {r.get('message','')[:50]}"
+    return True
+
+run_test("Friday: add_task/goal/note reject empty text (S23 fix)", _friday_rejects_empty)
+
 # Phase 36 — HackingTool fleet
 run_test("Router: 'ht search subdomain' → ht_search",     _route("ht search subdomain", "ultron", "ht_search"))
 run_test("Router: 'search hacking tools holehe' → ht_search", _route("search hacking tools holehe", "ultron", "ht_search"))
