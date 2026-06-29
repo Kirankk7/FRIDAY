@@ -1732,7 +1732,22 @@ def route_single_intent(
     # =====================================
     # OPEN APP
     # =====================================
-    if text.startswith(
+    # Strip polite/paraphrase prefixes so "can you open chrome" / "could you bring up X" /
+    # "fire up X" / "i need X" all reach the open_app block (dogfood S27 found these falling
+    # through to the LLM router which then misroutes to edith).
+    _open_text = text
+    for _pfx in ("can you ", "could you ", "would you ", "please ", "i need to ",
+                 "let's ", "lets ", "i want to ", "i'd like to "):
+        if _open_text.startswith(_pfx):
+            _open_text = _open_text[len(_pfx):]
+            break
+    # paraphrase verbs -> canonical "open "
+    for _alt in ("bring up ", "fire up ", "boot up ", "pull up ", "i need "):
+        if _open_text.startswith(_alt):
+            _open_text = "open " + _open_text[len(_alt):]
+            break
+
+    if _open_text.startswith(
 
         (
             "open ",
@@ -1740,6 +1755,7 @@ def route_single_intent(
             "start "
         )
     ):
+        text = _open_text       # use the normalized form below
 
         app = (
 
