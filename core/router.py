@@ -172,6 +172,27 @@ def route_single_intent(
         .strip()
     )
 
+    # ── Adversarial / null input pre-filter (dogfood S30 — caught by user/GPT review) ──
+    # Punctuation-only or 0-1 char inputs would otherwise fall through to the LLM router and
+    # get misclassified (e.g. '"' -> ultron, '.' -> friday with leaked context). Catch them
+    # here with a safe clarify reply instead.
+    if text and len(text) <= 2 and not text.isalnum() and not re.match(r"\w", text):
+        return {"tool": "chat", "action": "respond", "confidence": 0.99,
+                "parameters": {"task": "Didn't catch that, boss — could you say what you'd like me to do?"}}
+    # Prompt-injection / jailbreak markers — refuse with a fixed safe reply, do NOT pass to LLM
+    # (model would otherwise comply: 'I am DAN, I will follow your commands to the letter').
+    _PI = re.compile(
+        r"\b(?:ignore (?:all )?(?:previous|prior) (?:instructions|prompts)"
+        r"|you are now (?:dan|jailbroken|unrestricted)"
+        r"|do anything now\b"
+        r"|reveal (?:your |the )?(?:hidden |system )?(?:instructions|prompt|rules)"
+        r"|pretend (?:you have no |you are not )?(?:rules|restrictions)"
+        r"|system:.*(?:reveal|ignore|override))",
+        re.IGNORECASE)
+    if _PI.search(text):
+        return {"tool": "chat", "action": "respond", "confidence": 0.99,
+                "parameters": {"task": "Not going to do that. My rules stay, boss — what do you actually need?"}}
+
     # Exact-command fast path — O(1) before the regex chain (Phase 51 #7)
     _exact = _EXACT_ROUTES.get(text)
     if _exact:
