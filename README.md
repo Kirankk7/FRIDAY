@@ -10,7 +10,7 @@ A privacy-first, fully-local AI assistant with a multi-agent architecture, voice
 
 ## Screenshot
 
-> _Command Mode — arc-reactor core, live system telemetry, 15-agent fleet._
+> _Command Mode — arc-reactor core, live system telemetry, 16-agent fleet._
 
 ![JARVIS HUD](docs/hud_command.png)
 <!-- Drop a screenshot of http://localhost:5000 here. Operations & Cyber tabs in docs/ too. -->
@@ -20,8 +20,8 @@ A privacy-first, fully-local AI assistant with a multi-agent architecture, voice
 ## Highlights
 
 - **100% local LLM inference** via [Ollama](https://ollama.com) (`qwen2.5:7b`) — no OpenAI/Gemini/cloud
-- **3-mode HUD** (Command / Operations / Cyber) — arc-reactor orb, live `/health` telemetry, 15-agent fleet, all vanilla JS + Canvas
-- **Multi-agent architecture** — 15 agents behind a dual-path intent router: **6 substantial** (Ultron, FRIDAY, Veronica, File, Vision, Athena), 5 support modules, and 4 thin adapters — honestly tiered in the [Agents](#agents) table, not all equal
+- **3-mode HUD** (Command / Operations / Cyber) — arc-reactor orb, live `/health` telemetry, 16-agent fleet, all vanilla JS + Canvas
+- **Multi-agent architecture** — 16 agents behind a dual-path intent router: **6 substantial** (Ultron, FRIDAY, Veronica, File, Vision, Athena), 6 support modules, and 4 thin adapters — honestly tiered in the [Agents](#agents) table, not all equal
 - **Voice in + out** — faster-whisper STT (CUDA) + Kokoro-82M neural TTS (per-agent voices + earcons), barge-in interrupt, edge-tts fallback
 - **AutoTune** — context-adaptive sampling (classifies each query → code/analytical/creative/conversational/chaotic → tunes temperature/top-p/etc) with 👍/👎 EMA online learning
 - **Cybersecurity agent (Ultron)** — native recon suite + a HackingTool index of 180+ tools **gated down to ~25 runnable** (capability allowlist, offensive categories blocked), NVD CVE search, VirusTotal, CVE→asset correlation, one-command bug-bounty workflow with a 7-question validation gate (kills noise/unconfirmed findings) + platform-ready PoC report
@@ -31,7 +31,8 @@ A privacy-first, fully-local AI assistant with a multi-agent architecture, voice
 - **Chat with your documents (RAG)** — index a file or folder, then ask questions and get grounded answers with source citations. Local TF-IDF retrieval + MarkItDown — no cloud, no embeddings model
 - **Unified memory + telemetry** — one facade across the vector/edith/tool/personal stores; SQLite-backed long-term memory; live per-agent telemetry feeding the HUD
 - **Gated critic pass** — optional self-review (critique → revise) on high-stakes Ultron/Athena reports
-- **Reliability engineering** — circuit breaker, LRU routing cache, shared API rate-throttle, startup config validator, structured rotating logs, **300-test regression suite**
+- **Crypto toolkit** — 29-op encode/decode/hash agent (base64/32/58, hex, url, html, unicode, rot13, caesar, morse, md5/sha*, jwt, aes, **auto-detect**) — CTF/bug-bounty payload decoding, all local
+- **Reliability engineering** — circuit breaker, LRU routing cache, shared API rate-throttle, startup config validator, structured rotating logs, **393-test regression suite**
 - **Proactive engine** — JARVIS reaches out: morning digest, security alerts (new ports / suspicious processes), CVE-watchlist hits, and reminders pushed to the HUD (Telegram/email sinks pluggable)
 - **Streaming** — token-by-token SSE responses with sentence-chunked TTS
 
@@ -48,7 +49,7 @@ A privacy-first, fully-local AI assistant with a multi-agent architecture, voice
                                   cognitive_loop  (route → execute → reflect)
                                                   │
               ┌───────────────────────────────────┼───────────────────────────┐
-          router                              executor ──► tools_registry ──► 15 agents
+          router                              executor ──► tools_registry ──► 16 agents
    (regex fast-path + O(1) exact →           (per-step dispatch)                 │
     LLM classify → clarify → fallback)                                    ask_llm()  ──► Ollama
                                                             (circuit breaker · LRU cache · AutoTune · per-agent model routing)
@@ -60,7 +61,7 @@ A privacy-first, fully-local AI assistant with a multi-agent architecture, voice
 
 ## Agents
 
-Not all 15 are equal — they're tiered by how much real logic each carries (**Core** = substantial,
+Not all 16 are equal — they're tiered by how much real logic each carries (**Core** = substantial,
 **Support** = moderate, **Adapter** = thin wrapper over a library/endpoint). Honest by design.
 
 | Agent | Codename | Tier | Role |
@@ -76,6 +77,7 @@ Not all 15 are equal — they're tiered by how much real logic each carries (**C
 | **Terminator** | TERMINATOR | Support | Windows desktop control (pywinauto) — focus/type/click/launch apps |
 | **Edith** | EDITH | Support | Project/long-term memory (SQLite-backed) |
 | **Scheduler** | CHRONOS | Support | Recurring background tasks + proactive engine |
+| **Crypto** | CIPHER | Support | Encode/decode/hash toolkit — 29 ops (base64/32/58, hex, rot13, caesar, morse, md5/sha*, jwt, aes, auto-detect) |
 | **n8n** | RELAY | Adapter | Trigger self-hosted n8n automation workflows (webhook POST) |
 | **Personal** | JOCASTA | Adapter | User facts & profile store |
 | **Routines** | MACRO | Adapter | Record & replay command-sequence macros |
@@ -89,6 +91,8 @@ Not all 15 are equal — they're tiered by how much real logic each carries (**C
 - **Threat intel**: NVD CVE search, CVE tracking/watchlist, VirusTotal (file/hash/URL/domain/IP)
 - **Correlation**: cross-links tracked CVEs against scanned host services ("am I exposed?")
 - **Bug-bounty workflow**: `bug bounty <target>` → recon → parse → exploit lookup → validate → **quality gate** (7-question + never-submit blacklist + P1-P5 payout tiers) → platform-ready PoC report
+- **Multi-user authz / IDOR oracle**: register principals (`session set`), cross-account `idor check` / `bola check` (owner vs attacker vs anon control), `replay as`, `graphql hunt` (introspection + privileged-mutation) — the money-bug class, live-confirmed on OWASP Juice Shop
+- **Threat intel**: `threat intel <ioc>` aggregates IP/domain/URL/hash reputation across feeds (DShield no-key + optional URLhaus/AbuseIPDB/OTX)
 - **Target memory graph**: per-host profiles — scans, findings, endpoints, notes + typed intel buckets (APIs / JWT / auth / GraphQL / tech) across hunts
 - **Burp ingestion + tagging** (Community-friendly): parse a Burp HTTP-history export → endpoint/param inventory, auto-tagging JWT/GraphQL/API/auth-boundary/tech → typed target profile → nuclei/httpx (no Burp Pro / API key)
 - **Evidence/retest loop**: re-probe a finding, capture confirmed request/response evidence into the profile + report (bug-bounty value is in the evidence)
@@ -143,6 +147,8 @@ cp .env.example .env          # add API keys (all optional)
 python app.py                 # → http://localhost:5000
 ```
 
+**Full command list:** see **[COMMANDS.md](COMMANDS.md)** — every voice/text command + the friday-recon CLI, each with an inline comment. Functional coverage ledger in **[COVERAGE.md](COVERAGE.md)**; an honest end-to-end audit in **[FINAL_VERDICT.md](FINAL_VERDICT.md)**.
+
 On boot, a **config validator** prints a readiness summary (Ollama reachable, model pulled, optional keys, security tools, HackingTool backend) — loud about what's missing, never fatal.
 
 **Optional API keys** (features degrade gracefully without them): NVD, VirusTotal, football-data.org, GitHub token, n8n.
@@ -151,15 +157,16 @@ On boot, a **config validator** prints a readiness summary (Ollama reachable, mo
 ## Testing
 
 ```bash
-python test_regression.py     # 30 sections, 300 tests, HTML report
+python test_regression.py     # 393 tests (402 total, 9 skipped offline), HTML report
+python scripts/coverage.py    # → COVERAGE.md — every action PASS / SKIP / FAIL
 ```
 
-Covers all 15 agents, router patterns, security helpers + HackingTool gates, SSRF guard, circuit breaker, AutoTune + model routing, API throttle, config validator, memory, TTS, and live-API integrations (skipped when offline).
+Covers all 16 agents, router patterns, security helpers + HackingTool gates, SSRF guard, circuit breaker, AutoTune + model routing, API throttle, config validator, memory, TTS, and live-API integrations (skipped when offline).
 
 ---
 
 ## Status
 
-Feature-complete core. Local assistant + voice + 3-mode HUD + cybersecurity toolkit, all functional and tested (300 tests green).
+Feature-complete core. Local assistant + voice + 3-mode HUD + cybersecurity toolkit, all functional and tested (393 tests green). Hardened over a 56-session dogfood campaign — chat front-door proven 0-misroute/0-crash, the security engine live-confirmed (SQLi/NoSQLi/XSS/IDOR) on OWASP Juice Shop + DVWA.
 
 *Built as a learning project exploring local LLM orchestration, multi-agent design, adaptive cognition, and AI-assisted security workflows.*
