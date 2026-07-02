@@ -3989,6 +3989,32 @@ def _t_agent_voices():
 
 run_test("Voices: AGENT_VOICES contract + ULTRON/EDITH fingerprints", _t_agent_voices)
 
+def _t_followup_state():
+    """Deterministic follow-up state: 'now to X' re-translates the last source, 'do it again'
+    re-runs the last op, a bare word can't hijack, and a stale op expires."""
+    import time
+    from core import router, op_context
+    op_context.clear()
+    op_context.record("translate", "vision", "translate", {"text": "hello", "target": "french"}, "bonjour")
+    d = router.route_single_intent("now to spanish")
+    if not d or d.get("action") != "translate" or d.get("parameters", {}).get("target") != "spanish":
+        return f"'now to spanish' did not resolve to translate/spanish: {d}"
+    d2 = router.route_single_intent("do it again")
+    if not d2 or d2.get("action") != "translate" or d2.get("parameters", {}).get("target") != "french":
+        return f"'do it again' did not re-run the last translate: {d2}"
+    op_context.record("translate", "vision", "translate", {"text": "hello", "target": "french"}, "bonjour")
+    d3 = router.route_single_intent("battery")
+    if d3 and d3.get("action") == "translate":
+        return "bare 'battery' wrongly hijacked by the translate follow-up"
+    op_context.record("translate", "vision", "translate", {"text": "x", "target": "fr"}, "y")
+    op_context._last["ts"] = time.time() - 9999   # force stale
+    if op_context.last() is not None:
+        return "stale op did not expire"
+    op_context.clear()
+    return True
+
+run_test("Chat: deterministic follow-up state ('now to X' / 'do it again')", _t_followup_state)
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # CONSOLE SUMMARY

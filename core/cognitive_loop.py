@@ -159,6 +159,14 @@ def run_cognitive_loop(
                 "Done."
             )
 
+            # Follow-up state (deterministic): remember this op so "do it again" /
+            # "now to spanish" resolve against it next turn.
+            try:
+                from core import op_context
+                op_context.record(action or tool, tool, action, parameters, response)
+            except Exception:
+                pass
+
         # ==========================
         # NEWS CONTEXT -> spoken LLM summary
         # ==========================
@@ -315,6 +323,11 @@ def run_cognitive_loop_stream(
             plan = [{"tool": tool, "action": action, "parameters": parameters}]
             results = execute_plan(plan)
             response = results[0] if results else "Done."
+            try:
+                from core import op_context
+                op_context.record(action or tool, tool, action, parameters, response)
+            except Exception:
+                pass
 
         # ==========================
         # NEWS CONTEXT -> fast spoken LLM summary (streaming)
