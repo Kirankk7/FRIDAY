@@ -4015,6 +4015,49 @@ def _t_followup_state():
 
 run_test("Chat: deterministic follow-up state ('now to X' / 'do it again')", _t_followup_state)
 
+def _t_evidence_object():
+    """F3: gate-passed finding -> canonical Evidence Object (CWE + preliminary CVSS + curl),
+    submission-ready (lint clean), with a complete markdown export."""
+    from core import evidence
+    f = {"template": "sqli-error-based", "severity": "high", "url": "http://t/s?q=1",
+         "evidence": "db error", "repro": ["inject '"], "validated": True,
+         "_gate": {"tier": "P2", "confidence": "reproduced"}}
+    o = evidence.build(f, "target")
+    if o["cwe"]["id"] != "CWE-89":
+        return f"sqli CWE wrong: {o['cwe']}"
+    if not o["cvss"].get("preliminary"):
+        return "CVSS not marked preliminary"
+    if evidence.lint(o):
+        return f"evidence not submission-ready: {evidence.lint(o)}"
+    md = evidence.to_markdown(o)
+    for sec in ["CWE-89", "CVSS 3.1", "Steps to reproduce", "curl", "Remediation"]:
+        if sec not in md:
+            return f"markdown missing section: {sec}"
+    if evidence.build({"template": "idor-bola", "severity": "high", "url": "http://t/1"}, "t")["cwe"]["id"] != "CWE-639":
+        return "idor/bola CWE wrong"
+    return True
+
+def _t_evidence_bundle_write():
+    """F3: bug_bounty writes one json + md Evidence Object per gate-passed finding."""
+    import tempfile, os, shutil
+    from agents.ultron.ultron_agent import ultron_agent as U
+    d = tempfile.mkdtemp()
+    try:
+        n = U._write_evidence_bundle(d, "t", [{
+            "template": "sqli-error-based", "severity": "high", "url": "http://t/s",
+            "evidence": "e", "repro": ["x"], "_gate": {"report": True, "tier": "P2", "confidence": "reproduced"}}])
+        if n != 1:
+            return f"wrote {n} objects, want 1"
+        files = os.listdir(os.path.join(d, "evidence"))
+        if not any(x.endswith(".json") for x in files) or not any(x.endswith(".md") for x in files):
+            return f"missing json/md files: {files}"
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
+    return True
+
+run_test("F3: Evidence Object (CWE/CVSS/curl/lint + markdown export)", _t_evidence_object)
+run_test("F3: evidence bundle writes json+md per finding", _t_evidence_bundle_write)
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # CONSOLE SUMMARY
