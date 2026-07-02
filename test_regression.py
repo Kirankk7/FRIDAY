@@ -3637,6 +3637,258 @@ def _gh_repos_live():
 run_test("Live: GitHub repo search (no key needed)", _live(_gh_repos_live))
 
 
+section("31. F1 — Live Capture Proxy")
+
+def _f1_shared_schema():
+    from core import live_capture as lc, burp_ingest as bi
+    recs = [
+        {"url": "http://t.local/rest/basket/6?x=1", "method": "GET", "status": 200,
+         "request": "GET /rest/basket/6?x=1 HTTP/1.1\r\nCookie: token=abc; sid=9\r\n"
+                    "Authorization: Bearer eyJhbGci.def12345678.ghi90\r\n\r\n",
+         "response": "HTTP/1.1 200\r\nServer: nginx\r\nContent-Type: application/json\r\n\r\n{\"id\":6}"},
+        {"url": "http://t.local/api/users?id=2", "method": "POST", "status": 401,
+         "request": "POST /api/users?id=2 HTTP/1.1\r\n\r\nname=x", "response": "HTTP/1.1 401\r\n\r\n"},
+    ]
+    inv_lc, inv_bi = lc.build_from_records(recs), bi._build_inventory(recs)
+    if inv_lc != inv_bi:
+        return "live_capture and burp_ingest built DIFFERENT inventories from identical records"
+    need = {"items", "hosts", "endpoints", "urls", "params", "methods", "tags"}
+    if not need <= set(inv_lc):
+        return f"schema missing keys: {need - set(inv_lc)}"
+    if "apis" not in inv_lc["tags"] or "jwt" not in inv_lc["tags"]:
+        return f"shared tagging lost api/jwt: {inv_lc['tags']}"
+    return True
+
+def _f1_capture_roundtrip_and_register():
+    from core import live_capture as lc, session_manager as sm
+    host = "f1test.local"
+    try:
+        recs = [{"url": f"http://{host}/rest/basket/6", "method": "GET", "status": 200,
+                 "request": "GET /rest/basket/6 HTTP/1.1\r\nCookie: sessionid=SECRET123; other=x\r\n\r\n",
+                 "response": "HTTP/1.1 200\r\nContent-Type: application/json\r\n\r\n{\"ok\":1}"}]
+        inv = lc.save_capture(host, recs)
+        if not any("/rest/basket/6" in u for u in inv.get("urls", [])):
+            return f"capture missing endpoint: {inv.get('urls')}"
+        if lc.load_capture(host) != inv:
+            return "load_capture != saved inventory"
+        p = sm.get("captured")
+        if not p or "sessionid=SECRET123" not in (p.get("cookie") or ""):
+            return f"principal not auto-registered from capture: {p}"
+    finally:
+        sm.delete("captured")
+        _f = lc._host_file(host)
+        if os.path.exists(_f):
+            os.remove(_f)
+    return True
+
+def _f1_id_endpoint_detection():
+    from core import live_capture as lc
+    recs = [
+        {"url": "http://t/rest/basket/6", "method": "GET"},
+        {"url": "http://t/api/order?id=42", "method": "GET"},
+        {"url": "http://t/about", "method": "GET"},
+        {"url": "http://t/u/1b2c3d4e-1111-2222-3333-abcddef", "method": "GET"},
+    ]
+    ids = lc.id_record_urls(recs)
+    if any("/about" in u for u in ids):
+        return f"false positive on /about: {ids}"
+    if not any("/rest/basket/6" in u for u in ids):
+        return f"missed path id: {ids}"
+    if not any("id=42" in u for u in ids):
+        return f"missed query id: {ids}"
+    return True
+
+def _f1_scan_needs_two_principals():
+    from core import live_capture as lc, session_manager as sm
+    host = "f1scan.local"
+    try:
+        lc.save_capture(host, [{"url": f"http://{host}/rest/basket/6", "method": "GET", "status": 200,
+                                "request": "GET /rest/basket/6 HTTP/1.1\r\nCookie: sid=A\r\n\r\n",
+                                "response": "HTTP/1.1 200\r\n\r\nx"}], register=False)
+        sm.delete("captured"); sm.delete("userB")     # ensure both absent
+        r = lc.scan_captured(host, owner="captured", attacker="userB")
+        if r.get("success") is not False or "principal" not in r.get("message", "").lower():
+            return f"scan should refuse without both principals: {r}"
+    finally:
+        sm.delete("captured")
+        _f = lc._host_file(host)
+        if os.path.exists(_f):
+            os.remove(_f)
+    return True
+
+run_test("F1: live_capture == burp_ingest schema (shared builder)", _f1_shared_schema)
+run_test("F1: capture roundtrip + auto-register principal", _f1_capture_roundtrip_and_register)
+run_test("F1: object-id endpoint detection (path + query, no FP)", _f1_id_endpoint_detection)
+run_test("F1: scan_captured refuses without two principals", _f1_scan_needs_two_principals)
+
+
+section("32. 10x batch — assistant + infra features")
+
+def _t_portfolio():
+    from core import portfolio as pf
+    try:
+        pf.clear()
+        pf.add_holding(0.5, "btc")
+        v = pf.value(price_fn=lambda c: 60000)
+        if "30,000" not in v["message"]:
+            return f"portfolio value wrong: {v['message']}"
+        if pf.remove_holding("btc").get("success") is not True:
+            return "remove failed"
+        if pf.holdings():
+            return "holdings not empty after remove"
+    finally:
+        pf.clear()
+        if os.path.exists("data/portfolio.json"):
+            os.remove("data/portfolio.json")
+    return True
+
+def _t_expenses():
+    from core import expenses as ex
+    try:
+        ex._save([])
+        ex.add_expense(40, "groceries")
+        ex.add_expense(10, "coffee")
+        r = ex.report("week")
+        if abs(r["data"]["total"] - 50.0) > 0.01:
+            return f"expense total wrong: {r['data']}"
+        if "groceries" not in ex.by_category("all")["data"]:
+            return "category breakdown missing groceries"
+    finally:
+        if os.path.exists("data/expenses.json"):
+            os.remove("data/expenses.json")
+    return True
+
+def _t_weather_graceful():
+    from core import weather
+    r = weather.get_weather("Dubai")
+    if not isinstance(r, dict) or "success" not in r:
+        return f"weather bad shape: {r}"
+    if weather._WMO.get(0) != "clear sky":
+        return "WMO map broken"
+    return True
+
+def _t_find_graceful():
+    from core import unified_find as uf
+    if uf.find("")["success"] is not False:
+        return "empty find should clarify"
+    if uf.find("zzznomatch987xyz")["success"] is not True:
+        return "nonsense find should still succeed gracefully"
+    return True
+
+def _t_calendar_ics():
+    import agents.friday.friday_agent as fa
+    from core import calendar_ics as cal
+    tmp = os.path.join("data", "_test_cal.ics")
+    fx = os.path.join("data", "_test_import.ics")
+    try:
+        r = cal.export_ics(tmp)
+        if not r["success"] or "BEGIN:VCALENDAR" not in open(tmp, encoding="utf-8").read():
+            return "export produced invalid ics"
+        with open(fx, "w", encoding="utf-8") as f:
+            f.write("BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nSUMMARY:Test Meeting\r\n"
+                    "DTSTART:20260710T140000\r\nEND:VEVENT\r\nEND:VCALENDAR")
+        orig, added = fa.schedule_event, {"n": 0}
+        fa.schedule_event = lambda *a, **k: added.__setitem__("n", added["n"] + 1)
+        try:
+            cal.import_ics(fx)
+        finally:
+            fa.schedule_event = orig
+        if added["n"] != 1:
+            return f"import parsed {added['n']} events, want 1"
+    finally:
+        for f in (tmp, fx):
+            if os.path.exists(f):
+                os.remove(f)
+    return True
+
+def _t_telegram_auth():
+    from core import telegram_sink as ts
+    orig = ts.TELEGRAM_CHAT_ID
+    try:
+        ts.TELEGRAM_CHAT_ID = "12345"
+        if ts._authorized_text({"message": {"chat": {"id": 999}, "text": "hi"}}) is not None:
+            return "wrong chat id must be rejected"
+        if ts._authorized_text({"message": {"chat": {"id": 12345}, "text": "add task x"}}) != "add task x":
+            return "correct chat id must pass"
+    finally:
+        ts.TELEGRAM_CHAT_ID = orig
+    return True
+
+def _t_findings_feed():
+    from core import findings_feed as ff
+    return True if isinstance(ff.recent(5), list) else "recent() must return a list"
+
+def _t_rag_watch():
+    import tempfile, shutil
+    from core import rag
+    d = tempfile.mkdtemp()
+    try:
+        with open(os.path.join(d, "a.txt"), "w", encoding="utf-8") as f:
+            f.write("hello world")
+        if not rag.watch_folder(d)["success"]:
+            return "watch_folder failed"
+        if d not in rag.list_watched()["data"]["folders"]:
+            return "folder not in watch list"
+        if not isinstance(rag.reindex_watched(), int):
+            return "reindex_watched must return int"
+        rag.unwatch_folder(d)
+    finally:
+        if os.path.exists("data/rag_watch.json"):
+            os.remove("data/rag_watch.json")
+        shutil.rmtree(d, ignore_errors=True)
+    return True
+
+def _t_voice_lang():
+    import config
+    if config.stt_language() != "en":
+        return f"default stt_language should be en, got {config.stt_language()}"
+    orig = config.VOICE_LANG
+    try:
+        config.VOICE_LANG = "auto"
+        if config.stt_language() is not None:
+            return "auto should map to None"
+    finally:
+        config.VOICE_LANG = orig
+    return True
+
+def _t_route_k_l():
+    from core import router
+    d = router.route("schedule routine morning every day at 8am")
+    if d.get("tool") != "scheduler" or d.get("parameters", {}).get("tool") != "routines":
+        return f"K route wrong: {d}"
+    d2 = router.route("watch docs C:/notes")
+    if d2.get("tool") != "daily" or d2.get("action") != "watch_docs":
+        return f"L route wrong: {d2}"
+    return True
+
+def _t_route_daily():
+    from core import router
+    for txt, tool, act in [
+        ("weather in Dubai", "daily", "weather"),
+        ("brief me", "daily", "briefing"),
+        ("add holding 0.5 btc", "finance", "portfolio_add"),
+        ("spent 40 on groceries", "finance", "expense_add"),
+        ("export calendar", "daily", "cal_export"),
+        ("how is my portfolio", "finance", "portfolio_show"),
+    ]:
+        d = router.route(txt)
+        if d.get("tool") != tool or d.get("action") != act:
+            return f"{txt!r} -> {d.get('tool')}.{d.get('action')} (want {tool}.{act})"
+    return True
+
+run_test("Portfolio: add/value/remove", _t_portfolio)
+run_test("Expenses: log/report/by-category", _t_expenses)
+run_test("Weather: graceful shape + WMO map", _t_weather_graceful)
+run_test("Unified find: empty clarifies, nonsense graceful", _t_find_graceful)
+run_test("Calendar ICS: export valid + import parses", _t_calendar_ics)
+run_test("Telegram: inbound auth gate", _t_telegram_auth)
+run_test("Findings feed: recent() returns list", _t_findings_feed)
+run_test("RAG watch: watch/list/reindex/unwatch", _t_rag_watch)
+run_test("Voice: VOICE_LANG -> stt_language()", _t_voice_lang)
+run_test("Routing: K scheduled-routine + L watch-docs", _t_route_k_l)
+run_test("Routing: daily/finance commands", _t_route_daily)
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # CONSOLE SUMMARY
 # ══════════════════════════════════════════════════════════════════════════════

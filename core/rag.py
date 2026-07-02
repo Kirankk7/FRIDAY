@@ -178,3 +178,78 @@ def stats() -> dict:
 def clear() -> dict:
     _save([])
     return {"success": True, "message": "Cleared the document index, boss."}
+
+
+# ── L — auto-RAG watch folder ────────────────────────────────────────────────
+# Register folders to keep indexed; reindex_watched() (called from the proactive
+# tick) re-indexes a folder when any file's mtime advances past the last index.
+_RAG_WATCH = os.path.join("data", "rag_watch.json")
+
+
+def _watch_load() -> dict:
+    try:
+        with open(_RAG_WATCH, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {"folders": {}}
+
+
+def _watch_save(d: dict) -> None:
+    os.makedirs("data", exist_ok=True)
+    with open(_RAG_WATCH, "w", encoding="utf-8") as f:
+        json.dump(d, f, indent=2)
+
+
+def _latest_mtime(folder: str) -> float:
+    latest = 0.0
+    for root, _, files in os.walk(os.path.expanduser(folder)):
+        for fn in files:
+            try:
+                latest = max(latest, os.path.getmtime(os.path.join(root, fn)))
+            except Exception:
+                pass
+    return latest
+
+
+def watch_folder(folder: str) -> dict:
+    folder = (folder or "").strip()
+    if not folder or not os.path.isdir(os.path.expanduser(folder)):
+        return {"success": False, "message": f"Not a folder I can see: {folder}", "data": {}}
+    index_folder(folder)
+    d = _watch_load()
+    d.setdefault("folders", {})[folder] = _latest_mtime(folder)
+    _watch_save(d)
+    return {"success": True, "message": f"Watching {folder} — I'll keep the doc index current.", "data": {}}
+
+
+def unwatch_folder(folder: str) -> dict:
+    d = _watch_load()
+    if (folder or "").strip() in d.get("folders", {}):
+        d["folders"].pop(folder.strip())
+        _watch_save(d)
+        return {"success": True, "message": f"Stopped watching {folder}.", "data": {}}
+    return {"success": False, "message": f"Wasn't watching {folder}.", "data": {}}
+
+
+def list_watched() -> dict:
+    folders = list(_watch_load().get("folders", {}).keys())
+    msg = "Watched doc folders: " + ", ".join(folders) if folders else "No doc folders watched."
+    return {"success": True, "message": msg, "data": {"folders": folders}}
+
+
+def reindex_watched() -> int:
+    """Reindex any watched folder whose contents changed. Returns # reindexed."""
+    d = _watch_load()
+    changed = 0
+    for folder, last in list(d.get("folders", {}).items()):
+        try:
+            cur = _latest_mtime(folder)
+            if cur > (last or 0):
+                index_folder(folder)
+                d["folders"][folder] = cur
+                changed += 1
+        except Exception:
+            pass
+    if changed:
+        _watch_save(d)
+    return changed
