@@ -48,13 +48,65 @@ FAST_MESSAGES = {
     "hey friday", "hi friday", "friday",
     "hey, friday", "hey, friday.", "hi, friday",
     "morning", "evening", "afternoon",
+    # Conversational acks (browser dogfood 2026-07-02): these were falling to the LLM
+    # which returned a canned "Got it, boss." or an empty bubble. Handle instantly instead.
+    "thanks", "thank you", "thank you so much", "thanks a lot", "thx", "ty", "cheers",
+    "ok", "okay", "k", "kk", "cool", "nice", "great", "awesome", "perfect", "sweet",
+    "lol", "haha", "lmao", "hehe", "nvm", "nevermind", "never mind",
+    "bye", "goodbye", "cya", "see ya", "see you", "later",
+    "you're awesome", "youre awesome", "i love you", "good job", "well done", "nice work",
+    # Identity questions — were falling to the LLM and coming back empty.
+    "who are you", "what are you", "what's your name", "whats your name",
+    "what is your name", "who is this", "your name", "are you there", "can you hear me",
+}
+
+# Instant, varied acks — no LLM, no canned "Got it, boss."
+_FAST_ACKS = {
+    "thanks": ["Anytime, boss.", "You got it.", "Happy to help.", "Anytime."],
+    "thank you": ["Anytime, boss.", "You got it.", "Happy to help."],
+    "thank you so much": ["Anytime, boss — that's what I'm here for.", "You got it."],
+    "thanks a lot": ["Anytime, boss.", "You got it."],
+    "thx": ["Anytime.", "You got it."], "ty": ["Anytime.", "You got it."],
+    "cheers": ["Cheers, boss.", "Anytime."],
+    "ok": ["Standing by, boss.", "Ready when you are.", "Got it."],
+    "okay": ["Standing by, boss.", "Ready when you are."],
+    "k": ["Standing by.", "Ready when you are."], "kk": ["Standing by.", "Ready when you are."],
+    "cool": ["Ready when you are, boss.", "Standing by."],
+    "nice": ["Glad you think so, boss.", "Standing by."],
+    "great": ["Ready when you are, boss.", "On standby."],
+    "awesome": ["Glad it works, boss.", "Standing by."],
+    "perfect": ["Ready for the next one, boss.", "Standing by."],
+    "sweet": ["Standing by, boss."],
+    "lol": ["Heh.", "Glad you're amused, boss."], "haha": ["Heh.", "Glad you're amused, boss."],
+    "lmao": ["Heh.", "Glad you're amused, boss."], "hehe": ["Heh."],
+    "nvm": ["No worries, boss.", "All good."], "nevermind": ["No worries, boss.", "All good."],
+    "never mind": ["No worries, boss.", "All good."],
+    "bye": ["Later, boss.", "I'll be here."], "goodbye": ["Later, boss.", "I'll be here."],
+    "cya": ["Later, boss."], "see ya": ["Later, boss."], "see you": ["Later, boss."],
+    "later": ["Later, boss."],
+    "you're awesome": ["Appreciate it, boss.", "Just doing my job."],
+    "youre awesome": ["Appreciate it, boss."],
+    "i love you": ["Appreciate it, boss.", "Right back at you — now what do you need?"],
+    "good job": ["Appreciate it, boss.", "Just doing my job."],
+    "well done": ["Appreciate it, boss."], "nice work": ["Appreciate it, boss."],
+    "who are you": ["I'm FRIDAY, your local AI assistant, boss. What do you need?"],
+    "what are you": ["I'm FRIDAY — a local AI assistant running on your machine, boss."],
+    "what's your name": ["FRIDAY, boss."], "whats your name": ["FRIDAY, boss."],
+    "what is your name": ["FRIDAY, boss."], "your name": ["FRIDAY, boss."],
+    "who is this": ["FRIDAY, boss — your assistant."],
+    "are you there": ["Right here, boss.", "Always, boss."],
+    "can you hear me": ["Loud and clear, boss.", "I'm here, boss."],
 }
 
 import random
 import datetime as _dt
 
 def _instant_greeting(text: str) -> str:
-    """Zero-LLM responses for common greetings. Sub-50ms."""
+    """Zero-LLM responses for common greetings + acks. Sub-50ms."""
+    # Conversational acks first (thanks / ok / lol / bye / …) — instant + varied.
+    if text in _FAST_ACKS:
+        return random.choice(_FAST_ACKS[text])
+
     hour = _dt.datetime.now().hour
     time_str = "morning" if hour < 12 else "afternoon" if hour < 17 else "evening"
 
