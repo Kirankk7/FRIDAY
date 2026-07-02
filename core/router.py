@@ -217,6 +217,32 @@ def route_single_intent(
         return {"tool": "chat", "action": "respond", "confidence": 0.99,
                 "parameters": {"task": "That looks like a template/injection marker — not running it. Tell me plainly what you'd like."}}
 
+    # ── Deterministic follow-up resolution (conversation state, no LLM) ──
+    # Resolve "do it again" / "now to spanish" against the LAST operation.
+    try:
+        from core import op_context as _opc
+        _lop = _opc.last()
+    except Exception:
+        _lop = None
+    if _lop:
+        # Re-run the last operation verbatim.
+        if re.fullmatch(r"(?:do it again|again|same(?: thing)?|repeat(?: that)?|one more time)\.?",
+                        text, re.I):
+            return {"tool": _lop["tool"], "action": _lop["action"],
+                    "parameters": dict(_lop["parameters"]), "confidence": 0.9}
+        # Re-translate the last source into a new language — needs a connective
+        # ("now/and/to/in/translate that to X") so a bare word can't hijack it.
+        if _lop.get("action") == "translate" and _lop["parameters"].get("text"):
+            _fm = re.fullmatch(
+                r"(?:now|and|then)\s+(?:translate (?:that|it)\s+)?(?:to |in |into )?([a-z]{3,})\??|"
+                r"translate (?:that|it)\s+(?:to |in |into )?([a-z]{3,})\??|"
+                r"(?:to|in|into)\s+([a-z]{3,})\??", text, re.I)
+            if _fm:
+                _lang = next((g for g in _fm.groups() if g), None)
+                if _lang and _lang.lower() not in ("it", "that", "again", "the", "same"):
+                    _p = dict(_lop["parameters"]); _p["target"] = _lang.strip()
+                    return {"tool": "vision", "action": "translate", "parameters": _p, "confidence": 0.9}
+
     # Exact-command fast path — O(1) before the regex chain (Phase 51 #7)
     _exact = _EXACT_ROUTES.get(text)
     if _exact:
