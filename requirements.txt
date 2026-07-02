@@ -49,3 +49,7 @@ sounddevice==0.4.7
 numpy==1.26.4
 SpeechRecognition==3.10.1
 pyaudio==0.2.14
+
+# Optional — F1 live-capture proxy (core/live_capture.py) only. Not needed for anything
+# else; the code imports it lazily and degrades gracefully when absent.
+#   pip install mitmproxy

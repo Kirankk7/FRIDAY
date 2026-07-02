@@ -1,6 +1,6 @@
-# JARVIS Functional Coverage — 2026-07-02 16:50
+# JARVIS Functional Coverage — 2026-07-02 23:33
 
-**50 working / 0 broken / 92 skipped  of 142 functionalities**
+**54 working / 0 broken / 104 skipped  of 158 functionalities**
 
 PASS = dispatched + well-formed result · SKIP = wired but not executed (destructive/network/desktop/needs-dep) · FAIL = wiring broken.
 
@@ -146,3 +146,19 @@ PASS = dispatched + well-formed result · SKIP = wired but not executed (destruc
 - [x] `echo.list_tools` — PASS (dispatched (action recognized))
 - [ ] `echo.run_tool` — SKIP (executes code)
 - [ ] `echo.delete_tool` — SKIP (destructive)
+- [x] `finance.expense_report` — PASS (dispatched (action recognized))
+- [x] `finance.expense_categories` — PASS (dispatched (action recognized))
+- [ ] `finance.portfolio_show` — SKIP (needs network (live pricing))
+- [ ] `finance.portfolio_add` — SKIP (writes user data)
+- [ ] `finance.portfolio_remove` — SKIP (destructive)
+- [ ] `finance.portfolio_clear` — SKIP (destructive)
+- [ ] `finance.expense_add` — SKIP (writes user data)
+- [x] `daily.find` — PASS (dispatched (action recognized))
+- [x] `daily.docs_watched` — PASS (dispatched (action recognized))
+- [ ] `daily.weather` — SKIP (needs network)
+- [ ] `daily.will_rain` — SKIP (needs network)
+- [ ] `daily.briefing` — SKIP (needs network/LLM)
+- [ ] `daily.cal_export` — SKIP (writes .ics)
+- [ ] `daily.cal_import` — SKIP (needs source file)
+- [ ] `daily.watch_docs` — SKIP (writes/indexes)
+- [ ] `daily.unwatch_docs` — SKIP (state-change)

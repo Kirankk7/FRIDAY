@@ -79,6 +79,16 @@ ROUTER_ACTIONS = {
     "vision": {"describe_image": "skip:needs llava+image", "screenshot_describe": "skip:needs llava"},
     "echo": {"generate_tool": "skip:LLM codegen", "list_tools": "smoke",
              "run_tool": "skip:executes code", "delete_tool": "skip:destructive"},
+    # Daily-driver agents (route deterministically, not in _VALID_TOOLS).
+    "finance": {"expense_report": "dispatch", "expense_categories": "dispatch",
+                "portfolio_show": "skip:needs network (live pricing)",
+                "portfolio_add": "skip:writes user data", "portfolio_remove": "skip:destructive",
+                "portfolio_clear": "skip:destructive", "expense_add": "skip:writes user data"},
+    "daily": {"find": "dispatch", "docs_watched": "dispatch",
+              "weather": "skip:needs network", "will_rain": "skip:needs network",
+              "briefing": "skip:needs network/LLM", "cal_export": "skip:writes .ics",
+              "cal_import": "skip:needs source file", "watch_docs": "skip:writes/indexes",
+              "unwatch_docs": "skip:state-change"},
 }
 
 
