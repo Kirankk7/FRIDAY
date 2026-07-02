@@ -3888,6 +3888,49 @@ run_test("Voice: VOICE_LANG -> stt_language()", _t_voice_lang)
 run_test("Routing: K scheduled-routine + L watch-docs", _t_route_k_l)
 run_test("Routing: daily/finance commands", _t_route_daily)
 
+def _t_wall_of_noise_guard():
+    """Browser dogfood: a long low-entropy blob truncates (URL cap) + the LLM hallucinates
+    on prior context. Must be caught by the pre-filter as a clarify, not routed to the model."""
+    from core import router
+    for t in ["A" * 50000, "A" * 9000]:
+        d = router.route(t)
+        if d.get("tool") != "chat" or "wall of text" not in str(d.get("parameters", {}).get("task", "")).lower():
+            return f"wall input not guarded: {d.get('tool')}.{d.get('action')}"
+    prose = ("please summarize the following meeting notes about the quarterly budget review and "
+             "the marketing plan for next year in as much detail as you can manage")
+    d = router.route(prose)
+    if d.get("tool") == "chat" and "wall of text" in str(d.get("parameters", {}).get("task", "")).lower():
+        return "false positive: legit long prose flagged as a wall"
+    return True
+
+run_test("Router: wall-of-noise guard (long low-entropy input)", _t_wall_of_noise_guard)
+
+def _t_fast_acks():
+    """Browser dogfood: thanks/ok/lol/identity fell to the LLM -> canned 'Got it, boss.' or
+    an empty bubble. Must be instant, non-empty, varied acks."""
+    from core import brain
+    for t in ["thanks", "ok", "lol", "bye", "cool", "nevermind", "who are you",
+              "whats your name", "can you hear me"]:
+        if t not in brain.FAST_MESSAGES:
+            return f"{t!r} not in FAST_MESSAGES"
+        r = brain._instant_greeting(t)
+        if not r or not r.strip():
+            return f"{t!r} -> empty ack"
+    return True
+
+def _t_proactive_no_filler():
+    """The proactive nudge must NOT staple onto tool results (browser dogfood: 'base64 decode'
+    matched 'code' -> 'I can review or optimize', every news query -> a tracking offer)."""
+    from core import proactive
+    if proactive.generate_proactive_suggestion("base64 decode X", "Decoded (BASE64): Hello", "calm") is not None:
+        return "filler stapled onto a decode result"
+    if proactive.generate_proactive_suggestion("latest tech news", "Top Hacker News stories: 1. x", "calm") is not None:
+        return "filler stapled onto a news result"
+    return True
+
+run_test("Chat: instant acks (thanks/ok/identity, no canned/empty)", _t_fast_acks)
+run_test("Chat: no proactive filler on tool results", _t_proactive_no_filler)
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # CONSOLE SUMMARY

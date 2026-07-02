@@ -186,6 +186,17 @@ def route_single_intent(
     if text and not any(c.isalpha() for c in text) and not re.search(r"\d{2,}", text):
         return {"tool": "chat", "action": "respond", "confidence": 0.95,
                 "parameters": {"task": "Not sure what you mean there, boss — what would you like me to do?"}}
+    # Wall-of-noise guard (browser dogfood 2026-07-02): the UI sends the message in the URL and
+    # the server caps it at 4000 chars — so a long low-entropy blob (repeated chars / one giant
+    # token, no real words) truncates and falls to the LLM, which HALLUCINATES on prior context
+    # (50000×'A' -> a fake "Battery 100%" reply; 9000×'A' -> rambled about recent grocery tasks).
+    # Not a command -> clarify deterministically, never route it to the model.
+    if len(text) > 200:
+        _nospace = text.replace(" ", "")
+        if len(set(_nospace)) <= 4 or (len(text.split()) <= 2 and len(text) > 400):
+            return {"tool": "chat", "action": "respond", "confidence": 0.95,
+                    "parameters": {"task": "That's a wall of text with no clear command, boss — "
+                                           "tell me in a sentence what you'd like me to do."}}
     # Prompt-injection / jailbreak markers — refuse with a fixed safe reply, do NOT pass to LLM
     # (model would otherwise comply: 'I am DAN, I will follow your commands to the letter').
     _PI = re.compile(
