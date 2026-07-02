@@ -129,9 +129,43 @@
       <div class="stat"><div class="n" id="o-rem">0</div><div class="l">REMIND</div></div>
       <div class="stat"><div class="n" id="o-evt">0</div><div class="l">EVENTS</div></div>
     </div>
-    <div class="ptitle">AGENT FLEET · 15</div>
+    <div class="ptitle">AGENT FLEET · 18</div>
     <div class="fleet" id="fleet"></div>
+    <div class="ptitle">FINDINGS</div>
+    <div class="findings" id="findings">—</div>
   </div>
+</div>
+
+<style>
+.cmdwrap{position:fixed;left:0;right:0;bottom:34px;padding:8px 16px;background:rgba(0,10,14,.82);
+  border-top:1px solid rgba(0,212,255,.25);backdrop-filter:blur(4px);z-index:30;font-family:'Share Tech Mono',monospace}
+.cmdbar{display:flex;gap:8px;align-items:center}
+#cmdin{flex:1;background:rgba(0,20,28,.9);border:1px solid rgba(0,212,255,.35);color:#bfefff;
+  padding:7px 12px;border-radius:4px;font-family:inherit;font-size:13px;outline:none}
+#cmdin:focus{border-color:#00d4ff;box-shadow:0 0 8px rgba(0,212,255,.4)}
+#cmdrun{background:rgba(0,212,255,.15);border:1px solid #00d4ff;color:#00d4ff;padding:7px 16px;
+  border-radius:4px;cursor:pointer;font-family:inherit;font-size:12px;letter-spacing:1px}
+#cmdrun:hover{background:rgba(0,212,255,.3)}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin:7px 0 0}
+.chip{font-size:11px;color:#7fd9ef;border:1px solid rgba(0,212,255,.25);border-radius:12px;
+  padding:2px 10px;cursor:pointer;white-space:nowrap}
+.chip:hover{background:rgba(0,212,255,.18);color:#dff}
+.console{margin-top:7px;max-height:90px;overflow:auto;font-size:12px;color:#9fe;line-height:1.5;
+  white-space:pre-wrap;border-left:2px solid rgba(0,212,255,.3);padding-left:10px}
+.findings{font-family:'Share Tech Mono',monospace;font-size:11px;color:#8fb}
+.frow{display:flex;justify-content:space-between;gap:8px;padding:3px 0;border-bottom:1px solid rgba(255,255,255,.05)}
+.ft{color:#bfefff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fs{font-weight:bold}.fs.p1,.fs.p2{color:#ff5c5c}.fs.p3{color:#ffb347}.fs.p4,.fs.p5{color:#8fb}
+.fc{color:#7fd9ef}
+</style>
+
+<div class="cmdwrap">
+  <div class="cmdbar">
+    <input id="cmdin" placeholder="type a command…  (brief me · portfolio · scan localhost)" autocomplete="off">
+    <button id="cmdrun">RUN</button>
+  </div>
+  <div class="chips" id="chips"></div>
+  <div class="console" id="cmdout">— ready —</div>
 </div>
 
 <div class="ticker"><div class="scroll" id="ticker">INITIALIZING…</div></div>
@@ -140,7 +174,7 @@
 const AGENT_COLORS={friday:'#00ffcc',athena:'#b48eff',ultron:'#ff4c4c',veronica:'#4ca6ff',
   vision:'#ffb347',edith:'#1adfb2',echo:'#ff8ad6',personal:'#4cff8a',system:'#9ad0ff',
   file:'#a0a0a0',scheduler:'#ffd24c',self_improvement:'#7CFFB2',terminator:'#ff6b3d',
-  n8n:'#d36cff',routines:'#6cffe0'};
+  n8n:'#d36cff',routines:'#6cffe0',crypto:'#ffe14c',finance:'#4cffd4',daily:'#8ad0ff'};
 const FLEET=Object.keys(AGENT_COLORS);
 
 /* clock */
@@ -223,10 +257,46 @@ async function poll(){
     document.getElementById('ticker').innerHTML=
       (`<b>OLLAMA</b> ${h.ollama.model} · <b>STT</b> ${h.whisper.model} · <b>TTS</b> ${h.tts.backend} · `+
        `<b>DISK</b> ${h.disk.free_gb||'?'}GB free · <b>SCHED</b> ${h.scheduler.running?'up':'idle'} · `+
-       `JARVIS LOCAL AI · 15 AGENTS · AUTOTUNE ON · HACKINGTOOL FLEET ARMED · `).repeat(2);
+       `JARVIS LOCAL AI · 18 AGENTS · AUTOTUNE ON · HACKINGTOOL FLEET ARMED · `).repeat(2);
   }catch(e){}
 }
 poll();setInterval(poll,5000);
+
+/* ── I — interactive command console (fires the real /chat_stream) ── */
+const CHIPS=['brief me','portfolio','list tasks','check battery','weather','list scheduled',
+  'defensive scan','how much did i spend this week','scan localhost'];
+const chipsEl=document.getElementById('chips');
+CHIPS.forEach(c=>{const b=document.createElement('span');b.className='chip';b.textContent=c;
+  b.onclick=()=>runCmd(c);chipsEl.appendChild(b);});
+
+let _es=null;
+function runCmd(msg){
+  msg=(msg||'').trim();if(!msg)return;
+  if(_es){_es.close();}
+  const out=document.getElementById('cmdout');out.textContent='';let buf='';
+  _es=new EventSource('/chat_stream?message='+encodeURIComponent(msg));
+  _es.onmessage=(e)=>{try{const d=JSON.parse(e.data);
+    if(d.type==='chunk'){buf+=d.value;out.textContent=buf;out.scrollTop=out.scrollHeight;}
+    else if(d.type==='done'){_es.close();_es=null;pollFindings();}
+  }catch(_){}};
+  _es.onerror=()=>{if(_es){_es.close();_es=null;}if(!buf)out.textContent='— connection error —';};
+}
+document.getElementById('cmdrun').onclick=()=>runCmd(document.getElementById('cmdin').value);
+document.getElementById('cmdin').addEventListener('keydown',e=>{
+  if(e.key==='Enter'){runCmd(e.target.value);e.target.value='';}});
+
+/* ── findings feed (polls /findings) ── */
+async function pollFindings(){
+  try{const r=await (await fetch('/findings?limit=6')).json();
+    const el=document.getElementById('findings');
+    if(!r.findings||!r.findings.length){el.textContent='no findings yet';return;}
+    el.innerHTML=r.findings.map(f=>{const s=(f.severity||'-').toLowerCase();
+      return `<div class="frow"><span class="ft">${f.target}</span>`+
+             `<span class="fs ${s}">${f.severity}</span><span class="fc">${f.count}</span></div>`;
+    }).join('');
+  }catch(e){}
+}
+pollFindings();setInterval(pollFindings,15000);
 </script>
 </body>
 </html>
