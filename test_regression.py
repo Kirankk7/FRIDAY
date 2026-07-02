@@ -3968,6 +3968,27 @@ run_test("Chat: personality bans 'Already on that' + boss sparingly", _t_persona
 run_test("Chat: task lists summarized (cap 5 + more)", _t_list_summarized)
 run_test("Chat: circuit-breaker message rotates", _t_cb_msg_rotates)
 
+def _t_agent_voices():
+    """Agent-voice contract exists + the per-agent fingerprints are enforced (drift guard)."""
+    import os, inspect
+    if not os.path.exists("docs/AGENT_VOICES.md"):
+        return "docs/AGENT_VOICES.md missing"
+    doc = open("docs/AGENT_VOICES.md", encoding="utf-8").read()
+    for a in ["FRIDAY", "VERONICA", "ULTRON", "EDITH", "ATHENA", "TERMINATOR"]:
+        if a not in doc:
+            return f"{a} missing from AGENT_VOICES.md"
+    import agents.ultron.ultron_agent as u
+    disc = u._ANALYST_DISCIPLINE.lower()
+    if "validated" not in disc or "pleasantry" not in disc:
+        return "ULTRON voice fingerprint not enforced in _ANALYST_DISCIPLINE"
+    import agents.edith.edith_agent as e
+    src = inspect.getsource(e)
+    if "memory match(es)" in src or "Last {len(rows)} memory entries" in src:
+        return "EDITH still uses robotic memory phrasing"
+    return True
+
+run_test("Voices: AGENT_VOICES contract + ULTRON/EDITH fingerprints", _t_agent_voices)
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # CONSOLE SUMMARY

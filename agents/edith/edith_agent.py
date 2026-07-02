@@ -178,15 +178,15 @@ class EdithAgent:
             return {"success": False, "message": f"EDITH error: {e}", "data": {}}
 
         if not rows:
-            return {"success": True, "message": "Memory is empty.", "data": {"memories": []}}
+            return {"success": True, "message": "Nothing in the archive yet.", "data": {"memories": []}}
         rows = rows[::-1]  # chronological, matching old behavior
         lines = []
         for e in rows:
-            label_str = f"({e['label']}) " if e.get("label") else ""
-            ts = (e.get("timestamp") or "")[:10]
-            lines.append(f"  - {label_str}{e['content'][:200]} ({ts})")
+            label_str = f"{e['label'].replace('_', ' ')}: " if e.get("label") else ""
+            snippet = " ".join((e["content"] or "").split())[:130]
+            lines.append(f"  • {label_str}{snippet}")
         return {"success": True,
-                "message": f"Last {len(rows)} memory entries:\n" + "\n".join(lines),
+                "message": f"Here's what I've got on record recently:\n" + "\n".join(lines),
                 "data": {"memories": rows}}
 
     def run(self, input_text: str, action: str = None, parameters: dict = None) -> dict:
