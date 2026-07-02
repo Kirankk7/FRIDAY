@@ -112,6 +112,9 @@ def build(finding: dict, target: str = "") -> dict:
         cvss = {"vector": "", "score": _SEV_FALLBACK.get(sev, 0.0), "severity": sev.title(), "preliminary": True}
     gate = finding.get("_gate", {}) or {}
     return {
+        # Bump when the shape changes (screenshots, replay_id, HTML exporter, …). The object is
+        # IMMUTABLE: built once, every exporter reads from it — never edit it in place.
+        "schema_version": 1,
         "metadata": {
             "target": target or finding.get("host", ""),
             "template": tmpl,
