@@ -109,7 +109,8 @@ def _transcribe(model, wav_path: str) -> str:
             # fallthrough to Whisper if parakeet not ready
         if model is None:
             return ""
-        segments, _ = model.transcribe(wav_path, language='en', vad_filter=True)
+        from config import stt_language
+        segments, _ = model.transcribe(wav_path, language=stt_language(), vad_filter=True)
         return ' '.join(s.text.strip() for s in segments).strip()
     except Exception as e:
         print(f"[voice_loop] STT error: {e}")

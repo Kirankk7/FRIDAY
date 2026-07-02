@@ -59,6 +59,14 @@ WHISPER_MODEL   = "base"    # tiny/base/small/medium — base is good balance on
 WHISPER_DEVICE  = "cuda"    # cuda or cpu
 WHISPER_DTYPE   = "float16" # float16 (GPU) or int8 (CPU)
 
+# STT LANGUAGE (J) — "en" (default), any ISO code (hi/es/fr/…), or "auto" to let
+# Whisper detect. Drives voice_loop + /transcribe. "auto" -> None (autodetect).
+VOICE_LANG = os.getenv("VOICE_LANG", "en")
+
+def stt_language():
+    """Resolve VOICE_LANG to what faster-whisper expects (None = autodetect)."""
+    return None if str(VOICE_LANG).lower() in ("auto", "", "none") else VOICE_LANG
+
 # STT BACKEND — Phase 17b
 # "whisper" = faster-whisper (default, always works)
 # "parakeet" = nvidia/parakeet-tdt-1.1b via NeMo (faster, requires: pip install nemo_toolkit[asr])

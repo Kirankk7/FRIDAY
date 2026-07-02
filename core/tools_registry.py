@@ -13,6 +13,8 @@ from agents.terminator.terminator_agent import terminator_agent
 from agents.automation.n8n_agent import n8n_agent
 from agents.automation.routines_agent import routines_agent
 from agents.crypto.crypto_agent import crypto_agent
+from agents.finance.finance_agent import finance_agent
+from agents.daily.daily_agent import daily_agent
 from core.scheduler import scheduler
 
 
@@ -33,6 +35,8 @@ TOOLS = {
     "n8n": n8n_agent,
     "routines": routines_agent,
     "crypto": crypto_agent,
+    "finance": finance_agent,
+    "daily": daily_agent,
 }
 
 

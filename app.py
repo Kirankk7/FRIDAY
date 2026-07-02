@@ -69,6 +69,7 @@ _scheduler.start()  # Phase 26 — autonomous background task runner
 try:
     from core import telegram_sink
     telegram_sink.enable()
+    telegram_sink.start_polling()   # C — two-way: accept commands from your phone
 except Exception as _e:
     print(f"[telegram] bridge init skipped: {_e}")
 
@@ -264,9 +265,10 @@ def transcribe():
             else:
                 # ── Whisper path (default) ──
                 model = get_whisper()
+                from config import stt_language
                 segments, info = model.transcribe(
                     tmp_path,
-                    language="en",
+                    language=stt_language(),
                     vad_filter=False
                 )
                 segments_list = list(segments)
@@ -425,6 +427,17 @@ def cyber_status():
     except Exception:
         pass
     return jsonify(out)
+
+
+@app.route("/findings")
+def findings():
+    """I — HUD findings feed: recent gate-passed bug-bounty findings from saved reports."""
+    from core import findings_feed
+    try:
+        limit = int(request.args.get("limit", 20))
+    except Exception:
+        limit = 20
+    return jsonify({"findings": findings_feed.recent(limit)})
 
 
 @app.route("/health")

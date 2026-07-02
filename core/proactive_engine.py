@@ -29,7 +29,7 @@ except Exception:
     PROACTIVE_CVE_MIN = 180
     PROACTIVE_MONITOR_MIN = 0       # 0 = off; set e.g. 360 to re-recon watched targets
 
-_last = {"digest_date": None, "defense": 0.0, "cve": 0.0, "monitor": 0.0}
+_last = {"digest_date": None, "defense": 0.0, "cve": 0.0, "monitor": 0.0, "rag": 0.0}
 _seen_cves = set()
 
 
@@ -124,6 +124,20 @@ def _check_targets():
         print(f"[proactive] target monitor skipped: {e}")
 
 
+def _check_rag_watch():
+    # L — keep watched doc folders indexed (every 5 min). Cheap mtime diff; only
+    # re-indexes when a folder actually changed.
+    if not _due("rag", 5):
+        return
+    try:
+        from core import rag
+        n = rag.reindex_watched()
+        if n:
+            print(f"[proactive] reindexed {n} watched doc folder(s)")
+    except Exception as e:
+        print(f"[proactive] rag watch skipped: {e}")
+
+
 def tick():
     """Called every ~30s by the scheduler loop. Each check self-paces."""
     if not PROACTIVE_ENABLED:
@@ -133,3 +147,4 @@ def tick():
     _check_defense()        # opt-in interval
     _check_cves()           # interval
     _check_targets()        # opt-in: re-recon watched targets, alert on change
+    _check_rag_watch()      # L — keep watched doc folders current
