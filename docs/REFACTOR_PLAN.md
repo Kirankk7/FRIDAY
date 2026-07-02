@@ -42,6 +42,15 @@ def route_single_intent(text, ...):
 - Order-preserving → the only risk is a copy-paste slip, which the tests catch.
 - Estimate: 1–2 sessions.
 
+**Progress (branch `refactor/router-extraction`):**
+- ✅ Slice 1 — crypto + daily-driver → `core/routes/daily.py` (router 2781→2662, 418/0/9, 0 flips).
+- ✅ Slice 2 — vision live-info (currency/translate/flight/crypto-price) → `core/routes/vision.py` (→2598, 0 flips).
+- ⏭ Remaining (same pattern, contiguous-slice, one regression each): system quick-wins ·
+  friday personal-assistant · ultron security clusters · athena/veronica · file/docs ·
+  scheduler/routines · personal/edith/echo. Target: `route_single_intent` under ~1000 LOC.
+- Pattern proven: write `core/routes/<group>.py:try_route(text, text_raw)` verbatim → splice a
+  5-line dispatch stub at the same chain position → smoke routes identical → full regression 0 flips → commit.
+
 **Exit criteria (router — done when ALL true):**
 - [ ] `route_single_intent` (+ inline guards) under ~1000 LOC.
 - [ ] Identical routing order — every decision unchanged.
