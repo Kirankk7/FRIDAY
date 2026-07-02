@@ -360,8 +360,11 @@ def _friday_task_lifecycle():
     r2 = friday_agent.run(input_text="", action="list_tasks", parameters={})
     if not r2.get("success"):
         return f"list_tasks failed: {r2.get('message')}"
-    if "_regression_test_task_" not in r2.get("message", ""):
-        return "Added task not visible in list"
+    # list is summarized (cap 5 + 'N more') — the added task may be beyond the shown
+    # window, so check the full data payload, not the summary message.
+    _tasks = r2.get("data", {}).get("tasks", [])
+    if not any("_regression_test_task_" in (t.get("text", "") or "") for t in _tasks):
+        return "Added task not visible in list data"
     r3 = friday_agent.run(input_text="", action="complete_task", parameters={"identifier": "_regression_test_task_"})
     if not r3.get("success"):
         return f"complete_task failed: {r3.get('message')}"
@@ -381,8 +384,9 @@ def _friday_goal():
     if not r.get("success"):
         return f"add_goal failed: {r.get('message')}"
     r2 = friday_agent.run(input_text="", action="list_goals", parameters={})
-    if "_regression_goal_xyz_" not in r2.get("message", ""):
-        return "Goal not in list after add"
+    _goals = r2.get("data", {}).get("goals", [])
+    if not any("_regression_goal_xyz_" in (g.get("text", "") or "") for g in _goals):
+        return "Goal not in list data after add"
     return True
 
 def _friday_health():
@@ -876,8 +880,8 @@ def _breaker_trips_and_fails_fast():
         dt = time.time() - t0
         if dt > 0.1:
             return f"Open breaker not failing fast: {dt*1000:.0f}ms"
-        if r != _llm._CB_MSG:
-            return "Open breaker did not return circuit-breaker message"
+        if r not in _llm._CB_MSGS:
+            return "Open breaker did not return a circuit-breaker message"
         return True
     finally:
         _llm.OLLAMA_HOST = saved_host
@@ -3930,6 +3934,39 @@ def _t_proactive_no_filler():
 
 run_test("Chat: instant acks (thanks/ok/identity, no canned/empty)", _t_fast_acks)
 run_test("Chat: no proactive filler on tool results", _t_proactive_no_filler)
+
+def _t_personality_polish():
+    """GPT/browser review: kill the 'Already on that.' broken-record + boss-spam."""
+    from core import personality
+    p = personality.build_personality_prompt("neutral")
+    if "sparingly" not in p.lower():
+        return "boss-sparingly rule missing from personality prompt"
+    if "NEVER use the phrase \"Already on that.\"" not in p:
+        return "'Already on that.' not explicitly banned"
+    return True
+
+def _t_list_summarized():
+    """Lists must summarize (cap ~5 + 'N more'), not dump 20-30 rows."""
+    import re as _re
+    import agents.friday.friday_agent as fa
+    r = fa.list_tasks()
+    if len(r.get("data", {}).get("tasks", [])) > 5:
+        nums = _re.findall(r"^\s*\d+\.", r["message"], _re.M)
+        if len(nums) > 5:
+            return f"list_tasks dumped {len(nums)} lines (should cap at 5)"
+        if "more" not in r["message"]:
+            return "no '+N more' summary on a long task list"
+    return True
+
+def _t_cb_msg_rotates():
+    from core import llm
+    if len({llm._cb_msg() for _ in range(30)}) < 3:
+        return "circuit-breaker message not randomized"
+    return True
+
+run_test("Chat: personality bans 'Already on that' + boss sparingly", _t_personality_polish)
+run_test("Chat: task lists summarized (cap 5 + more)", _t_list_summarized)
+run_test("Chat: circuit-breaker message rotates", _t_cb_msg_rotates)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
