@@ -42,6 +42,12 @@ def route_single_intent(text, ...):
 - Order-preserving → the only risk is a copy-paste slip, which the tests catch.
 - Estimate: 1–2 sessions.
 
+**Exit criteria (router — done when ALL true):**
+- [ ] `route_single_intent` (+ inline guards) under ~1000 LOC.
+- [ ] Identical routing order — every decision unchanged.
+- [ ] 393+ router tests green, **zero behavioral diffs**.
+- [ ] No new dependencies; imports remain acyclic.
+
 ---
 
 ## Phase B — ultron_agent.py (AFTER router — higher risk: shared `self` state)
@@ -65,6 +71,13 @@ die. Don't force it.
 
 - After each module extraction: full regression + friday-recon parity (its ultron is a copy).
 - Estimate: 3–4 sessions. **Time-box: if refactoring runs past ~2 weeks, STOP and ship features.**
+
+**Exit criteria (ultron — done when ALL true):**
+- [ ] report / evidence / CWE-CVSS / CVE extracted to modules.
+- [ ] **No inheritance introduced** (free functions / composition only).
+- [ ] Public API (`ultron_agent.run`, method names) unchanged.
+- [ ] Full regression + friday-recon parity green.
+- [ ] Imports remain acyclic (verify via graphify / import check).
 
 ---
 
