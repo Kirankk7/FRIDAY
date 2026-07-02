@@ -75,9 +75,13 @@ def list_tasks() -> dict:
     data = _load()
     pending = [t for t in data["tasks"] if not t["done"]]
     if not pending:
-        return {"success": True, "message": "No pending tasks, boss. Clean slate.", "data": {"tasks": []}}
-    lines = [f"{i+1}. {t['text']} [{t['priority']}]" for i, t in enumerate(pending)]
-    return {"success": True, "message": "Pending tasks:\n" + "\n".join(lines), "data": {"tasks": pending}}
+        return {"success": True, "message": "No pending tasks — clean slate.", "data": {"tasks": []}}
+    n = len(pending)
+    top = pending[:5]
+    lines = [f"  {i+1}. {t['text']}" for i, t in enumerate(top)]
+    head = f"You have {n} task{'s' if n != 1 else ''}." + (f" Next {len(top)}:" if n > 1 else "")
+    more = f"\n  (+{n - 5} more — say \"show all tasks\")" if n > 5 else ""
+    return {"success": True, "message": head + "\n" + "\n".join(lines) + more, "data": {"tasks": pending}}
 
 
 def complete_task(identifier: str) -> dict:
@@ -139,8 +143,12 @@ def list_goals() -> dict:
     active = [g for g in data["goals"] if not g["done"]]
     if not active:
         return {"success": True, "message": "No active goals. Add one — \"add goal <text>\".", "data": {"goals": []}}
-    lines = [f"{i+1}. {g['text']}" for i, g in enumerate(active)]
-    return {"success": True, "message": "Active goals:\n" + "\n".join(lines), "data": {"goals": active}}
+    n = len(active)
+    top = active[:5]
+    lines = [f"  {i+1}. {g['text']}" for i, g in enumerate(top)]
+    head = f"{n} active goal{'s' if n != 1 else ''}." + (f" Top {len(top)}:" if n > 1 else "")
+    more = f"\n  (+{n - 5} more — say \"show all goals\")" if n > 5 else ""
+    return {"success": True, "message": head + "\n" + "\n".join(lines) + more, "data": {"goals": active}}
 
 
 def complete_goal(identifier: str) -> dict:

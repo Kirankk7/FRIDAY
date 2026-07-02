@@ -47,7 +47,20 @@ _cb_failures      = 0
 _cb_tripped_until = 0.0
 _CB_THRESHOLD     = 3      # consecutive failures to trip
 _CB_COOLDOWN      = 30     # seconds to stay open
-_CB_MSG           = "Brain's not responding, boss — Ollama looks down. Give it a moment."
+import random as _random
+# Rotate the "model is down" line so a run of failures doesn't read like a broken record.
+_CB_MSGS = [
+    "The local model isn't responding — give it a second.",
+    "Looks like Ollama is still spinning up. Try again shortly.",
+    "My local brain's offline for a moment.",
+    "Lost the connection to the language model — one sec.",
+    "Waiting on the model to come back.",
+    "Couldn't reach the AI engine just now.",
+    "Ollama's not answering — probably still starting.",
+]
+
+def _cb_msg() -> str:
+    return _random.choice(_CB_MSGS)
 
 
 def _cb_is_open() -> bool:
@@ -77,7 +90,7 @@ def ask_llm_stream(prompt: str, agent: str = None, autotune_on: bool = True,
                    params: dict = None):
     """Generator — yields tokens from Ollama as they arrive."""
     if _cb_is_open():
-        yield _CB_MSG
+        yield _cb_msg()
         return
     try:
         url = f"{OLLAMA_HOST}/api/generate"
@@ -147,7 +160,7 @@ def ask_llm(prompt: str, agent: str = None, autotune_on: bool = True,
     - params: explicit Ollama options override (skips AutoTune).
     """
     if _cb_is_open():
-        return _CB_MSG
+        return _cb_msg()
     try:
         url = f"{OLLAMA_HOST}/api/generate"
         model = model_for(agent)

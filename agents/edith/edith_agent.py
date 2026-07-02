@@ -140,12 +140,14 @@ class EdithAgent:
 
         lines = []
         for e in results:
-            label_str = f"({e['label']}) " if e.get("label") else ""
-            ts = (e.get("timestamp") or "")[:10]
-            lines.append(f"  - {label_str}{e['content'][:300]} ({ts})")
+            label_str = f"{e['label'].replace('_', ' ')}: " if e.get("label") else ""
+            snippet = " ".join((e["content"] or "").split())[:130]
+            lines.append(f"  • {label_str}{snippet}")
+        n = len(results)
+        opener = "Here's what I've got" if n > 1 else "One thing I remember"
         return {"success": True,
-                "message": f"Found {len(results)} memory match(es) for '{query}':\n" + "\n".join(lines),
-                "data": {"results": results, "count": len(results)}}
+                "message": f"{opener} on '{query}':\n" + "\n".join(lines),
+                "data": {"results": results, "count": n}}
 
     def get_by_label(self, label: str) -> dict:
         if not label:
