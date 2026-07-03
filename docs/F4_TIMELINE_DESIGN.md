@@ -73,8 +73,10 @@ timeline.json + traffic/ → zip).
 1. ✅ DONE `core/timeline.py` — Timeline object + `start_run / record_event / step / finish`, versioned, persisted `data/runs/<run_id>/timeline.json`. Pure recorder, no pipeline coupling. `load / list_runs` read side. (+parity, tested.)
 2. ✅ DONE Instrument `ultron.bug_bounty` stages to emit events (recon/probe/idor/cve/validate/gate/evidence) + surface `run_id` in the result. Degrades silently. (+parity, wiring test.)
 3. ✅ DONE Read side: `render / render_list` viewer + `/timeline` + `/timeline/<run_id>` HUD endpoints (JARVIS) + `timeline` CLI subcommand (recon). (+parity, tested.)
-4. TODO Replay: `replay <run_id> [step]` — rerun from recorded inputs. (Separate module.) **Blocked on richer input-capture:** step events currently record output counts, not the full `{args, target, prior artifact refs}` a rerun needs — capture that first.
-5. TODO (Phase 2) submission **package** — zip the run dir into a bounty deliverable.
+4. ✅ DONE Replay: `core/replay.py` `replay(run_id[, step])` — full hunt from recorded target, or per-step (`recon`/`probe`) from persisted artifacts (probe reruns against `endpoints.json`, no re-crawl). Refuses unknown steps / missing runs. Active-scan launcher → CLI-gated (`recon` `replay <run_id> --step`), no endpoint. (Unblocked by artifact+inputs persistence: `Timeline.write_artifact` + recon writes endpoints/findings.json + `inputs={target,cookie}`.) (+parity, tested.)
+5. ✅ DONE Submission **package**: `core/package.py` `build_package(run_id)` — zips run dir (timeline+artifacts) + report.md + F3 `evidence/` into one bounty zip. `recon package <run_id>`. (+parity, tested.)
+
+**F4 COMPLETE (all 5 steps) 2026-07-03.** JARVIS 422/0/9, recon 36/36, 0 flips. Possible follow-ups: JARVIS chat-intent + HUD download for replay/package; per-step replay for more stages; richer per-event `inputs` if finer replay granularity needed.
 
 ## Guardrails
 - Timeline immutable + `schema_version` (bump when the event shape grows).
