@@ -75,6 +75,22 @@ def try_route(text, text_raw):
     if _m:
         return {"tool": "ultron", "action": "collect_evidence", "parameters": {"url": _m.group(1).strip()}, "confidence": 0.94}
 
+    # F4 — execution timeline / replay / submission package (parity with the recon CLI)
+    if text in ("timeline", "show timeline", "list runs", "recent runs", "list timelines", "show runs"):
+        return {"tool": "ultron", "action": "timeline_show", "parameters": {}, "confidence": 0.95}
+    _m = re.match(r"(?:show |view )?(?:timeline|run)\s+(?:for\s+)?([a-f0-9]{6,})$", text)
+    if _m:
+        return {"tool": "ultron", "action": "timeline_show", "parameters": {"run_id": _m.group(1)}, "confidence": 0.95}
+    _m = re.match(r"(?:build |make |create )?(?:submission ?package|package|submission)\s+(?:for\s+)?([a-f0-9]{6,})$", text)
+    if _m:
+        return {"tool": "ultron", "action": "make_package", "parameters": {"run_id": _m.group(1)}, "confidence": 0.94}
+    if text in ("package", "make package", "build submission", "make submission", "submission package"):
+        return {"tool": "ultron", "action": "make_package", "parameters": {}, "confidence": 0.9}
+    _m = re.match(r"replay(?: run)?\s+([a-f0-9]{6,})(?:\s+(recon|probe|full))?$", text)
+    if _m:
+        return {"tool": "ultron", "action": "replay_run",
+                "parameters": {"run_id": _m.group(1), "step": _m.group(2) or ""}, "confidence": 0.94}
+
     # Phase 62 — Ultron Knowledge Pack (bug-bounty methodology + wordlists)
     _m = re.match(r"(?:list )?(?:bundled )?wordlists?$|wordlists? for\s+(.+)", text)
     if text in ("wordlists", "list wordlists", "bundled wordlists"):

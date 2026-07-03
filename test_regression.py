@@ -2334,6 +2334,33 @@ run_test("Router: 'is google.com malicious' → vt_scan",_route("is google.com m
 run_test("Router: 'find exploits for CVE-2021-44228'", _route("find exploits for cve-2021-44228", "ultron", "find_exploits"))
 run_test("Router: 'bug bounty example.com' → bug_bounty", _route("bug bounty example.com", "ultron", "bug_bounty"))
 run_test("Router: 'hunt example.com' → bug_bounty",       _route("hunt example.com", "ultron", "bug_bounty"))
+# F4 — execution-timeline chat surface (JARVIS parity with the recon CLI)
+run_test("Router: 'timeline' → timeline_show",            _route("timeline", "ultron", "timeline_show"))
+run_test("Router: 'timeline <id>' → timeline_show",       _route("timeline 567aa86e", "ultron", "timeline_show"))
+run_test("Router: 'package <id>' → make_package",         _route("package 567aa86e", "ultron", "make_package"))
+run_test("Router: 'replay <id>' → replay_run",            _route("replay 567aa86e probe", "ultron", "replay_run"))
+
+def _t_f4_chat_surface():
+    """F4: the timeline_show / make_package ultron actions dispatch + degrade gracefully."""
+    import tempfile, shutil
+    from core import timeline
+    from agents.ultron.ultron_agent import ultron_agent as U
+    d = tempfile.mkdtemp(); old = timeline._RUNS_DIR; timeline._RUNS_DIR = d
+    try:
+        if "No runs" not in U.run("", "timeline_show", {}).get("message", ""):
+            return "empty timeline_show not graceful"
+        tl = timeline.start_run("t.example"); tl.record_event("recon", outputs={"urls": 2}); tl.finish()
+        r = U.run("", "timeline_show", {"run_id": tl.run_id})
+        if not r["success"] or "t.example" not in r["message"]:
+            return f"timeline_show(view) wrong: {r}"
+        if U.run("", "timeline_show", {"run_id": "nope"})["success"]:
+            return "bad run_id should fail"
+        return True
+    finally:
+        timeline._RUNS_DIR = old
+        shutil.rmtree(d, ignore_errors=True)
+
+run_test("Ultron: F4 chat surface (timeline_show dispatch)", _t_f4_chat_surface)
 
 # Crypto / encoding toolkit (deterministic, case-preserving payloads)
 def _crypto_route(text, op):
