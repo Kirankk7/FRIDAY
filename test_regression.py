@@ -4100,6 +4100,12 @@ def _t_timeline_record():
             return f"step() outputs/timing wrong: {httpx}"
         if tl.run_id not in timeline.list_runs():
             return "list_runs missing the run"
+        # viewer (read side)
+        view = timeline.render(tl.run_id)
+        if "t.com" not in view or "httpx" not in view or "✗" not in view:
+            return f"render missing target/step/fail-mark: {view!r}"
+        if tl.run_id[:8] not in timeline.render_list():
+            return "render_list missing the run"
         return True
     finally:
         timeline._RUNS_DIR = old

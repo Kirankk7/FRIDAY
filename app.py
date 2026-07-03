@@ -440,6 +440,28 @@ def findings():
     return jsonify({"findings": findings_feed.recent(limit)})
 
 
+@app.route("/timeline")
+def timeline_list():
+    """F4 — HUD execution-timeline feed: recent runs (id/status/target/#events)."""
+    from core import timeline
+    try:
+        limit = int(request.args.get("limit", 20))
+    except Exception:
+        limit = 20
+    runs = [timeline.load(rid) for rid in timeline.list_runs()[:limit]]
+    return jsonify({"runs": [r for r in runs if r]})
+
+
+@app.route("/timeline/<run_id>")
+def timeline_detail(run_id):
+    """F4 — one run's full immutable timeline (events + artifacts) for the viewer."""
+    from core import timeline
+    tl = timeline.load(run_id)
+    if not tl:
+        return jsonify({"error": "run not found", "run_id": run_id}), 404
+    return jsonify(tl)
+
+
 @app.route("/health")
 def health():
     """Full system health snapshot — one call to diagnose subsystems."""
