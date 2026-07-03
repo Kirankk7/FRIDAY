@@ -1221,6 +1221,35 @@ def _impact_data_driven():
 run_test("Report: data-driven impact line (param/endpoint + confidence)", _impact_data_driven)
 
 
+def _report_dedup_clustering():
+    """Smarter reporting: the same class on N endpoints of one host collapses to ONE grouped
+    finding (highest-priority representative + 'Also affected' list), not N separate ones."""
+    from agents.ultron import report
+    mk = lambda i, host="t": {"template": "sqli-error-based", "severity": "high",
+        "url": f"http://{host}/p?id={i}", "cve": "", "evidence": "db err",
+        "_gate": {"report": True, "tier": "P2", "priority": 70, "score": 6, "confidence": "reproduced"}}
+    # 3 dupes on the same host -> 1 group with 2 extra endpoints
+    d = report.dedup_findings([mk(0), mk(1), mk(2)])
+    if len(d) != 1 or len(d[0].get("_also_affected", [])) != 2:
+        return f"same-host dupes not clustered: {len(d)}"
+    # different host is a distinct finding (not merged)
+    if len(report.dedup_findings([mk(0), mk(0, host="other")])) != 2:
+        return "distinct hosts wrongly merged"
+    # never mutates inputs
+    orig = mk(0)
+    report.dedup_findings([orig, mk(1)])
+    if "_also_affected" in orig:
+        return "dedup mutated an input finding"
+    # end-to-end: report shows one entry + the grouping line, honest count
+    rpt = report.format_bb_report("t.com", [dict(mk(i)) for i in range(3)], {}, {"urls": []}, True)
+    if "Also affected (2)" not in rpt or "Reportable findings: **1**" not in rpt:
+        return "report did not render the clustered group / honest count"
+    rpt.encode("cp1252")
+    return True
+
+run_test("Report: dedup clusters same-class findings", _report_dedup_clustering)
+
+
 # Feature A — active injection smell-test on crawled params (_probe_injection).
 # Patches the module-level _http_get seam (no global sys.modules games → order-safe).
 class _FakeResp:
