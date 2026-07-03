@@ -4059,6 +4059,55 @@ run_test("F3: Evidence Object (CWE/CVSS/curl/lint + markdown export)", _t_eviden
 run_test("F3: evidence bundle writes json+md per finding", _t_evidence_bundle_write)
 
 
+def _t_timeline_record():
+    """F4: pure recorder — start_run -> events (incl step() timing) -> finish, immutable
+    versioned timeline.json persisted + loadable, status derived from event outcomes."""
+    import tempfile, os, shutil, json
+    from core import timeline
+    d = tempfile.mkdtemp()
+    old = timeline._RUNS_DIR
+    timeline._RUNS_DIR = d
+    try:
+        tl = timeline.start_run("t.com")
+        if tl.status != "running" or not tl.run_id:
+            return "run not initialised"
+        tl.record_event("subfinder", tool="subfinder", outputs={"domains": 143})
+        # step() times a stage and captures outputs
+        with tl.step("httpx", inputs={"target": "t.com"}) as ev:
+            ev["outputs"] = {"alive": 121}
+        # step() records a failure then re-raises (pipeline behaviour unchanged)
+        raised = False
+        try:
+            with tl.step("nuclei") as ev:
+                raise RuntimeError("boom")
+        except RuntimeError:
+            raised = True
+        if not raised:
+            return "step() swallowed pipeline exception"
+        path = tl.finish()
+        if len(tl.events) != 3:
+            return f"want 3 events, got {len(tl.events)}"
+        if tl.status != "partial":
+            return f"status should be partial (ok+failed mix), got {tl.status}"
+        # persisted + loadable + versioned
+        back = timeline.load(tl.run_id)
+        if not back or back["schema_version"] != 1:
+            return f"reload failed / unversioned: {back}"
+        if back["events"][2]["status"] != "failed" or "boom" not in (back["events"][2]["error"] or ""):
+            return f"failed event not recorded: {back['events'][2]}"
+        httpx = back["events"][1]
+        if httpx["outputs"]["alive"] != 121 or httpx["duration_ms"] is None:
+            return f"step() outputs/timing wrong: {httpx}"
+        if tl.run_id not in timeline.list_runs():
+            return "list_runs missing the run"
+        return True
+    finally:
+        timeline._RUNS_DIR = old
+        shutil.rmtree(d, ignore_errors=True)
+
+run_test("F4: Timeline recorder (events/step timing/immutable persist)", _t_timeline_record)
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # CONSOLE SUMMARY
 # ══════════════════════════════════════════════════════════════════════════════
