@@ -1194,6 +1194,33 @@ run_test("Gate: triage priority (expected-value ranking)", _gate_triage_priority
 run_test("Report: findings ranked by triage priority",     _report_triage_ordering)
 
 
+def _impact_data_driven():
+    """Smarter impact: impact_line is evidence-aware — canonical class impact + the concrete
+    affected param/endpoint + a gate-confidence qualifier (not a static severity string)."""
+    from agents.ultron import report
+    from core import evidence
+    # class impact comes from the ONE canonical map (core/evidence.class_impact)
+    if "database" not in evidence.class_impact("sqli-error-based").lower():
+        return f"class_impact wrong: {evidence.class_impact('sqli-error-based')}"
+    line = report.impact_line({"template": "sqli-error-based", "severity": "high",
+                               "url": "http://t/p?id=1", "cve": "",
+                               "_gate": {"confidence": "reproduced"}})
+    if "`id`" not in line or "parameter" not in line:
+        return f"impact didn't name the injected param: {line!r}"
+    if "Reproduced" not in line:
+        return f"impact missing confidence qualifier: {line!r}"
+    # endpoint fallback when there's no query param
+    line2 = report.impact_line({"template": "idor-bola", "severity": "medium",
+                                "url": "http://t/api/user/5", "cve": "",
+                                "_gate": {"confidence": "candidate"}})
+    if "`/api/user/5`" not in line2 or "Candidate" not in line2:
+        return f"impact endpoint/qualifier wrong: {line2!r}"
+    line.encode("cp1252"); line2.encode("cp1252")   # stay Windows-console safe
+    return True
+
+run_test("Report: data-driven impact line (param/endpoint + confidence)", _impact_data_driven)
+
+
 # Feature A — active injection smell-test on crawled params (_probe_injection).
 # Patches the module-level _http_get seam (no global sys.modules games → order-safe).
 class _FakeResp:
