@@ -1160,11 +1160,16 @@ def _gate_triage_priority():
         return f"triage not monotonic: {p_crit_exploit},{p_high_repro},{p_crit_cand},{p_low_weak}"
     if not (0 <= p_low_weak and p_crit_exploit <= 100):
         return "triage out of 0-100 range"
-    # gate exposes the priority field on reported findings
+    # gate exposes priority on reported findings; a reproduced sqli is demonstrably
+    # exploitable (exploit bonus) even with no CVE -> outranks the plain high baseline.
     g = gate.validate_finding({"template": "sqli", "severity": "high",
                                "url": "http://t/p?id=1", "validated": True, "cve": ""}, {})
-    if "priority" not in g or g["priority"] != p_high_repro:
+    if "priority" not in g or g["priority"] != gate.triage("high", "reproduced", True):
         return f"gate priority field wrong: {g.get('priority')}"
+    if g["priority"] <= p_high_repro:
+        return "reproduced app-vuln did not get the exploitability bonus"
+    if g.get("exploitability") != "reproduced on target":
+        return f"exploitability label wrong: {g.get('exploitability')}"
     return True
 
 def _report_triage_ordering():
