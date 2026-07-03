@@ -1255,6 +1255,73 @@ def _report_dedup_clustering():
 run_test("Report: dedup clusters same-class findings", _report_dedup_clustering)
 
 
+def _v12_engine_end_to_end():
+    """v1.2 integration dogfood: one real bug_bounty() run must fire the WHOLE chain together
+    — F4 timeline+artifacts+package, gate noise-filter, triage ranking, data-driven impact,
+    dedup clustering, exploitability-beyond-CVE, F3 evidence bundle. Offline (stubbed recon)."""
+    import tempfile, shutil, os, re, zipfile
+    from core import timeline, package
+    U = _ult.ultron_agent
+    d = tempfile.mkdtemp()
+    old_runs = timeline._RUNS_DIR
+    timeline._RUNS_DIR = os.path.join(d, "runs")
+    urls = [f"http://shop.example.com/item?id={i}" for i in range(3)] + ["http://shop.example.com/s?q=1"]
+    sqli = [{"template": "sqli-error-based", "severity": "high", "url": u, "cve": "",
+             "validated": True, "evidence": "error in your SQL syntax", "repro": ["'"]} for u in urls[:3]]
+    cve = [{"template": "CVE-2021-44228", "severity": "critical", "url": "http://shop.example.com/api",
+            "cve": "CVE-2021-44228", "validated": True}]
+    noise = [{"template": "tls-version", "severity": "low", "url": "http://shop.example.com", "cve": ""}]
+
+    def _save(name, body):
+        p = os.path.join(d, "reports", name + ".md")
+        os.makedirs(os.path.dirname(p), exist_ok=True)
+        open(p, "w", encoding="utf-8").write(body)
+        return p
+
+    stubs = {"full_pipeline": lambda *a, **k: {"success": True, "data":
+                {"urls": urls, "post_endpoints": [], "sections": {"nuclei": "", "httpx": ""}}},
+             "_probe_injection": lambda *a, **k: [dict(x) for x in sqli + cve + noise],
+             "_probe_post": lambda *a, **k: [], "_probe_path_params": lambda *a, **k: [],
+             "_probe_stored_xss": lambda *a, **k: [],
+             "collect_evidence": lambda *a, **k: {"success": True, "data": {}},
+             "find_exploits": lambda *a, **k: {"success": True, "data": {"pocs": [{"url": "p"}], "total": 1}, "message": "p"},
+             "save_report": _save}
+    orig = {n: getattr(U, n) for n in stubs}
+    for n, fn in stubs.items():
+        setattr(U, n, fn)
+    try:
+        r = U.bug_bounty("shop.example.com", force=True)
+        rid = r["data"].get("run_id")
+        rpt = r["data"].get("report", "")
+        tl = timeline.load(rid) if rid else None
+        if not tl or not all(s in [e["step"] for e in tl["events"]] for s in ("recon", "probe", "gate", "evidence")):
+            return f"F4 timeline/events missing: {tl and [e['step'] for e in tl['events']]}"
+        for name, needle in (("triage Priority line", "Priority:"), ("exec top pick", "Top priority:"),
+                             ("dedup grouping", "Also affected (2)"), ("data-driven impact param", "`id`"),
+                             ("exploitability reproduced", "reproduced on target"),
+                             ("gate noise filter", "tls-version")):
+            if needle not in rpt and not (name == "gate noise filter" and "Filtered by Validation Gate" in rpt):
+                return f"chain missing: {name} ({needle!r})"
+        prios = [int(x) for x in re.findall(r"\*\*Priority:\*\* (\d+)/100", rpt)]
+        if prios != sorted(prios, reverse=True) or not prios:
+            return f"findings not in descending triage order: {prios}"
+        pk = package.build_package(rid)
+        if not pk["success"]:
+            return "F4 package build failed"
+        with zipfile.ZipFile(pk["data"]["path"]) as z:
+            names = z.namelist()
+        if "timeline.json" not in names or not any(n.endswith(".md") for n in names):
+            return f"package missing timeline/report: {names}"
+        return True
+    finally:
+        for n, fn in orig.items():
+            setattr(U, n, fn)
+        timeline._RUNS_DIR = old_runs
+        shutil.rmtree(d, ignore_errors=True)
+
+run_test("v1.2 engine end-to-end (F4+triage+impact+dedup+exploit+package)", _v12_engine_end_to_end)
+
+
 # Feature A — active injection smell-test on crawled params (_probe_injection).
 # Patches the module-level _http_get seam (no global sys.modules games → order-safe).
 class _FakeResp:
