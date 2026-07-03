@@ -4224,6 +4224,50 @@ def _t_timeline_replay():
 run_test("F4: replay reruns from timeline (full / per-step / refuses unknown)", _t_timeline_replay)
 
 
+def _t_timeline_package():
+    """F4: build_package zips a run — timeline + artifacts + report + F3 evidence bundle —
+    into one submission zip, reading only what the pipeline already persisted."""
+    import tempfile, shutil, os, zipfile
+    from core import timeline, package
+    d = tempfile.mkdtemp()
+    old_runs = timeline._RUNS_DIR
+    timeline._RUNS_DIR = d
+    try:
+        # a recorded run + persisted artifacts + a report (recorded on the evidence event)
+        tl = timeline.start_run("t.example")
+        tl.write_artifact("endpoints.json", ["http://t.example/a"])
+        tl.write_artifact("findings.json", [{"template": "sqli"}])
+        reports = os.path.join(d, "reports")
+        os.makedirs(os.path.join(reports, "evidence"), exist_ok=True)
+        report = os.path.join(reports, "bugbounty_t.example.md")
+        with open(report, "w", encoding="utf-8") as f:
+            f.write("# Report")
+        with open(os.path.join(reports, "evidence", "01_sqli.json"), "w", encoding="utf-8") as f:
+            f.write("{}")
+        tl.record_event("evidence", artifacts=[{"name": "bugbounty_t.example.md",
+                                                "path": report, "kind": "report"}])
+        tl.finish()
+
+        r = package.build_package(tl.run_id)
+        if not r["success"] or not os.path.exists(r["data"]["path"]):
+            return f"package not built: {r}"
+        with zipfile.ZipFile(r["data"]["path"]) as z:
+            names = z.namelist()
+        for want in ("timeline.json", "endpoints.json", "findings.json",
+                     "bugbounty_t.example.md", "evidence/01_sqli.json"):
+            if want not in names:
+                return f"package missing {want}: {names}"
+        # missing run refuses cleanly
+        if package.build_package("nope")["success"]:
+            return "missing run should not package"
+        return True
+    finally:
+        timeline._RUNS_DIR = old_runs
+        shutil.rmtree(d, ignore_errors=True)
+
+run_test("F4: submission package zips run+report+evidence", _t_timeline_package)
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # CONSOLE SUMMARY
 # ══════════════════════════════════════════════════════════════════════════════
