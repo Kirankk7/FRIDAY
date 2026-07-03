@@ -4100,6 +4100,13 @@ def _t_timeline_record():
             return f"step() outputs/timing wrong: {httpx}"
         if tl.run_id not in timeline.list_runs():
             return "list_runs missing the run"
+        # artifact persistence (debugging superpower / replay input)
+        art = tl.write_artifact("endpoints.json", ["http://t.com/a"])
+        if not art or not os.path.exists(art["path"]):
+            return f"write_artifact did not persist: {art}"
+        with open(art["path"], encoding="utf-8") as _f:
+            if json.load(_f) != ["http://t.com/a"]:
+                return "artifact content wrong"
         # viewer (read side)
         view = timeline.render(tl.run_id)
         if "t.com" not in view or "httpx" not in view or "✗" not in view:
@@ -4117,7 +4124,7 @@ run_test("F4: Timeline recorder (events/step timing/immutable persist)", _t_time
 def _t_timeline_bug_bounty_wiring():
     """F4: bug_bounty threads an execution timeline through its stages — returns a
     run_id and persists a timeline with the recon/probe/gate/evidence events."""
-    import tempfile, shutil
+    import tempfile, shutil, os
     from core import timeline
     from agents.ultron import ultron_agent as _ult
     U = _ult.ultron_agent
@@ -4125,12 +4132,16 @@ def _t_timeline_bug_bounty_wiring():
     old_runs = timeline._RUNS_DIR
     timeline._RUNS_DIR = d
     stubs = {"full_pipeline": lambda *a, **k: {"success": True, "data":
-                {"urls": [], "post_endpoints": [], "sections": {"nuclei": "", "httpx": ""}}},
-             "_probe_injection": lambda *a, **k: [],
+                {"urls": ["http://t.example/a?id=1"], "post_endpoints": [],
+                 "sections": {"nuclei": "", "httpx": ""}}},
+             "_probe_injection": lambda *a, **k: [
+                {"template": "sqli-error-based", "severity": "high", "url": "http://t.example/a?id=1",
+                 "cve": "", "evidence": "db error", "repro": ["x"]}],
              "_probe_post": lambda *a, **k: [],
              "_probe_path_params": lambda *a, **k: [],
              "_probe_stored_xss": lambda *a, **k: [],
-             "save_report": lambda *a, **k: ""}
+             "save_report": lambda *a, **k: "",
+             "collect_evidence": lambda *a, **k: {"success": True, "data": {}}}
     for name, fn in stubs.items():
         setattr(U, name, fn)
     try:
@@ -4141,12 +4152,18 @@ def _t_timeline_bug_bounty_wiring():
         tl = timeline.load(rid)
         if not tl or tl["schema_version"] != 1:
             return f"timeline not persisted/unversioned: {tl}"
-        steps = [e["step"] for e in tl["events"]]
+        by_step = {e["step"]: e for e in tl["events"]}
         for s in ("recon", "probe", "gate", "evidence"):
-            if s not in steps:
-                return f"missing timeline step {s} (got {steps})"
+            if s not in by_step:
+                return f"missing timeline step {s} (got {list(by_step)})"
         if tl["status"] not in ("ok", "partial", "failed"):
             return f"bad terminal status: {tl['status']}"
+        # rich inputs (replay needs the target) + persisted artifacts (debugging superpower)
+        if by_step["recon"]["inputs"].get("target") != "t.example":
+            return f"recon inputs missing target: {by_step['recon']['inputs']}"
+        for art_name in ("endpoints.json", "findings.json"):
+            if not os.path.exists(os.path.join(d, rid, art_name)):
+                return f"artifact not persisted: {art_name}"
         return True
     finally:
         for name in stubs:
