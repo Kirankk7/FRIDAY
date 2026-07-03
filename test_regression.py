@@ -4108,6 +4108,52 @@ def _t_timeline_record():
 run_test("F4: Timeline recorder (events/step timing/immutable persist)", _t_timeline_record)
 
 
+def _t_timeline_bug_bounty_wiring():
+    """F4: bug_bounty threads an execution timeline through its stages — returns a
+    run_id and persists a timeline with the recon/probe/gate/evidence events."""
+    import tempfile, shutil
+    from core import timeline
+    from agents.ultron import ultron_agent as _ult
+    U = _ult.ultron_agent
+    d = tempfile.mkdtemp()
+    old_runs = timeline._RUNS_DIR
+    timeline._RUNS_DIR = d
+    stubs = {"full_pipeline": lambda *a, **k: {"success": True, "data":
+                {"urls": [], "post_endpoints": [], "sections": {"nuclei": "", "httpx": ""}}},
+             "_probe_injection": lambda *a, **k: [],
+             "_probe_post": lambda *a, **k: [],
+             "_probe_path_params": lambda *a, **k: [],
+             "_probe_stored_xss": lambda *a, **k: [],
+             "save_report": lambda *a, **k: ""}
+    for name, fn in stubs.items():
+        setattr(U, name, fn)
+    try:
+        r = U.bug_bounty("t.example", force=True)
+        rid = r.get("data", {}).get("run_id")
+        if not rid:
+            return "no run_id returned from bug_bounty"
+        tl = timeline.load(rid)
+        if not tl or tl["schema_version"] != 1:
+            return f"timeline not persisted/unversioned: {tl}"
+        steps = [e["step"] for e in tl["events"]]
+        for s in ("recon", "probe", "gate", "evidence"):
+            if s not in steps:
+                return f"missing timeline step {s} (got {steps})"
+        if tl["status"] not in ("ok", "partial", "failed"):
+            return f"bad terminal status: {tl['status']}"
+        return True
+    finally:
+        for name in stubs:
+            try:
+                delattr(U, name)
+            except Exception:
+                pass
+        timeline._RUNS_DIR = old_runs
+        shutil.rmtree(d, ignore_errors=True)
+
+run_test("F4: bug_bounty threads execution timeline (run_id + events)", _t_timeline_bug_bounty_wiring)
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # CONSOLE SUMMARY
 # ══════════════════════════════════════════════════════════════════════════════
