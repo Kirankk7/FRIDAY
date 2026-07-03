@@ -4177,6 +4177,53 @@ def _t_timeline_bug_bounty_wiring():
 run_test("F4: bug_bounty threads execution timeline (run_id + events)", _t_timeline_bug_bounty_wiring)
 
 
+def _t_timeline_replay():
+    """F4: replay reruns a recorded run — full hunt from target, per-step probe from the
+    persisted endpoints artifact, and refuses unknown/missing runs cleanly."""
+    import tempfile, shutil
+    from core import timeline, replay
+    from agents.ultron import ultron_agent as _ult
+    U = _ult.ultron_agent
+    d = tempfile.mkdtemp()
+    old_runs = timeline._RUNS_DIR
+    timeline._RUNS_DIR = d
+    # record a run with a target + a persisted endpoints artifact
+    tl = timeline.start_run("t.example")
+    tl.write_artifact("endpoints.json", ["http://t.example/a?id=1"])
+    tl.finish()
+    stubs = {"bug_bounty": lambda *a, **k: {"success": True, "data": {"run_id": "NEWRUN", "report": "r"}},
+             "_probe_injection": lambda urls, **k: [{"template": "sqli", "url": urls[0]}] if urls else [],
+             "_probe_path_params": lambda *a, **k: [],
+             "_probe_stored_xss": lambda *a, **k: [],
+             "_probe_post": lambda *a, **k: []}
+    for name, fn in stubs.items():
+        setattr(U, name, fn)
+    try:
+        full = replay.replay(tl.run_id)
+        if not full["success"] or full["data"].get("new_run_id") != "NEWRUN":
+            return f"full replay wrong: {full}"
+        probe = replay.replay(tl.run_id, "probe")
+        if not probe["success"] or len(probe["data"]["findings"]) != 1:
+            return f"probe replay didn't read the endpoints artifact: {probe}"
+        bogus = replay.replay(tl.run_id, "nope")
+        if bogus["success"] or "not replayable" not in bogus["message"]:
+            return f"unknown step should refuse: {bogus}"
+        missing = replay.replay("does-not-exist")
+        if missing["success"] or "No run" not in missing["message"]:
+            return f"missing run should refuse: {missing}"
+        return True
+    finally:
+        for name in stubs:
+            try:
+                delattr(U, name)
+            except Exception:
+                pass
+        timeline._RUNS_DIR = old_runs
+        shutil.rmtree(d, ignore_errors=True)
+
+run_test("F4: replay reruns from timeline (full / per-step / refuses unknown)", _t_timeline_replay)
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # CONSOLE SUMMARY
 # ══════════════════════════════════════════════════════════════════════════════
