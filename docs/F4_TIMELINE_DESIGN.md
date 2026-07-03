@@ -70,11 +70,11 @@ Feeds the HUD findings panel (I) + Phase-2 submission package (report.md + evide
 timeline.json + traffic/ → zip).
 
 ## Build order (next session)
-1. `core/timeline.py` — Timeline object + `start_run / record_event / finish_run`, versioned, persisted `runs/<run_id>/timeline.json`. Pure recorder, no pipeline coupling.
-2. Instrument `ultron.bug_bounty` / `full_recon` stages to emit events + save artifacts.
-3. Read side: `timeline show <run_id>` (the viewer) + `/timeline` HUD endpoint.
-4. Replay: `replay <run_id> [step]` — rerun from recorded inputs. (Separate module from Timeline.)
-5. Later (Phase 2): submission **package** — zip the run dir into a bounty deliverable.
+1. ✅ DONE `core/timeline.py` — Timeline object + `start_run / record_event / step / finish`, versioned, persisted `data/runs/<run_id>/timeline.json`. Pure recorder, no pipeline coupling. `load / list_runs` read side. (+parity, tested.)
+2. ✅ DONE Instrument `ultron.bug_bounty` stages to emit events (recon/probe/idor/cve/validate/gate/evidence) + surface `run_id` in the result. Degrades silently. (+parity, wiring test.)
+3. ✅ DONE Read side: `render / render_list` viewer + `/timeline` + `/timeline/<run_id>` HUD endpoints (JARVIS) + `timeline` CLI subcommand (recon). (+parity, tested.)
+4. TODO Replay: `replay <run_id> [step]` — rerun from recorded inputs. (Separate module.) **Blocked on richer input-capture:** step events currently record output counts, not the full `{args, target, prior artifact refs}` a rerun needs — capture that first.
+5. TODO (Phase 2) submission **package** — zip the run dir into a bounty deliverable.
 
 ## Guardrails
 - Timeline immutable + `schema_version` (bump when the event shape grows).
