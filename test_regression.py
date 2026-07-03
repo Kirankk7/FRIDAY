@@ -1147,6 +1147,53 @@ run_test("Gate: drops weak low-score finding",  _gate_drops_weak_low_score)
 run_test("Gate: report separates noise",        _gate_report_filters_noise)
 
 
+def _gate_triage_priority():
+    """Smarter validation: deterministic triage priority ranks findings by expected value
+    (severity x confidence + exploit), so a CONFIRMED high outranks an UNCONFIRMED critical."""
+    from agents.ultron import gate
+    # monotonicity: more severe / more confident / exploit-backed => higher priority
+    p_crit_exploit = gate.triage("critical", "reproduced", True)   # 98
+    p_high_repro   = gate.triage("high", "reproduced")             # 70
+    p_crit_cand    = gate.triage("critical", "candidate")          # 54
+    p_low_weak     = gate.triage("low", "weak")                    # 6
+    if not (p_crit_exploit > p_high_repro > p_crit_cand > p_low_weak):
+        return f"triage not monotonic: {p_crit_exploit},{p_high_repro},{p_crit_cand},{p_low_weak}"
+    if not (0 <= p_low_weak and p_crit_exploit <= 100):
+        return "triage out of 0-100 range"
+    # gate exposes the priority field on reported findings
+    g = gate.validate_finding({"template": "sqli", "severity": "high",
+                               "url": "http://t/p?id=1", "validated": True, "cve": ""}, {})
+    if "priority" not in g or g["priority"] != p_high_repro:
+        return f"gate priority field wrong: {g.get('priority')}"
+    return True
+
+def _report_triage_ordering():
+    """Report orders findings by triage priority (best bug first), not raw severity — a
+    reproduced high (70) leads over an unproven critical (54); exec summary names the top."""
+    U = _ult.ultron_agent
+    findings = [
+        {"template": "cve-critical-unproven", "severity": "critical", "url": "http://t/a",
+         "cve": "", "validated": False},                       # candidate crit -> 54
+        {"template": "sqli-error-based", "severity": "high", "url": "http://t/p?id=1",
+         "cve": "", "validated": True, "evidence": "db err"},  # reproduced high -> 70
+    ]
+    for f in findings:
+        f["_gate"] = U._validate_finding(f, {})
+    rpt = U._format_bb_report("t.com", findings, {}, {"urls": []}, True)
+    # the confirmed high must appear before the unproven critical in the Findings body
+    if rpt.index("sqli-error-based") > rpt.index("cve-critical-unproven"):
+        return "report did not rank by triage priority (confirmed high should lead)"
+    if "Top priority: **sqli-error-based**" not in rpt:
+        return "exec summary missing/incorrect top-priority pick"
+    if "Priority:" not in rpt:
+        return "per-finding Priority line missing"
+    rpt.encode("cp1252")   # new Priority/summary text must stay Windows-console safe
+    return True
+
+run_test("Gate: triage priority (expected-value ranking)", _gate_triage_priority)
+run_test("Report: findings ranked by triage priority",     _report_triage_ordering)
+
+
 # Feature A — active injection smell-test on crawled params (_probe_injection).
 # Patches the module-level _http_get seam (no global sys.modules games → order-safe).
 class _FakeResp:
