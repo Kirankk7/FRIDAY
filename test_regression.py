@@ -1979,6 +1979,41 @@ def _write_bola_oracle():
         sm.clear()
 
 run_test("Ultron: write-BOLA oracle (confirm+revert / refuse-destructive / FP-guard)", _write_bola_oracle)
+
+
+def _rate_gate_safety():
+    """Safety promise: every outbound request flows through _rate_gate, which THROTTLES public
+    hosts (RoE rps / a 3-rps default) but leaves localhost unthrottled. A refactor that breaks
+    this could hammer a real bounty target = RoE violation. Guards it. (No network — _rate_gate
+    only parses the host + paces; it never fetches.)"""
+    import time, os
+    # ensure NO program roe.json so the public-DEFAULT (3 rps) path is what's exercised
+    roe = os.path.join("data", "roe.json"); bak = roe + ".ratetest.bak"
+    had = os.path.exists(roe)
+    if had:
+        os.replace(roe, bak)
+    try:
+        # 1) localhost = unthrottled (dogfood speed) — many calls stay fast
+        _ult._RATE_LAST[0] = 0.0
+        t0 = time.time()
+        for _ in range(8):
+            _ult._rate_gate("http://127.0.0.1:8000/x")
+        if time.time() - t0 > 0.25:
+            return "localhost must be unthrottled"
+        # 2) public host = paced to the 3-rps default: 3 calls => ~2 intervals (~0.66s)
+        _ult._RATE_LAST[0] = 0.0
+        t0 = time.time()
+        for _ in range(3):
+            _ult._rate_gate("http://example.com/x")
+        el = time.time() - t0
+        if el < 0.55:
+            return f"public host NOT throttled (3 calls took {el:.2f}s; expected >=~0.66s at 3 rps)"
+    finally:
+        if had:
+            os.replace(bak, roe)
+    return True
+
+run_test("Ultron: rate-gate honors RoE / throttles public, not localhost", _rate_gate_safety)
 run_test("Router: 'idor check <url> as A vs B'", _route("idor check http://t/a?id=1 as userA vs userB", "ultron", "idor_check"))
 run_test("Router: 'session list'", _route("session list", "ultron", "session_list"))
 
