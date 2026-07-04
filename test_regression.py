@@ -1354,14 +1354,21 @@ def _probe_sqli_and_xss():
     return True
 
 def _probe_sqli_anomaly():
+    # A quote that flips 200->500 with NO DB-error string is an injection CANDIDATE of an
+    # UNCONFIRMED class (could be SQLi/LFI/XPath/command/parser error) — it must NOT be
+    # over-claimed as CVSS-9.8 sqli-error-based. (Precision fix surfaced by the DSVW dogfood:
+    # path/include/name/size all 500 on a quote for non-SQL reasons.)
     U = _ult.ultron_agent
     def _get(url, timeout=8, headers=None):
         if "%27" in url: return _FakeResp("", 500)        # quote -> empty 500 (anomaly, no error string)
         return _FakeResp("healthy page " * 100, 200)      # baseline 200 with body
     res = _with_fake_http(_get, lambda: U._probe_injection(["http://t.com/n.aspx?id=1"]))
-    sqli = [r for r in res if r["template"] == "sqli-error-based"]
-    if not sqli:                         return "anomaly SQLi not flagged"
-    if "500" not in sqli[0]["evidence"]: return f"anomaly evidence missing status: {sqli[0]['evidence']}"
+    anom = [r for r in res if r["template"] == "injection-error-anomaly"]
+    if not anom:                                     return f"anomaly not flagged as candidate: {[r['template'] for r in res]}"
+    if [r for r in res if r["template"] == "sqli-error-based"]:
+        return "bare 500-on-quote must NOT be labeled confirmed SQLi"
+    if anom[0]["severity"] != "medium" or "UNCONFIRMED" not in anom[0]["evidence"]:
+        return f"candidate should be medium + class-unconfirmed: {anom[0]}"
     return True
 
 def _probe_sqli_empty_param():
