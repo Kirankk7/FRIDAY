@@ -1934,6 +1934,51 @@ def _authz_engine():
     return True
 
 run_test("Ultron: authz engine (session/mutator/IDOR)", _authz_engine)
+
+
+def _write_bola_oracle():
+    """B3+ opt-in write-BOLA oracle: attacker mutates the owner's object -> confirmed CRITICAL
+    + auto-reverted; destructive fields refused; enforced-ownership = no finding. (VAmPI dogfood.)"""
+    from core import session_manager as sm
+    U = _ult.ultron_agent
+    class _J:
+        def __init__(s, obj, c=200): s._o = obj; s.status_code = c; s.text = _json_dumps(obj); s.headers = {}
+        def json(s): return s._o
+    import json as _pyjson
+    def _json_dumps(o): return _pyjson.dumps(o)
+    sm.clear(); sm.set_session("userA", cookie="uid=1"); sm.set_session("userB", cookie="uid=2")
+    sv_g, sv_w = _ult._http_get, _ult._http_write
+    try:
+        # --- vulnerable: NO ownership check on the write (any session mutates the object) ---
+        state = {"email": "alice@orig.com"}
+        def g(url, timeout=8, headers=None, allow_redirects=True): return _J(dict(state))
+        def w(method, url, json_body=None, timeout=8, headers=None):
+            state.update(json_body or {}); return _J(dict(state), 204)   # write accepted regardless of caller
+        _ult._http_get, _ult._http_write = g, w
+        r = U.write_bola_check("http://t/users/v1/alice", field="email", owner="userA", attacker="userB")
+        tt = [f["template"] for f in r["data"]["findings"]]
+        if "idor-bola-write" not in tt:            return f"write-BOLA not flagged: {r['message']}"
+        if r["data"]["reverted"] is not True:      return "write-BOLA not auto-reverted"
+        if state["email"] != "alice@orig.com":     return f"revert didn't restore original: {state}"
+        # --- destructive field refused (no auto-write of password) ---
+        rp = U.write_bola_check("http://t/users/v1/alice", field="password", owner="userA", attacker="userB")
+        if rp["success"] or "Refusing" not in rp["message"]:  return "did not refuse destructive field"
+        # --- enforced ownership: attacker's write is rejected / doesn't land -> no finding ---
+        state2 = {"email": "bob@orig.com"}
+        def g2(url, timeout=8, headers=None, allow_redirects=True): return _J(dict(state2))
+        def w2(method, url, json_body=None, timeout=8, headers=None):
+            ck = (headers or {}).get("Cookie", "")
+            if ck == "uid=1": state2.update(json_body or {})      # only the owner may write
+            return _J(dict(state2), 200 if ck == "uid=1" else 403)
+        _ult._http_get, _ult._http_write = g2, w2
+        r2 = U.write_bola_check("http://t/users/v1/bob", field="email", owner="userA", attacker="userB")
+        if r2["data"]["findings"]:                 return f"FP: enforced-ownership write flagged {r2['message']}"
+        return True
+    finally:
+        _ult._http_get, _ult._http_write = sv_g, sv_w
+        sm.clear()
+
+run_test("Ultron: write-BOLA oracle (confirm+revert / refuse-destructive / FP-guard)", _write_bola_oracle)
 run_test("Router: 'idor check <url> as A vs B'", _route("idor check http://t/a?id=1 as userA vs userB", "ultron", "idor_check"))
 run_test("Router: 'session list'", _route("session list", "ultron", "session_list"))
 
