@@ -1459,6 +1459,14 @@ def _fp_corpus_discipline():
     if run(g_json, "http://t/api/s?q=a"):
         return "FP: JSON-context reflection flagged as XSS"
 
+    # 2b. xss-text-plain (SAFE): marker reflects verbatim but content-type is text/plain
+    #     (e.g. a 500 error page echoing input) — browsers don't render it as HTML. (DSVW FP)
+    def g_plain(url, timeout=8, headers=None, allow_redirects=True):
+        if M in url: return _HResp(f"error: file '{M}<x>' not found", ctype="text/plain")
+        return _HResp("error: file '' not found", ctype="text/plain")
+    if run(g_plain, "http://t/x?path=a"):
+        return "FP: text/plain reflection flagged as XSS"
+
     # 3. sqli-canned (SAFE): a static SQL-error-looking banner present on EVERY response.
     def g_canned(url, timeout=8, headers=None, allow_redirects=True):
         return _HResp("Welcome. (note: SQL syntax help at /docs) " * 5)   # same in base + inject
