@@ -2037,6 +2037,32 @@ def _apex_domain_for_subfinder():
     return True
 
 run_test("Ultron: subfinder runs on registrable apex (www.-prefix fix)", _apex_domain_for_subfinder)
+
+
+def _sitemap_paths_discovery():
+    """Passive sitemap discovery: follows a nested sitemap INDEX to its child sitemaps and
+    returns the real page URLs (uses a browser UA — WP serves empty to python-requests)."""
+    class _R:
+        def __init__(s, t): s.text = t; s.status_code = 200; s.headers = {}
+    INDEX = "<sitemapindex><sitemap><loc>https://t.com/page-sitemap.xml</loc></sitemap></sitemapindex>"
+    CHILD = "<urlset><url><loc>https://t.com/admission/</loc></url><url><loc>https://t.com/refer/</loc></url></urlset>"
+    def g(url, timeout=8, headers=None, allow_redirects=True):
+        if url.endswith("/robots.txt"): return _R("User-agent: *\nSitemap: https://t.com/sitemap.xml")
+        if "page-sitemap" in url: return _R(CHILD)
+        if "sitemap" in url: return _R(INDEX)
+        return _R("")
+    sv = _ult._http_get; _ult._http_get = g
+    try:
+        paths = _ult._sitemap_paths("https://t.com")
+    finally:
+        _ult._http_get = sv
+    if "https://t.com/admission/" not in paths or "https://t.com/refer/" not in paths:
+        return f"nested sitemap pages not extracted: {paths}"
+    if any(".xml" in p for p in paths):
+        return f"sitemap index files leaked into results: {paths}"
+    return True
+
+run_test("Ultron: sitemap.xml passive path discovery (nested index)", _sitemap_paths_discovery)
 run_test("Router: 'idor check <url> as A vs B'", _route("idor check http://t/a?id=1 as userA vs userB", "ultron", "idor_check"))
 run_test("Router: 'session list'", _route("session list", "ultron", "session_list"))
 
