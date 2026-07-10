@@ -2014,6 +2014,29 @@ def _rate_gate_safety():
     return True
 
 run_test("Ultron: rate-gate honors RoE / throttles public, not localhost", _rate_gate_safety)
+
+
+def _apex_domain_for_subfinder():
+    """Subfinder must enumerate the registrable APEX — 'www.x.com' gave 0 subs because it
+    looked for '*.www.x.com'. (bhavansdubai.com dogfood: 0 -> 5 subs after the fix.)"""
+    a = _ult._apex_domain
+    checks = {
+        "www.bhavansdubai.com": "bhavansdubai.com",
+        "https://www.bhavansdubai.com/x": "bhavansdubai.com",
+        "lms.bhavansdubai.com": "bhavansdubai.com",
+        "bhavansdubai.com": "bhavansdubai.com",
+        "shop.example.co.uk": "example.co.uk",
+        "a.b.example.com": "example.com",
+        "10.0.0.1": "10.0.0.1",
+        "localhost": "localhost",
+    }
+    for host, want in checks.items():
+        got = a(host)
+        if got != want:
+            return f"apex({host}) = {got!r}, want {want!r}"
+    return True
+
+run_test("Ultron: subfinder runs on registrable apex (www.-prefix fix)", _apex_domain_for_subfinder)
 run_test("Router: 'idor check <url> as A vs B'", _route("idor check http://t/a?id=1 as userA vs userB", "ultron", "idor_check"))
 run_test("Router: 'session list'", _route("session list", "ultron", "session_list"))
 
