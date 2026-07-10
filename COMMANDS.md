@@ -39,9 +39,11 @@ python deep_hunt.py <target>             # sqlmap deep-confirm (money shot)
 
 ```bash
 scan example.com                         # nmap port scan (with scan diffing)
-full recon example.com                   # pipeline: nmap→subfinder→httpx→nuclei→katana→report
+full recon example.com                   # pipeline: nmap→subfinder→httpx→nuclei→katana→sitemap→report
 bug bounty example.com                   # full hunt → probe → gate → test plan + PoC report
-content discovery example.com            # brute-force hidden paths/dirs (ffuf/gobuster)
+content discovery example.com            # brute-force hidden paths/dirs (ffuf/gobuster), standalone
+#   note: subfinder auto-uses the registrable apex (www.x.com → x.com); sitemap.xml + robots.txt
+#   paths are ALWAYS pulled into recon/hunt reports; ffuf/gobuster dir-brute is OPT-IN (see --discover)
 crawl example.com                        # katana web crawl (endpoint inventory)
 spa crawl example.com                    # headless-render JS/SPA → capture API surface
 search cve for log4j                     # NVD CVE lookup by keyword
@@ -159,8 +161,11 @@ Flask/HUD/voice. **Authorized targets only.**
 
 ```bash
 python cli.py scan <target> [--type basic]                 # nmap port scan
-python cli.py recon <target> [--force]                     # full recon pipeline
-python cli.py bugbounty <target> [--force]                 # full hunt → validated PoC report + plan
+python cli.py recon <target> [--force] [--discover]        # full recon pipeline (+sitemap; --discover = ffuf/gobuster)
+python cli.py bugbounty <target> [--force] [--discover]    # full hunt → validated PoC report + plan
+#   --discover = ALSO brute hidden paths (ffuf/gobuster) — slower & noisier, off by default.
+#   sitemap.xml + robots.txt paths are pulled in ALWAYS (passive, cheap). subfinder auto-apexes www.
+python cli.py write-bola <url> --field email --owner A --attacker B [--verify-url <read-url>]  # write-BOLA oracle (opt-in)
 python cli.py cve <keyword>                                # NVD CVE lookup
 python cli.py kb "how do I test for IDOR"                  # methodology knowledge base
 python cli.py discover <target>                            # content discovery (ffuf/gobuster)
