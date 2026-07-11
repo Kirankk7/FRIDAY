@@ -1371,6 +1371,22 @@ def _probe_sqli_anomaly():
         return f"candidate should be medium + class-unconfirmed: {anom[0]}"
     return True
 
+def _probe_type_error_not_flagged():
+    # FP-kill (DSVW `?size=` dogfood): a quote that flips 200->500 via a NUMERIC-CAST error
+    # (int("32'") -> ValueError) is input-validation, NOT injection — the param rejects any
+    # non-numeric input, not the quote. It must be DROPPED, not flagged injection-error-anomaly.
+    U = _ult.ultron_agent
+    def _get(url, timeout=8, headers=None):
+        if "%27" in url:                                  # quote -> type-error 500 (not injection)
+            return _FakeResp("Traceback...\nValueError: invalid literal for int() with base 10: \"32'\"", 500)
+        return _FakeResp("healthy page " * 100, 200)      # baseline 200 with body
+    res = _with_fake_http(_get, lambda: U._probe_injection(["http://t.com/n.aspx?size=32"]))
+    if [r for r in res if r["template"] == "injection-error-anomaly"]:
+        return f"type-cast 500 must be dropped, not flagged as injection: {[r['template'] for r in res]}"
+    if [r for r in res if r["template"] == "sqli-error-based"]:
+        return "type-error must not be labeled SQLi"
+    return True
+
 def _probe_sqli_empty_param():
     # crawled URLs often carry EMPTY params (?q=). A bare quote can hit a trivial-query
     # short-circuit (no error); the probe must seed the value so the quote breaks the query.
@@ -1385,6 +1401,7 @@ def _probe_sqli_empty_param():
 
 run_test("Ultron: injection probe sqli+xss",    _probe_sqli_and_xss)
 run_test("Ultron: injection probe anomaly sqli", _probe_sqli_anomaly)
+run_test("Ultron: injection type-error FP-kill", _probe_type_error_not_flagged)
 run_test("Ultron: injection probe empty-param seed", _probe_sqli_empty_param)
 
 def _probe_carries_cookie():
