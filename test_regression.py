@@ -4424,6 +4424,16 @@ def _t_evidence_object():
     for sec in ["CWE-89", "CVSS 3.1", "Steps to reproduce", "curl", "Remediation"]:
         if sec not in md:
             return f"markdown missing section: {sec}"
+    # confidence-gated CVSS: a REPRODUCED finding shows the full score, no "up to" caveat.
+    if o["cvss"].get("provisional"):    return "reproduced finding must NOT be provisional"
+    if "up to" in md:                   return "confirmed CVSS must not render 'up to'"
+    # a CANDIDATE finding must NOT present 9.8 as proven -> provisional 'up to X' + caveat.
+    cand = evidence.build({"template": "sqli-error-based", "severity": "high", "url": "http://t/s?q=1",
+                           "_gate": {"tier": "P3", "confidence": "candidate"}}, "target")
+    if not cand["cvss"].get("provisional"):     return "candidate finding must be provisional"
+    cmd = evidence.to_markdown(cand)
+    if "up to" not in cmd or "candidate" not in cmd.lower():
+        return "candidate CVSS must render 'up to' + candidate caveat"
     if evidence.build({"template": "idor-bola", "severity": "high", "url": "http://t/1"}, "t")["cwe"]["id"] != "CWE-639":
         return "idor/bola CWE wrong"
     return True
