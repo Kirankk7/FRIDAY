@@ -1387,6 +1387,33 @@ def _probe_type_error_not_flagged():
         return "type-error must not be labeled SQLi"
     return True
 
+def _probe_xss_context():
+    # Reflection-context classifier: a marker echoed in a COMMENT or rawtext element is inert
+    # -> must be dropped (FP-kill); a marker in raw HTML element context is executable -> flagged.
+    U = _ult.ultron_agent
+    def _mk(body):
+        return lambda url, timeout=8, headers=None: (
+            _FakeResp(body.replace("MARK", _ult._XSS_MARKER + "<x>"), 200)
+            if _ult._XSS_MARKER in url else _FakeResp("normal " * 50, 200))
+    # comment context -> inert -> dropped
+    r_comment = _with_fake_http(_mk("<html><!-- cached: MARK --></html>"),
+                                lambda: U._probe_injection(["http://t.com/p?q=1"]))
+    if [r for r in r_comment if r["template"] == "xss-reflected"]:
+        return "comment-context reflection must be dropped (inert)"
+    # raw HTML element context -> executable -> flagged
+    r_html = _with_fake_http(_mk("<div>MARK</div>"),
+                             lambda: U._probe_injection(["http://t.com/p?q=1"]))
+    x = [r for r in r_html if r["template"] == "xss-reflected"]
+    if not x:                                return "executable HTML-context reflection must be flagged"
+    if "executable" not in x[0]["evidence"]: return f"HTML context should read executable: {x[0]['evidence']}"
+    # multi-occurrence: marker in an attr AND a raw-html context -> pick the STRONGEST (executable)
+    r_multi = _with_fake_http(_mk('<input value="MARK"><div>MARK</div>'),
+                              lambda: U._probe_injection(["http://t.com/p?q=1"]))
+    xm = [r for r in r_multi if r["template"] == "xss-reflected"]
+    if not xm or "executable" not in xm[0]["evidence"]:
+        return f"multi-context reflection must pick executable: {xm and xm[0]['evidence']}"
+    return True
+
 def _probe_sqli_empty_param():
     # crawled URLs often carry EMPTY params (?q=). A bare quote can hit a trivial-query
     # short-circuit (no error); the probe must seed the value so the quote breaks the query.
@@ -1402,6 +1429,7 @@ def _probe_sqli_empty_param():
 run_test("Ultron: injection probe sqli+xss",    _probe_sqli_and_xss)
 run_test("Ultron: injection probe anomaly sqli", _probe_sqli_anomaly)
 run_test("Ultron: injection type-error FP-kill", _probe_type_error_not_flagged)
+run_test("Ultron: xss reflection-context classifier", _probe_xss_context)
 run_test("Ultron: injection probe empty-param seed", _probe_sqli_empty_param)
 
 def _probe_carries_cookie():
