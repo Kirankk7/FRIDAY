@@ -1351,6 +1351,12 @@ def _probe_sqli_and_xss():
     if any("flat.html" in r["url"] for r in res): return "param-less URL was probed"
     if not all(r.get("validated") and r.get("evidence") and r.get("repro") for r in res):
         return "finding missing validated/evidence/repro"
+    # raw request/response captured (not the fabricated `GET {url} HTTP/1.1` fallback)
+    sq = [r for r in res if r["template"] == "sqli-error-based"][0]
+    if not sq.get("request", "").startswith("GET ") or "Host:" not in sq["request"]:
+        return f"sqli request not a raw HTTP request: {sq.get('request')}"
+    if "HTTP" not in (sq.get("response") or ""):
+        return "sqli response excerpt not captured"
     return True
 
 def _probe_sqli_anomaly():
