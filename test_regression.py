@@ -4434,6 +4434,15 @@ def _t_evidence_object():
     cmd = evidence.to_markdown(cand)
     if "up to" not in cmd or "candidate" not in cmd.lower():
         return "candidate CVSS must render 'up to' + candidate caveat"
+    # preconditions derived from the CVSS vector (sqli = PR:N/UI:N/AV:N = unauth·network·no-UI)
+    pc = o["preconditions"]["summary"].lower()
+    if "unauthenticated" not in pc or "network" not in pc or "no user interaction" not in pc:
+        return f"sqli preconditions wrong: {pc}"
+    if "Preconditions:" not in md:              return "markdown missing Preconditions line"
+    # xss uses UI:R -> must say victim interaction required
+    xpc = evidence.build({"template": "xss-reflected", "severity": "medium", "url": "http://t/x?q=1"}, "t")
+    if "victim interaction" not in xpc["preconditions"]["summary"].lower():
+        return f"xss preconditions should require interaction: {xpc['preconditions']}"
     if evidence.build({"template": "idor-bola", "severity": "high", "url": "http://t/1"}, "t")["cwe"]["id"] != "CWE-639":
         return "idor/bola CWE wrong"
     return True
