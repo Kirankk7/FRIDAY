@@ -4535,6 +4535,27 @@ run_test("Auth Matrix: BFLA (anon reaches /admin)", _auth_matrix_bfla)
 run_test("Auth Matrix: BOLA delegates to idor_check", _auth_matrix_bola)
 
 
+def _jwt_analyze():
+    import base64, json
+    from core import jwt_analyzer as J
+    def mk(hdr, pl):
+        b = lambda o: base64.urlsafe_b64encode(json.dumps(o).encode()).decode().rstrip("=")
+        return f"{b(hdr)}.{b(pl)}.sig"
+    r = J.analyze(mk({"alg": "none", "typ": "JWT"}, {"sub": "1", "exp": 9999999999}))
+    if "jwt-alg-none" not in {f["template"] for f in r["data"]["findings"]}:
+        return f"alg:none not flagged: {[f['template'] for f in r['data']['findings']]}"
+    r2 = J.analyze("Bearer " + mk({"alg": "HS256", "jku": "https://evil/jwks.json", "kid": "1"}, {"sub": "1", "role": "user"}))
+    t2 = {f["template"] for f in r2["data"]["findings"]}
+    for want in ("jwt-weak-alg", "jwt-jku-ssrf", "jwt-kid-injection", "jwt-missing-exp", "jwt-sensitive-claims"):
+        if want not in t2: return f"{want} missing: {t2}"
+    r3 = J.analyze(mk({"alg": "RS256", "typ": "JWT"}, {"sub": "1", "iat": 1000, "exp": 1000 + 3600}))
+    if r3["data"]["findings"]: return f"clean RS256 token flagged: {[f['template'] for f in r3['data']['findings']]}"
+    if J.analyze("not.a")["success"] or J.analyze("plainstring")["success"]: return "non-JWT must fail"
+    return True
+
+run_test("JWT analyzer: alg-none/jku/kid/exp/claims + clean", _jwt_analyze)
+
+
 def _t_timeline_record():
     """F4: pure recorder — start_run -> events (incl step() timing) -> finish, immutable
     versioned timeline.json persisted + loadable, status derived from event outcomes."""
