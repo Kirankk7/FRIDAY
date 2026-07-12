@@ -4625,6 +4625,31 @@ def _secrets():
 run_test("Secrets: JS keys + endpoints + exposed .env/.git", _secrets)
 
 
+def _oast_ssrf():
+    import urllib.request, urllib.parse
+    U = _ult.ultron_agent
+    class _R:
+        def __init__(s): s.text = ""; s.status_code = 200; s.headers = {}
+    # VULNERABLE server: fetches whatever ?url= points to, server-side (blind SSRF) -> hits our listener
+    def g_vuln(url, timeout=8, headers=None):
+        q = dict(urllib.parse.parse_qsl(urllib.parse.urlsplit(url).query))
+        if q.get("url"):
+            try: urllib.request.urlopen(q["url"], timeout=2).read()
+            except Exception: pass
+        return _R()
+    r = _with_fake_http(g_vuln, lambda: U.oast_ssrf("http://target/fetch?url=x", param="url", wait=3.0))
+    f = r["data"]["findings"]
+    if not f or f[0]["template"] != "ssrf-oob-confirmed": return f"OOB SSRF not confirmed: {r['message']}"
+    if "CONFIRMED" not in f[0]["evidence"] or not f[0].get("oob"): return "confirmed finding missing evidence/oob metadata"
+    # NON-vulnerable: server ignores the url param -> no OOB -> no finding
+    r2 = _with_fake_http(lambda url, timeout=8, headers=None: _R(),
+                         lambda: U.oast_ssrf("http://safe/x?url=y", param="url", wait=1.0))
+    if r2["data"]["findings"]: return f"non-vulnerable wrongly confirmed: {r2['data']['findings']}"
+    return True
+
+run_test("OAST: blind SSRF OOB confirm + non-vuln", _oast_ssrf)
+
+
 def _t_timeline_record():
     """F4: pure recorder — start_run -> events (incl step() timing) -> finish, immutable
     versioned timeline.json persisted + loadable, status derived from event outcomes."""
