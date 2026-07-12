@@ -1980,8 +1980,22 @@ def _authz_engine():
         fp = U.idor_check("http://t/account_safe?id=1", "userA", "userB")
     finally:
         _ult._http_get = sv_o
-    sm.clear()
     if fp["data"]["findings"]: return f"B3 FP: enforced-ownership flagged {[f['template'] for f in fp['data']['findings']]}"
+    # R5: self-scoped endpoint (VAmPI /me, crAPI /dashboard) — each principal gets its OWN same-length
+    # record. Length matches + anon denied, but content DIFFERS -> must NOT flag BOLA (content-aware fix).
+    def g_self(url, timeout=8, headers=None, allow_redirects=True):
+        ck = (headers or {}).get("Cookie", "")
+        if not ck: return _R("login required here padded 0", 401)
+        who = "AAAA" if "uid=1" in ck else "BBBB"                # each caller sees its own data, same length
+        return _R(f"self-scoped dashboard for {who} padded to identical length 01234567")
+    _ult._http_get = g_self
+    try:
+        ss = U.idor_check("http://t/me", "userA", "userB")
+    finally:
+        _ult._http_get = sv_o
+    sm.clear()
+    if ss["data"]["findings"]:
+        return f"R5 FP: self-scoped (same-len, diff content) wrongly flagged {[f['template'] for f in ss['data']['findings']]}"
     return True
 
 run_test("Ultron: authz engine (session/mutator/IDOR)", _authz_engine)
