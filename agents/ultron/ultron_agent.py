@@ -1012,6 +1012,15 @@ class UltronAgent:
             "data": {"domain": domain, "subdomains": subdomains}
         }
 
+    def subdomain_takeover(self, hosts) -> dict:
+        """v1.3 A2 — dangling-service subdomain takeover (deterministic fingerprint match). Accepts a
+        list, or a comma/space/newline-separated string, or a single host. Delegates to core.takeover.
+        Fires on any target, unauthed — high bug-bounty ROI. Authorized targets only."""
+        from core import takeover
+        if isinstance(hosts, str):
+            hosts = [h for h in re.split(r"[\s,]+", hosts) if h]
+        return takeover.scan(hosts)
+
     # =====================================
     # HTTPX PROBE
     # =====================================
@@ -4526,6 +4535,9 @@ Report:"""
 
             elif action == "jwt_analyze":
                 return self.jwt_analyze(parameters.get("token", "") or target)
+
+            elif action == "subdomain_takeover":
+                return self.subdomain_takeover(parameters.get("hosts", "") or target)
 
             elif action == "auth_matrix":
                 # gather endpoints: stored profile inventory (burp/recon/crawl) + the base target

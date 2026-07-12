@@ -4556,6 +4556,24 @@ def _jwt_analyze():
 run_test("JWT analyzer: alg-none/jku/kid/exp/claims + clean", _jwt_analyze)
 
 
+def _takeover():
+    from core import takeover as TK
+    # GitHub Pages dangling fingerprint -> flagged, service named
+    r = TK.scan(["gh.t.com"], fetch=lambda u, timeout=8: (404, "<h1>404</h1> There isn't a GitHub Pages site here."))
+    if not any(f["template"] == "subdomain-takeover" for f in r["data"]["findings"]):
+        return f"GH-pages takeover not flagged: {r['data']['findings']}"
+    if "GitHub Pages" not in r["data"]["findings"][0]["evidence"]: return "service not named in evidence"
+    # S3 fingerprint carried in a 404 error body (must read error bodies)
+    if not TK.scan(["s3.t.com"], fetch=lambda u, timeout=8: (404, "<Error><Code>NoSuchBucket</Code></Error>"))["data"]["findings"]:
+        return "S3 NoSuchBucket not flagged"
+    # a normal live site -> NO finding (precision: no generic-404 false-match)
+    if TK.scan(["ok.t.com"], fetch=lambda u, timeout=8: (200, "<html>welcome, 404 not found nowhere here</html>"))["data"]["findings"]:
+        return "clean host wrongly flagged"
+    return True
+
+run_test("Subdomain takeover: GH-pages/S3 fingerprint + clean", _takeover)
+
+
 def _t_timeline_record():
     """F4: pure recorder — start_run -> events (incl step() timing) -> finish, immutable
     versioned timeline.json persisted + loadable, status derived from event outcomes."""
