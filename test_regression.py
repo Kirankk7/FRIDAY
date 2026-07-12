@@ -4597,6 +4597,34 @@ def _cors():
 run_test("CORS: reflected-origin+creds / medium / clean", _cors)
 
 
+def _secrets():
+    from core import secrets as S
+    names = [n for n, _ in S.find_secrets('k="AKIAIOSFODNN7EXAMPLE"; t="ghp_' + "a" * 36 + '"')]
+    if "AWS access key id" not in names or not any("GitHub" in n for n in names):
+        return f"secret patterns missed: {names}"
+    if S.find_secrets("a normal string mentioning api and key and secret words"):
+        return "false-positive on benign text"
+    if not any(e.startswith("/api/users") for e in S.find_endpoints('fetch("/api/users?id=1")')):
+        return "JS endpoint extraction failed"
+    if not S.file_signature(".env", "APP_SECRET=abc\nDB_PASSWORD=x"): return ".env signature missed"
+    if S.file_signature(".git/config", "<html>SPA index</html>"):     return ".git/config false-match on SPA 200"
+    # method: JS carrying a key + an exposed .env
+    U = _ult.ultron_agent
+    class _R:
+        def __init__(s, t, c=200): s.text = t; s.status_code = c
+    def g(url, timeout=8, headers=None):
+        if url.endswith("app.js"): return _R('const K="AKIAIOSFODNN7EXAMPLE";')
+        if url.endswith(".env"):   return _R("APP_SECRET=abc\nDB_PASSWORD=x", 200)
+        return _R("<html></html>", 404)
+    tmpls = {f["template"] for f in
+             _with_fake_http(g, lambda: U.secret_scan("https://t.com", urls=["https://t.com/app.js"]))["data"]["findings"]}
+    if "exposed-secret" not in tmpls: return f"exposed-secret not flagged: {tmpls}"
+    if "sensitive-file" not in tmpls: return f"exposed .env not flagged: {tmpls}"
+    return True
+
+run_test("Secrets: JS keys + endpoints + exposed .env/.git", _secrets)
+
+
 def _t_timeline_record():
     """F4: pure recorder — start_run -> events (incl step() timing) -> finish, immutable
     versioned timeline.json persisted + loadable, status derived from event outcomes."""
