@@ -4574,6 +4574,29 @@ def _takeover():
 run_test("Subdomain takeover: GH-pages/S3 fingerprint + clean", _takeover)
 
 
+def _cors():
+    U = _ult.ultron_agent
+    class _CR:
+        def __init__(s, h): s.text = ""; s.status_code = 200; s.headers = h
+    # HIGH: reflects the attacker Origin + credentials
+    r = _with_fake_http(lambda url, timeout=8, headers=None: _CR(
+            {"Access-Control-Allow-Origin": (headers or {}).get("Origin", ""), "Access-Control-Allow-Credentials": "true"}),
+        lambda: U.cors_check(["https://t.com/api"]))
+    f = r["data"]["findings"]
+    if not f or f[0]["severity"] != "high": return f"reflected-origin+creds must be HIGH: {f}"
+    # MEDIUM: reflects origin, no creds
+    r2 = _with_fake_http(lambda url, timeout=8, headers=None: _CR({"Access-Control-Allow-Origin": (headers or {}).get("Origin", "")}),
+                         lambda: U.cors_check(["https://t.com/x"]))
+    if not r2["data"]["findings"] or r2["data"]["findings"][0]["severity"] != "medium": return "reflected-no-creds must be MEDIUM"
+    # CLEAN: fixed same-origin ACAO -> no finding
+    r3 = _with_fake_http(lambda url, timeout=8, headers=None: _CR({"Access-Control-Allow-Origin": "https://t.com"}),
+                         lambda: U.cors_check(["https://t.com/y"]))
+    if r3["data"]["findings"]: return f"same-origin ACAO wrongly flagged: {r3['data']['findings']}"
+    return True
+
+run_test("CORS: reflected-origin+creds / medium / clean", _cors)
+
+
 def _t_timeline_record():
     """F4: pure recorder — start_run -> events (incl step() timing) -> finish, immutable
     versioned timeline.json persisted + loadable, status derived from event outcomes."""
