@@ -4475,6 +4475,52 @@ run_test("F3: Evidence Object (CWE/CVSS/curl/lint + markdown export)", _t_eviden
 run_test("F3: evidence bundle writes json+md per finding", _t_evidence_bundle_write)
 
 
+def _auth_expected_access():
+    # heuristic role classifier — the Expected-Access layer feeding the matrix
+    ea = _ult._expected_access
+    if ea("/admin/users")[0] != "admin":  return "admin path misclassified"
+    if ea("/orders/42")[0] != "owner":    return "id-bearing path misclassified"
+    if ea("/login")[0] != "guest":        return "public path misclassified"
+    if ea("/profile")[0] != "self":       return "self path misclassified"
+    if ea("/foo")[0] != "user":           return "default should be 'user' (assume auth)"
+    if ea("/admin/x")[1] != "high":       return "admin expectation should be high-confidence"
+    return True
+
+def _auth_matrix_bfla():
+    # BFLA: a lower-priv principal (anon) reaching an admin-expected path = broken function-level authz.
+    from core import session_manager as sm
+    U = _ult.ultron_agent
+    sm.clear()                                       # anon-only principal set
+    res = _with_fake_http(lambda url, timeout=8, headers=None: _FakeResp("panel", 200),
+                          lambda: U.auth_matrix(["http://t/admin/users", "http://t/products"]))
+    bfla = [x for x in res["data"]["findings"] if x["template"] == "bfla-broken-function-auth"]
+    if not bfla:                                   return f"BFLA not flagged when anon reaches /admin: {res['data']['findings']}"
+    if "/admin/users" not in bfla[0]["url"]:       return "BFLA flagged the wrong endpoint"
+    if "HIGH" not in bfla[0]["evidence"]:          return "anon-reaches-admin must be HIGH confidence"
+    if any("/products" in x["url"] for x in bfla): return "non-admin path wrongly flagged BFLA"
+    if "Expected" not in res["data"]["table_md"]:  return "matrix table not rendered"
+    return True
+
+def _auth_matrix_bola():
+    # BOLA: id-bearing path with 2 principals -> delegates to idor_check (no new BOLA logic).
+    from core import session_manager as sm
+    U = _ult.ultron_agent
+    sm.clear(); sm.set_session("userA", cookie="u=1", role="user"); sm.set_session("userB", cookie="u=2", role="user")
+    def _get(url, timeout=8, headers=None):
+        if not (headers or {}).get("Cookie"):       # anon denied (kills 'it's public' FP)
+            return _FakeResp("forbidden", 403)
+        return _FakeResp("owner's order record " * 6, 200)   # both sessions get the owner's 200
+    res = _with_fake_http(_get, lambda: U.auth_matrix(["http://t/orders/1"], owner="userA", attacker="userB"))
+    tmpls = [x["template"] for x in res["data"]["findings"]]
+    sm.clear()
+    if "idor-bola" not in tmpls:                   return f"BOLA not delegated to idor_check: {tmpls}"
+    return True
+
+run_test("Auth Matrix: expected-access classifier", _auth_expected_access)
+run_test("Auth Matrix: BFLA (anon reaches /admin)", _auth_matrix_bfla)
+run_test("Auth Matrix: BOLA delegates to idor_check", _auth_matrix_bola)
+
+
 def _t_timeline_record():
     """F4: pure recorder — start_run -> events (incl step() timing) -> finish, immutable
     versioned timeline.json persisted + loadable, status derived from event outcomes."""
