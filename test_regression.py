@@ -1435,6 +1435,27 @@ def _probe_sqli_empty_param():
 run_test("Ultron: injection probe sqli+xss",    _probe_sqli_and_xss)
 run_test("Ultron: injection probe anomaly sqli", _probe_sqli_anomaly)
 run_test("Ultron: injection type-error FP-kill", _probe_type_error_not_flagged)
+
+
+def _probe_nosqli_operator():
+    # NoSQL operator-injection ([$ne]) auth-bypass: plain param denied, [$ne] returns 200-with-data.
+    U = _ult.ultron_agent
+    def g_bypass(url, timeout=8, headers=None):
+        if "[$ne]" in url or "%5B" in url:
+            return _FakeResp('[{"user":"admin","email":"a@t"},{"user":"bob"}]', 200)  # operator matched records
+        return _FakeResp("Unauthorized", 401)                                          # plain param denied
+    res = _with_fake_http(g_bypass, lambda: U._probe_injection(["http://t.com/api/users?user=me"]))
+    if not any(f["template"] == "nosqli-operator" for f in res):
+        return f"nosqli-operator auth-bypass not flagged: {[f['template'] for f in res]}"
+    # clean: operator returns the SAME as baseline -> no over-exposure -> no finding
+    def g_clean(url, timeout=8, headers=None):
+        return _FakeResp("stable record body padded to a fixed length 0123456789 " * 6, 200)
+    res2 = _with_fake_http(g_clean, lambda: U._probe_injection(["http://t.com/api/x?user=me"]))
+    if any(f["template"] == "nosqli-operator" for f in res2):
+        return "clean same-size response wrongly flagged nosqli-operator"
+    return True
+
+run_test("Ultron: NoSQLi operator-injection ($ne bypass)", _probe_nosqli_operator)
 run_test("Ultron: xss reflection-context classifier", _probe_xss_context)
 run_test("Ultron: injection probe empty-param seed", _probe_sqli_empty_param)
 
