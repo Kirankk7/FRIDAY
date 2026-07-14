@@ -1456,6 +1456,32 @@ def _probe_nosqli_operator():
     return True
 
 run_test("Ultron: NoSQLi operator-injection ($ne bypass)", _probe_nosqli_operator)
+
+
+def _xss_confirm_exec():
+    # live headless-browser XSS EXECUTION confirm vs a raw-reflecting server. SKIP if no browser.
+    import threading, http.server, urllib.parse
+    U = _ult.ultron_agent
+    class _H(http.server.BaseHTTPRequestHandler):
+        def do_GET(s):
+            v = urllib.parse.parse_qs(urllib.parse.urlsplit(s.path).query).get("q", [""])[0]
+            s.send_response(200); s.send_header("Content-Type", "text/html"); s.end_headers()
+            s.wfile.write(f"<html><body><div>{v}</div></body></html>".encode())
+        def log_message(s, *a): pass
+    srv = http.server.HTTPServer(("127.0.0.1", 0), _H)
+    port = srv.server_address[1]
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    try:
+        r = U.xss_confirm(f"http://127.0.0.1:{port}/s?q=x", param="q", timeout=10)
+    finally:
+        srv.shutdown()
+    if not r.get("success"):
+        return None    # Playwright/browser unavailable -> SKIP (consistent with other browser tests)
+    if not any(f["template"] == "xss-confirmed" for f in r["data"]["findings"]):
+        return f"raw-reflecting target should confirm XSS execution: {r['message']}"
+    return True
+
+run_test("Ultron: XSS execution confirm (headless)", _xss_confirm_exec)
 run_test("Ultron: xss reflection-context classifier", _probe_xss_context)
 run_test("Ultron: injection probe empty-param seed", _probe_sqli_empty_param)
 
