@@ -4535,6 +4535,25 @@ run_test("Auth Matrix: BFLA (anon reaches /admin)", _auth_matrix_bfla)
 run_test("Auth Matrix: BOLA delegates to idor_check", _auth_matrix_bola)
 
 
+def _auth_matrix_r6():
+    # R6: anon 2xx on an owner/self-expected path = missing-authentication (CWE-306); default 'user' path
+    # (public-page-prone) must NOT trigger it — precision.
+    from core import session_manager as sm
+    U = _ult.ultron_agent
+    sm.clear()
+    res = _with_fake_http(lambda url, timeout=8, headers=None: _FakeResp("record", 200),
+                          lambda: U.auth_matrix(["http://t/orders/1"]))   # owner (id-bearing)
+    if "missing-authentication" not in [f["template"] for f in res["data"]["findings"]]:
+        return f"anon-2xx on owner path not flagged missing-auth: {[f['template'] for f in res['data']['findings']]}"
+    res2 = _with_fake_http(lambda url, timeout=8, headers=None: _FakeResp("record", 200),
+                           lambda: U.auth_matrix(["http://t/products"]))  # default 'user' -> must NOT flag
+    if any(f["template"] == "missing-authentication" for f in res2["data"]["findings"]):
+        return "default-user path wrongly flagged R6 (public-page FP)"
+    return True
+
+run_test("Auth Matrix: R6 anon-2xx = missing-auth", _auth_matrix_r6)
+
+
 def _jwt_analyze():
     import base64, json
     from core import jwt_analyzer as J
