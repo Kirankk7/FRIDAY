@@ -58,7 +58,36 @@ External review (human or AI) is an input, not an oracle. Accept good ideas rega
 reject ideas that conflict with these principles; adjust plans on evidence (real LOC, tests,
 behaviour); know when to stop. The judgement is the asset.
 
+## 12. Sunset / delete on evidence *(added 2026-07-12 — philosophy-critique gap)*
+The principles above all say build / freeze / validate; none said **retire**. Codebases die of accretion,
+not bad architecture. A probe, KB entry, target, or flag that hasn't earned its keep in a real hunt/dogfood
+gets **removed**, not left "just in case". Deletion is a first-class move, guarded the same way as a build
+(move-only, tests green, 0-flip). Without this, a 10-year codebase ossifies: dead code nobody's *allowed* to
+delete + a frozen core nobody dares thaw.
+
+## 13. A frozen layer thaws only on a proven, recurring requirement *(added 2026-07-12)*
+"Freeze completed layers" (#6) and "hunts create requirements" **conflict** when a hunt needs a frozen layer
+changed (R5 touched the "done" idor oracle; R1 needs the Auth-Matrix core reopened). Resolution: a frozen
+layer may be reopened **only** when a requirement is (a) surfaced by real dogfood/hunting, AND (b) recurs or
+is blocking — never on a single speculative idea. The reopening is itself move-only + regression-gated. This
+makes "freeze" a technical rule with a written escape hatch, not one person's veto (matters at 3 engineers).
+
+## 14. Big requirements are allowed — if reality proves them *(added 2026-07-12)*
+"Small deterministic improvements over speculative systems" (implicit) must not block genuinely-needed LARGE
+work (the capture→principal/tenant matrix; the OAST listener). The rule is *anti-speculation*, not *anti-size*:
+a large build is sanctioned when repeated real hunts demand it (evidence, not a whiteboard). Salami-slicing a
+proven big requirement to obey "small" is itself a failure.
+
+## 15. Parity is a stated invariant, not a habit *(added 2026-07-12)*
+"Two products, one engine" (#10) is practiced but was never a *defended* invariant → the least-guarded real
+risk (manual byte-copy, one drift already slipped). Until a shared `friday-core` package exists
+(`REFACTOR_PLAN.md`), every engine change ships to BOTH repos in the same commit-set + full regression on
+each; an unstated invariant rots first.
+
 ---
 
 *Maturity today: prototype → integrated assistant → **execution platform** (here) → operational →
-autonomous. The jump to "platform" was made by adopting these principles, not by any single feature.*
+autonomous. The jump to "platform" was made by adopting these principles, not by any single feature.
+Principles 12–15 were added after 10-year-lens reviews found the philosophy excellent at NOT adding the
+wrong thing but silent on removing the dead thing + reopening the frozen thing — the two failure modes of a
+long-lived codebase.*
