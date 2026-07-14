@@ -4669,6 +4669,43 @@ def _oast_ssrf():
 run_test("OAST: blind SSRF OOB confirm + non-vuln", _oast_ssrf)
 
 
+def _oast_cmdi_xxe():
+    import urllib.request, urllib.parse, re
+    U = _ult.ultron_agent
+    class _R:
+        def __init__(s): s.text = ""; s.status_code = 200; s.headers = {}
+    # cmdi: server "runs" the injected shell -> extract the curl/wget target + fetch it (OOB)
+    def g_cmdi(url, timeout=8, headers=None):
+        v = dict(urllib.parse.parse_qsl(urllib.parse.urlsplit(url).query)).get("cmd", "")
+        m = re.search(r"(?:curl -s|wget -q -O-) (http://\S+)", v)
+        if m:
+            try: urllib.request.urlopen(m.group(1).rstrip(";)`&|"), timeout=2).read()
+            except Exception: pass
+        return _R()
+    rc = _with_fake_http(g_cmdi, lambda: U.oast_probe("http://t/ping?cmd=1", param="cmd", kind="cmdi", wait=3.0))
+    if not any(f["template"] == "cmdi-oob-confirmed" for f in rc["data"]["findings"]):
+        return f"cmdi OOB not confirmed: {rc['message']}"
+    # xxe: patch the write seam; server parses the external entity -> fetch its SYSTEM url (OOB)
+    sv = _ult._http_write
+    def w(method, url, json_body=None, timeout=8, headers=None, data=None):
+        if data:
+            m = re.search(r'SYSTEM "(http://\S+?)"', data)
+            if m:
+                try: urllib.request.urlopen(m.group(1), timeout=2).read()
+                except Exception: pass
+        return _R()
+    _ult._http_write = w
+    try:
+        rx = U.oast_probe("http://t/parse", kind="xxe", wait=3.0)
+    finally:
+        _ult._http_write = sv
+    if not any(f["template"] == "xxe-oob-confirmed" for f in rx["data"]["findings"]):
+        return f"xxe OOB not confirmed: {rx['message']}"
+    return True
+
+run_test("OAST: blind cmdi + XXE OOB confirm", _oast_cmdi_xxe)
+
+
 def _t_timeline_record():
     """F4: pure recorder — start_run -> events (incl step() timing) -> finish, immutable
     versioned timeline.json persisted + loadable, status derived from event outcomes."""
