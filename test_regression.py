@@ -1458,6 +1458,21 @@ def _probe_nosqli_operator():
 run_test("Ultron: NoSQLi operator-injection ($ne bypass)", _probe_nosqli_operator)
 
 
+def _probe_lfi_environ():
+    # broadened LFI: /proc/self/environ leak (env-var signature), not just /etc/passwd.
+    U = _ult.ultron_agent
+    def g(url, timeout=8, headers=None):
+        if "environ" in url: return _FakeResp("USER=root\nPATH=/usr/local/bin:/usr/bin\nHOME=/root\n")
+        if "passwd" in url:  return _FakeResp("not found", 404)
+        return _FakeResp("normal page " * 40)
+    res = _with_fake_http(g, lambda: U._probe_injection(["http://t.com/dl?file=readme"]))
+    if not any(f["template"] == "lfi-path-traversal" for f in res):
+        return f"/proc/self/environ LFI not flagged: {[f['template'] for f in res]}"
+    return True
+
+run_test("Ultron: LFI /proc/self/environ signature", _probe_lfi_environ)
+
+
 def _xss_confirm_exec():
     # live headless-browser XSS EXECUTION confirm vs a raw-reflecting server. SKIP if no browser.
     import threading, http.server, urllib.parse
