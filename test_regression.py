@@ -4764,6 +4764,53 @@ run_test("Hunt Mode: HAR -> ranked BOLA candidates (core)", _hunt_mode_core)
 run_test("Hunt Mode: JWT enrichment (ultron)", _hunt_mode_ultron)
 
 
+_GQL_INTRO = {"data": {"__schema": {
+    "queryType": {"fields": [
+        {"name": "paste", "args": [{"name": "id", "type": {"kind": "SCALAR", "name": "Int"}}]},
+        {"name": "search", "args": [{"name": "keyword", "type": {"kind": "SCALAR", "name": "String"}}]},
+        {"name": "systemHealth", "args": []},
+    ]},
+    "mutationType": {"fields": [{"name": "login", "args": [{"name": "username", "type": {"name": "String"}}]}]},
+}}}
+
+def _graphql_core():
+    from core import graphql as G
+    sch = G.parse_schema(_GQL_INTRO)
+    if not sch:                                            return "parse_schema returned None"
+    if ("paste", "id", "Int") not in G.single_id_queries(sch):   return f"single-id query missed: {G.single_id_queries(sch)}"
+    if ("search", "keyword") not in G.string_args(sch):    return f"string arg missed: {G.string_args(sch)}"
+    q = G.build_query("paste", "id", "1")
+    if q != "{paste(id:1){__typename}}":                   return f"build_query numeric wrong: {q}"
+    qs = G.build_query("search", "keyword", "x'")
+    if 'keyword:"x\'"' not in qs:                          return f"build_query string-quote wrong: {qs}"
+    return True
+
+def _graphql_check_ultron():
+    import json as _json
+    U = _ult.ultron_agent
+    orig = _ult._http_write
+    def _fake(method, url, json_body=None, timeout=8, headers=None, data=None):
+        q = (json_body or {}).get("query", "")
+        if "__schema" in q:
+            return _FakeResp(_json.dumps(_GQL_INTRO), 200)
+        if "search(" in q:                    # injection probe -> surface a SQL error
+            return _FakeResp("...near \"x\": syntax error at or near unterminated quoted string", 200)
+        return _FakeResp('{"data":{"__typename":"Query"}}', 200)
+    _ult._http_write = _fake
+    try:
+        r = U.graphql_check("http://t/graphql")
+    finally:
+        _ult._http_write = orig
+    tmpls = [f["template"] for f in r["data"]["findings"]]
+    if "graphql-introspection" not in tmpls:               return f"introspection not flagged: {tmpls}"
+    if "graphql-injection-sqli" not in tmpls:              return f"graphql sqli not flagged: {tmpls}"
+    if not r["data"]["schema"]:                            return "schema not returned"
+    return True
+
+run_test("GraphQL: schema parse/build (core)", _graphql_core)
+run_test("GraphQL: introspection + injection (ultron)", _graphql_check_ultron)
+
+
 def _jwt_analyze():
     import base64, json
     from core import jwt_analyzer as J
