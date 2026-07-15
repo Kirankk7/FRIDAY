@@ -4616,6 +4616,61 @@ def _auth_matrix_r6():
 run_test("Auth Matrix: R6 anon-2xx = missing-auth", _auth_matrix_r6)
 
 
+_FAKE_SPEC = {
+    "openapi": "3.0.0",
+    "paths": {
+        "/api/users": {"get": {}},                              # param-free collection (harvest source)
+        "/api/vehicle/{vehicleId}/location": {"get": {}},        # id-bearing (needs a real id)
+        "/api/management/users/all": {"get": {}},                # admin/BFLA path, no id
+    },
+}
+
+def _openapi_core():
+    # core.openapi: routes + to_urls + harvest, deterministic, no network
+    import json as _json
+    from core import openapi as oa
+    rts = dict(oa.routes(_FAKE_SPEC))
+    if "/api/vehicle/{vehicleId}/location" not in [p for _m, p in oa.routes(_FAKE_SPEC)]:
+        return "routes() dropped a templated path"
+    # to_urls fills {param} from the id pool (real object id), not a placeholder
+    urls = oa.to_urls("http://t", _FAKE_SPEC, id_pool=["abc-123"])
+    if "http://t/api/vehicle/abc-123/location" not in urls:  return f"to_urls didn't fill param from pool: {urls}"
+    if "http://t/api/management/users/all" not in urls:      return "to_urls dropped a param-free route"
+    # harvest pulls uuids + int ids out of a collection body
+    def _hg(url, timeout=8, headers=None):
+        if url.endswith("/api/users"):
+            return _FakeResp(_json.dumps({"users": [{"id": 7, "uuid": "11111111-2222-3333-4444-555555555555"}]}), 200)
+        return _FakeResp("{}", 200)
+    ids = oa.harvest_ids("http://t", _FAKE_SPEC, _hg)
+    if "11111111-2222-3333-4444-555555555555" not in ids:   return f"harvest missed the uuid: {ids}"
+    if "7" not in ids:                                       return f"harvest missed the int id: {ids}"
+    return True
+
+def _spec_ingest_ultron():
+    # ultron.spec_ingest: discover spec at /openapi.json, harvest owner ids, expand routes to URLs
+    import json as _json
+    from core import session_manager as sm
+    U = _ult.ultron_agent
+    sm.clear(); sm.set_session("userA", cookie="u=1", role="user")
+    def _get(url, timeout=8, headers=None, allow_redirects=True):
+        if url.endswith("/openapi.json"):
+            return _FakeResp(_json.dumps(_FAKE_SPEC), 200)
+        if url.endswith("/api/users"):
+            return _FakeResp(_json.dumps({"users": [{"uuid": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"}]}), 200)
+        return _FakeResp("not found", 404)
+    res = _with_fake_http(_get, lambda: U.spec_ingest("t", owner="userA"))
+    sm.clear()
+    if not res.get("success"):                              return f"spec_ingest failed: {res.get('message')}"
+    urls = res["data"]["urls"]
+    if "http://t/api/management/users/all" not in urls:     return f"admin route missing from spec urls: {urls}"
+    if "http://t/api/vehicle/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee/location" not in urls:
+        return f"harvested id not substituted into templated route: {urls}"
+    return True
+
+run_test("OpenAPI: routes/to_urls/harvest (core)", _openapi_core)
+run_test("Spec-ingest: discover + harvest + expand (ultron)", _spec_ingest_ultron)
+
+
 def _jwt_analyze():
     import base64, json
     from core import jwt_analyzer as J
