@@ -44,6 +44,21 @@
   speculative feature — so it's fixed immediately, not gated behind the 2–3× recurrence rule. The recurrence rule
   guards *new capability*, not *bugs in shipped capability*.
 
+## Full `bug_bounty` e2e run (same day, `bugbounty_2026-07-15_110633.md`)
+- Ran the complete pipeline (recon → hunt → validate → quality-gate → report → save) with force=True + A/B sessions.
+  All 5 stages + LLM analysis + screenshot + report-packaging fired end-to-end, report saved to Desktop. **0 FP.**
+- **BUT: 0 findings on a target I manually confirmed has BOLA + 3× BFLA.** Root cause on line: *"Stage 2.6: IDOR
+  oracle on **0 id-bearing URL(s)**."* crAPI is a **SPA/API** target — Katana/crawl found 12 HTML endpoints but
+  **zero API routes** (`/identity/api/…`, `/workshop/api/…` are XHR-called, never `<a href>` links). So `idor_check`
+  got nothing to test, and **`auth_matrix` isn't wired into `bug_bounty` at all.**
+- **This is the API-spec-ingestion gap, 2nd occurrence (data point #2).** 1st = `auth_matrix` needed a hand-fed route
+  list; now the SAME gap zeroed the entire automated e2e. **The pipeline's PRECISION is fine (0 noise, honest empty
+  report); its RECALL on API/SPA targets is ~0 because recon is `<a href>`-crawl-only.**
+- **→ Promotes `OpenAPI/spec → route-set ingestion` from "deferred, 1 data point" to "build-justified (2× recurrence)."**
+  The build: ingest a spec (or discovered `/openapi.json`/`swagger`), emit the concrete route list, feed it into the
+  existing `idor_check` + `auth_matrix` (both already work once handed URLs — proven above). Also **wire `auth_matrix`
+  into the `bug_bounty` pipeline** (currently only `idor_check` is, at Stage 2.6). No new detection logic — plumbing.
+
 ## Lessons
 - **R5 content-diff is the load-bearing rule** for authz precision: it both *confirms* real BOLA (attacker body ==
   owner body) and *kills* the self-scoped FP. Live-validated twice now (VAmPI `_debug`, crAPI vehicle-location).
