@@ -4671,6 +4671,59 @@ run_test("OpenAPI: routes/to_urls/harvest (core)", _openapi_core)
 run_test("Spec-ingest: discover + harvest + expand (ultron)", _spec_ingest_ultron)
 
 
+def _route_inventory_core():
+    # core.route_inventory: dedupe across sources, merge params+provenance, id-bearing, HAR
+    import json as _json, tempfile, os as _os
+    from core import route_inventory as ri
+    inv = ri.RouteInventory()
+    inv.add("http://t/api/users?id=1", source="crawl")
+    inv.add("http://t/api/users", params=["page"], source="openapi")   # same route, new source+param
+    inv.add("http://t/api/orders/42", source="crawl")                  # id-bearing (int)
+    inv.add("http://t/api/vehicle/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee/location", source="har")  # uuid
+    s = inv.summary()
+    if s["total"] != 3:                                   return f"dedupe failed: {s}"
+    users = [r for r in inv.routes() if r["path"] == "/api/users"][0]
+    if users["params"] != {"id", "page"}:                 return f"params not merged: {users['params']}"
+    if users["sources"] != {"crawl", "openapi"}:          return f"sources not merged: {users['sources']}"
+    idb = inv.id_bearing()
+    if not any("orders/42" in u for u in idb):            return "int id-bearing missed"
+    if not any("vehicle/aaaa" in u for u in idb):         return "uuid id-bearing missed"
+    if not any("id=1" in u or "page=1" in u for u in inv.urls()):  return "urls() didn't seed params"
+    # HAR import
+    har = {"log": {"entries": [{"request": {"url": "http://t/api/pay", "method": "POST",
+            "headers": [{"name": "Content-Type", "value": "application/json"}]}}]}}
+    fd, path = tempfile.mkstemp(suffix=".har"); _os.close(fd)
+    open(path, "w", encoding="utf-8").write(_json.dumps(har))
+    recs = ri.from_har(path); _os.unlink(path)
+    if not (recs and recs[0]["url"] == "http://t/api/pay" and recs[0]["method"] == "POST"):
+        return f"from_har failed: {recs}"
+    return True
+
+def _route_inventory_ultron():
+    # ultron.route_inventory: merge crawl + spec into one deduped store
+    import json as _json
+    from core import session_manager as sm
+    U = _ult.ultron_agent
+    sm.clear(); sm.set_session("userA", cookie="u=1", role="user")
+    def _get(url, timeout=8, headers=None, allow_redirects=True):
+        if url.endswith("/openapi.json"):
+            return _FakeResp(_json.dumps(_FAKE_SPEC), 200)
+        if url.endswith("/api/users"):
+            return _FakeResp(_json.dumps({"users": [{"uuid": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"}]}), 200)
+        return _FakeResp("not found", 404)
+    res = _with_fake_http(_get, lambda: U.route_inventory("t", owner="userA",
+                          crawled=["http://t/app/page?q=1"]))
+    sm.clear()
+    d = res["data"]
+    if d["summary"]["by_source"].get("crawl", 0) < 1:     return f"crawl source missing: {d['summary']}"
+    if d["summary"]["by_source"].get("openapi", 0) < 1:   return f"openapi source missing: {d['summary']}"
+    if not any("management/users/all" in u for u in d["urls"]):  return "spec route absent from inventory"
+    return True
+
+run_test("Route Inventory: dedupe+merge+id-bearing+HAR (core)", _route_inventory_core)
+run_test("Route Inventory: fan-in crawl+spec (ultron)", _route_inventory_ultron)
+
+
 def _jwt_analyze():
     import base64, json
     from core import jwt_analyzer as J
