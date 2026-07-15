@@ -14,10 +14,16 @@
 - **`jwt_analyze`** parsed the RS256 token, flagged the `role` claim as **info**, correctly **gated** ("tamper target
   IF a signature bypass holds") — no over-claim on a properly-signed token. Honest by design.
 
-## What FRIDAY MISSED (false negatives)
-- **None on the object axis.** The BFLA (function-level) axis returned nothing — but that was **operator error**,
-  not an engine miss: I hand-guessed admin/mechanic paths (`/auth/admin/users`, `/workshop/api/mechanic/`) that
-  don't exist at those URLs. The engine can only test endpoints it's given.
+## What FRIDAY MISSED (false negatives) → FOUND + FIXED
+- **REAL FN caught on the 2nd pass (real routes from `openapi-spec/`):** `auth_matrix` marked
+  `/workshop/api/management/users/all` and `/workshop/api/mechanic/service_requests` as **`ok`** when a normal
+  user (role=user) got HTTP 200 on both. `/management/users/all` **leaks every user's email + phone + credit** —
+  textbook **BFLA**. Manually confirmed the dump.
+- **Root cause:** `_expected_access` regex `/(…|manage|…)(/|$|\?)` — the trailing anchor required the keyword to
+  *end* the path segment, so `manage` never matched inside `management`; `mechanic`/`merchant` weren't listed at all.
+  → these privileged routes fell through to the `user` default → no BFLA expectation → no finding.
+- **This is why "feed the engine real routes" matters:** my 1st pass hand-guessed paths that 404'd and the axis
+  looked fine. The spec-derived list is what exposed the defect.
 
 ## False positives
 - **Zero.** Self-scoped control (`/user/dashboard`, owner vs attacker) returned `findings: []` — R5 content-diff
@@ -28,11 +34,15 @@
   list**. The engine validated; the human did discovery + auth setup.
 
 ## Feature NOT added
-- No new detection built from this hunt. BOLA/R5/jwt all behaved as designed → nothing to change. (Discipline:
-  a green dogfood is not a feature trigger.)
+- No *new detection class* built. The BFLA axis already existed — the fix was to its input classifier, not a new probe.
 
 ## Feature added / to add
-- (blank — no recurring miss yet)
+- **FIXED `_expected_access` (both repos, byte-parity):** broadened the privileged-path keyword set to
+  `administrator|management|mgmt|mechanic|merchant|staff|moderator|root` (+ existing admin/internal/manage/…).
+  Post-fix the same run flags **2 BFLA HIGH + 1 BOLA HIGH**, dashboard control still clean (0 FP).
+- **Note on discipline:** this was a *correctness defect* (too-strict regex missing obvious admin paths), not a
+  speculative feature — so it's fixed immediately, not gated behind the 2–3× recurrence rule. The recurrence rule
+  guards *new capability*, not *bugs in shipped capability*.
 
 ## Lessons
 - **R5 content-diff is the load-bearing rule** for authz precision: it both *confirms* real BOLA (attacker body ==
