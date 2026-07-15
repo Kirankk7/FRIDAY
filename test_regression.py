@@ -4724,6 +4724,46 @@ run_test("Route Inventory: dedupe+merge+id-bearing+HAR (core)", _route_inventory
 run_test("Route Inventory: fan-in crawl+spec (ultron)", _route_inventory_ultron)
 
 
+_HUNT_HAR = {"log": {"entries": [
+    {"request": {"method": "POST", "url": "https://t/graphql",
+                 "headers": [{"name": "Authorization", "value": "Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJhIn0.sig"}],
+                 "postData": {"text": '{"operationName":"GetOrder","variables":{"orderId":"ord-11112222-3333-4444-5555-666677778888"},"query":"query GetOrder($orderId:ID!){order(id:$orderId){total}}"}'}}},
+    {"request": {"method": "GET", "url": "https://t/api/v1/address?addressId=90210", "headers": []}},
+    {"request": {"method": "GET", "url": "https://t/api/v1/health", "headers": []}},   # no id, not owner-scoped
+]}}
+
+def _hunt_mode_core():
+    from core import hunt_mode as hm
+    r = hm.analyze(_HUNT_HAR)
+    if not r.get("success"):                               return f"analyze failed: {r.get('message')}"
+    d = r["data"]
+    if "GetOrder" not in d["graphql_ops"]:                 return f"GraphQL op missed: {d['graphql_ops']}"
+    if not any("eyJhbGci" in j for j in d["jwts"]):        return f"JWT missed: {d['jwts']}"
+    labels = [c["label"] for c in d["candidates"]]
+    if not any("GetOrder" in l for l in labels):           return f"GraphQL order candidate not ranked: {labels}"
+    if not any("address" in c["url"] for c in d["candidates"]):  return f"REST address candidate missing: {labels}"
+    if any("health" in c["url"] for c in d["candidates"]): return "non-owner /health wrongly flagged"
+    top = d["candidates"][0]
+    if "orderId" not in top["id_keys"] and "addressId" not in top["id_keys"]:
+        return f"top candidate has no id key: {top}"
+    if "account B" not in top["suggested_test"]:           return "suggested manual test missing"
+    return True
+
+def _hunt_mode_ultron():
+    U = _ult.ultron_agent
+    r = U.hunt_mode(_HUNT_HAR)   # core.analyze accepts a dict directly; ultron passes through + enriches JWTs
+    d = r["data"]
+    if not r.get("success"):                               return f"hunt_mode failed: {r.get('message')}"
+    if "jwt_findings" not in d:                            return "jwt enrichment missing"
+    # the HS256 token should raise a weak-alg finding via jwt_analyze
+    if not any(f.get("template", "").startswith("jwt") for f in d["jwt_findings"]):
+        return f"jwt_analyze enrichment produced nothing: {d['jwt_findings']}"
+    return True
+
+run_test("Hunt Mode: HAR -> ranked BOLA candidates (core)", _hunt_mode_core)
+run_test("Hunt Mode: JWT enrichment (ultron)", _hunt_mode_ultron)
+
+
 def _jwt_analyze():
     import base64, json
     from core import jwt_analyzer as J
