@@ -3,6 +3,20 @@
 The metric that keeps FRIDAY honest: **not features, but "how many times did a real hunt teach it something
 genuinely new?"** Fill one row per real-target session. A build is earned only when a lesson **recurs across 3–5 hunts**.
 
+## Why this dataset IS the asset (banked 2026-07-16, operator-experience review)
+Software encodes decisions; humans generate them. The engine has eaten the *encodable* bottom of the skill stack
+(routing, ranking, FP-suppression, evidence, reports). The next 3 years = the operator climbing the *un-encodable* top
+(smell, where-to-look, modeling the builders, "is this real?", when-to-quit). **This log is the only thing that carries
+that climb forward** — it's the exhaust the tool learns from AND the record that sharpens your tacit model. Both ratchet.
+Capture per hunt (deepen the table below with these when relevant):
+- **candidate → tested? → outcome** (confirmed / dup / FP / informative / paid) → **the one-line WHY** (the human's reason).
+- **MISSES** — what a human found the tool didn't, + the *tell* the human used. (highest-value rows.)
+- **FP corpus** — what fired but wasn't real + the discriminator that killed it.
+- **Real-traffic fixtures** — save the actual request/response shapes (also fixes the test-false-confidence debt).
+- **Abandon points** — where you quit + whether that was right.
+- **"Hunch here" flag** — even a checkbox on the smell moments; crude but signal.
+A lesson only becomes an earned build at 3–5× recurrence. Everything else stays human judgment.
+
 | # | Date | Target | Time | Candidates | Tested | Confirmed | Dup | Invalid | Lesson (what FRIDAY couldn't have known beforehand) |
 |--|------|--------|------|-----------:|-------:|----------:|----:|--------:|------|
 | 1 | 2026-07-16 | MediaMarkt (GraphQL, HAR co-pilot) | ~2h | 5 ranked | 1 (in progress) | — | — | 3 productId FPs | see lessons below |
