@@ -50,7 +50,7 @@ A lesson only becomes an earned build at 3–5× recurrence. Everything else sta
   `partyUid` (uuid). Noted for future — different ops key on different ids.
 - **Next surface (hunt #2):** NOT the account API (hardened). The softer target = **checkout/coupon/cart business-logic**
   (apply-coupon, quantities, GetPromotionCalculations) — price/quantity manipulation, where e-commerce bugs + the skill live.
-| 2 | | | | | | | | | |
+| 2 | 2026-07-17 | MediaMarkt (GraphQL checkout/basket) | ~1h | 2 (quantity, basketId-BOLA) | 1 | 0 | — | — | AddProduct quantity manipulation KILLED — sent quantity:-1, server normalized to 1 (server-side validation). 999 clamped to stock cap. Negative-total bug dead. MediaMarkt checkout also hardened. **Strategic: MediaMarkt (501 reports, years-old) is picked-clean across authz+BL — 3 kills total. Pivot to fresher/smaller program for higher EV.** |
 | 3 | | | | | | | | | |
 
 ### Hunt #1 lessons (MediaMarkt) — 2 EARNED fixes shipped
