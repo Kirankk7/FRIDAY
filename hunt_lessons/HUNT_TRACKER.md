@@ -37,7 +37,7 @@ A lesson only becomes an earned build at 3–5× recurrence. Everything else sta
 
 | # | Date | Target | Time | Candidates | Tested | Confirmed | Dup | Invalid | Lesson (what FRIDAY couldn't have known beforehand) |
 |--|------|--------|------|-----------:|-------:|----------:|----:|--------:|------|
-| 1 | 2026-07-16 | MediaMarkt (GraphQL, HAR co-pilot) | ~2h | 5 ranked | 1 (in progress) | — | — | 3 productId FPs | see lessons below |
+| 1 | 2026-07-16 | MediaMarkt (GraphQL, HAR co-pilot) | ~2h | 5 ranked | 1 | 0 | — | 3 productId FPs + 1 partyId-swap | GetDashboardDataV3 partyId-BOLA KILLED w/ proof — server re-validates client partyId server-side (Forbidden on cross-user fields, empty orders, null loyalty). partyId-swap dead here. FIRST fully-validated candidate: candidate→tested→safe. |
 | 2 | | | | | | | | | |
 | 3 | | | | | | | | | |
 
