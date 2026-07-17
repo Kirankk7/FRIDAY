@@ -75,3 +75,19 @@ STATE_DUMP.md
 # ─── Local vuln-lab pack (3rd-party Claude-BugHunter test apps + eval corpora;
 #     local dogfood targets only, not ours to redistribute) ──────────────────
 labs/
+
+# Local-only docs — internal eval/strategy, kept off the public repo (2026-07-18)
+/CHAT_BEFORE_AFTER.md
+/CHAT_REVIEW.md
+/FINAL_VERDICT.md
+/CAMPAIGN_SUMMARY.md
+/ROADMAP_10X.md
+/docs/SESSION_HANDOFF.md
+/docs/VALIDATION_BASELINE_v1.2.md
+/docs/validation/
+/docs/PRODUCT_BOUNDARIES.md
+/docs/REFACTOR_PLAN.md
+/docs/V1_3_ROADMAP.md
+/docs/V1_3_AUTH_MATRIX.md
+/docs/V1_3_OAST_DESIGN.md
+/docs/AUTH_MATRIX_V2.md
