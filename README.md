@@ -32,7 +32,7 @@ A privacy-first, fully-local AI assistant with a multi-agent architecture, voice
 - **Unified memory + telemetry** — one facade across the vector/edith/tool/personal stores; SQLite-backed long-term memory; live per-agent telemetry feeding the HUD
 - **Gated critic pass** — optional self-review (critique → revise) on high-stakes Ultron/Athena reports
 - **Crypto toolkit** — 29-op encode/decode/hash agent (base64/32/58, hex, url, html, unicode, rot13, caesar, morse, md5/sha*, jwt, aes, **auto-detect**) — CTF/bug-bounty payload decoding, all local
-- **Reliability engineering** — circuit breaker, LRU routing cache, shared API rate-throttle, startup config validator, structured rotating logs, **417-test regression suite**
+- **Reliability engineering** — circuit breaker, LRU routing cache, shared API rate-throttle, startup config validator, structured rotating logs, **468-test regression suite**
 - **Daily-driver suite** — weather (open-meteo, no key), a rich morning briefing (day + weather + crypto + news), unified find across tasks/notes/memory/docs, crypto portfolio + expense tracking, calendar `.ics` import/export, and a live-capture proxy that feeds the IDOR oracle from your own browsing
 - **Two-way Telegram** — command JARVIS from your phone (add a task, run recon, check the day) and receive digests/alerts back; only your chat id may issue commands
 - **Proactive engine** — JARVIS reaches out: morning digest, security alerts (new ports / suspicious processes), CVE-watchlist hits, and reminders pushed to the HUD (Telegram/email sinks pluggable)
@@ -96,6 +96,9 @@ Not all 18 are equal — they're tiered by how much real logic each carries (**C
 - **Correlation**: cross-links tracked CVEs against scanned host services ("am I exposed?")
 - **Bug-bounty workflow**: `bug bounty <target>` → recon → parse → exploit lookup → validate → **quality gate** (7-question + never-submit blacklist + P1-P5 payout tiers) → platform-ready PoC report
 - **Multi-user authz / IDOR oracle**: register principals (`session set`), cross-account `idor check` / `bola check` (owner vs attacker vs anon control), `replay as`, `graphql hunt` (introspection + privileged-mutation) — the money-bug class, live-confirmed on OWASP Juice Shop
+- **Hunt Mode (compliance-first HAR co-pilot)**: import a HAR of your own authenticated browsing → extract JWTs / object-ids / GraphQL-ops / REST endpoints → group by object → rank by ownership → suggest the manual IDOR/BOLA tests worth running. Zero automation touches the target — the browser is the crawler, so no-scanning program rules and bot-protection are non-issues
+- **Route Inventory + spec-ingest**: unify discovery across crawl / OpenAPI / HAR / Burp / JS into one deduped, id-bearing route store that feeds the oracles; point it at an OpenAPI/Swagger spec → templated routes + harvested owner-ids
+- **F4 evidence pipeline**: every `bug bounty` run is instrumented — `timeline` (immutable event log) → `replay` (re-run the whole run or a single step) → `package` (zips run + report + evidence) for a reproducible, submission-ready bundle
 - **Threat intel**: `threat intel <ioc>` aggregates IP/domain/URL/hash reputation across feeds (DShield no-key + optional URLhaus/AbuseIPDB/OTX)
 - **Target memory graph**: per-host profiles — scans, findings, endpoints, notes + typed intel buckets (APIs / JWT / auth / GraphQL / tech) across hunts
 - **Burp ingestion + tagging** (Community-friendly): parse a Burp HTTP-history export → endpoint/param inventory, auto-tagging JWT/GraphQL/API/auth-boundary/tech → typed target profile → nuclei/httpx (no Burp Pro / API key)
@@ -151,7 +154,7 @@ cp .env.example .env          # add API keys (all optional)
 python app.py                 # → http://localhost:5000
 ```
 
-**Full command list:** see **[COMMANDS.md](COMMANDS.md)** — every voice/text command + the friday-recon CLI, each with an inline comment. Functional coverage ledger in **[COVERAGE.md](COVERAGE.md)**; an honest end-to-end audit in **[FINAL_VERDICT.md](FINAL_VERDICT.md)**.
+**Full command list:** see **[COMMANDS.md](COMMANDS.md)** — every voice/text command + the friday-recon CLI, each with an inline comment. Functional coverage ledger in **[COVERAGE.md](COVERAGE.md)**.
 
 On boot, a **config validator** prints a readiness summary (Ollama reachable, model pulled, optional keys, security tools, HackingTool backend) — loud about what's missing, never fatal.
 
@@ -161,7 +164,7 @@ On boot, a **config validator** prints a readiness summary (Ollama reachable, mo
 ## Testing
 
 ```bash
-python test_regression.py     # 417 tests, live (417/0/0); 408 offline (CI), HTML report
+python test_regression.py     # 468 tests, live (459/0/9 skip); offline subset in CI, HTML report
 python scripts/coverage.py    # → COVERAGE.md — every action PASS / SKIP / FAIL
 ```
 
@@ -171,6 +174,6 @@ Covers all 18 agents, router patterns, security helpers + HackingTool gates, SSR
 
 ## Status
 
-Feature-complete core. Local assistant + voice + 3-mode HUD + cybersecurity toolkit, all functional and tested (417 tests green, live). Hardened over a 56-session dogfood campaign — chat front-door proven 0-misroute/0-crash, the security engine live-confirmed (SQLi/NoSQLi/XSS/IDOR) on OWASP Juice Shop + DVWA.
+Feature-complete core. Local assistant + voice + 3-mode HUD + cybersecurity toolkit, all functional and tested (468 tests green, live). Hardened over a long dogfood campaign — chat front-door proven 0-misroute/0-crash, the security engine live-confirmed (SQLi/NoSQLi/XSS/IDOR/BOLA) on OWASP Juice Shop + DVWA, with a compliance-first HAR hunt workflow for real programs.
 
 *Built as a learning project exploring local LLM orchestration, multi-agent design, adaptive cognition, and AI-assisted security workflows.*
