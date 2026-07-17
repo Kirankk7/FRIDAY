@@ -1,5 +1,23 @@
 # Hunt Tracker — the north-star dataset
 
+## THE OPERATING CONTRACT (banked 2026-07-16, GPT↔Claude converged — final)
+Track ONLY these. If the first six trend right and the last trends down, FRIDAY is healthy:
+| metric | goal |
+|---|---|
+| real hunts completed · lessons extracted · confirmed findings · report accept-rate | ↑ |
+| false positives · missed findings | ↓ |
+| **new features / LOC / modules** | **↓** |
+
+**4 rules (supersede the scattered cadence notes):**
+1. **No new feature** unless **≥3 hunts** reveal the *same* missing capability.
+2. **No empty hunts** — every hunt produces one of: finding · FP · missed-opportunity · lesson.
+3. **Every 25 hunts** — review the DATA, not the code.
+4. **Every 100 hunts** — pay down exactly ONE architectural debt. Nothing more.
+
+*What 100 hunts produces isn't features — it's experience the software can't invent without data:
+"German retailers consistently expose X", "party-IDs on GraphQL APIs behave like Y". That's the asset.*
+
+
 The metric that keeps FRIDAY honest: **not features, but "how many times did a real hunt teach it something
 genuinely new?"** Fill one row per real-target session. A build is earned only when a lesson **recurs across 3–5 hunts**.
 
