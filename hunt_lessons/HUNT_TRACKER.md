@@ -37,7 +37,19 @@ A lesson only becomes an earned build at 3–5× recurrence. Everything else sta
 
 | # | Date | Target | Time | Candidates | Tested | Confirmed | Dup | Invalid | Lesson (what FRIDAY couldn't have known beforehand) |
 |--|------|--------|------|-----------:|-------:|----------:|----:|--------:|------|
-| 1 | 2026-07-16 | MediaMarkt (GraphQL, HAR co-pilot) | ~2h | 5 ranked | 1 | 0 | — | 3 productId FPs + 1 partyId-swap | GetDashboardDataV3 partyId-BOLA KILLED w/ proof — server re-validates client partyId server-side (Forbidden on cross-user fields, empty orders, null loyalty). partyId-swap dead here. FIRST fully-validated candidate: candidate→tested→safe. |
+| 1 | 2026-07-16 | MediaMarkt (GraphQL account API) | ~3h | 5 ranked | 2 | 0 | — | 3 productId FPs | HUNT COMPLETE, 0 findings (hardened surface). (a) GetDashboardDataV3 partyId-BOLA KILLED — server re-validates client partyId (Forbidden on cross-user fields). (b) UpdatePersonalAccountProfile mass-assign KILLED — persisted-query = locked variable schema, injected isLoyaltyMember ignored; loyaltyCustomer:true was pre-existing (loyaltyCard present), NOT injected. |
+
+### Hunt #1 FINAL — MediaMarkt account API is hardened (0 findings, healthy hunt)
+**Both real candidates killed WITH PROOF** — the discipline worked (no noise filed). Operator lessons banked:
+- **`loyaltyCustomer:true` in an update RESPONSE ≠ mass-assign.** A mutation echoing your full profile is normal; mass-assign
+  is only confirmed if a field you shouldn't control CHANGED to your injected value. Don't misread verbose responses.
+- **Persisted-query GraphQL (`sha256Hash` + `apollographql-client-name: *-pqm`) locks the variable schema** → undeclared-field
+  mass-assign is DEAD. Skip it on any persisted-query API.
+- **Client-supplied `partyId` re-validated server-side** (Forbidden on cross-user) → partyId-swap dead. MediaMarkt account API = well-built.
+- **3 identifiers per account** seen: `partyId` (1705195689), `id` (2001856705), `loyaltyCard`/myMediaMarkt-ID (9814913931709386),
+  `partyUid` (uuid). Noted for future — different ops key on different ids.
+- **Next surface (hunt #2):** NOT the account API (hardened). The softer target = **checkout/coupon/cart business-logic**
+  (apply-coupon, quantities, GetPromotionCalculations) — price/quantity manipulation, where e-commerce bugs + the skill live.
 | 2 | | | | | | | | | |
 | 3 | | | | | | | | | |
 
