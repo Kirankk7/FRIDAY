@@ -8,12 +8,14 @@ Track ONLY these. If the first six trend right and the last trends down, FRIDAY 
 | false positives · missed findings | ↓ |
 | **new features / LOC / modules** | **↓** |
 
-**4 rules (supersede the scattered cadence notes):**
+**6 rules (supersede the scattered cadence notes):**
 1. **No new feature** unless **≥3 hunts ACROSS DIFFERENT programs** reveal the *same root-cause* missing capability → then ship the **smallest possible fix**. **External inspiration (GitHub repo, conf talk, blog, paper, another tool) is NEVER sufficient justification** — only *recurring pain in real authorized investigations* is. (banked 2026-07-21, APIHarvester design-review: reviewed → 0 built, 1 watched [path-param templating], because 0/5 hunts proved any gap.)
 2. **No empty hunts** — every hunt produces one of: finding · FP · missed-opportunity · lesson.
 3. **Every 25 hunts** — review the DATA, not the code.
 4. **Every 100 hunts** — pay down exactly ONE architectural debt. Nothing more.
 5. **Every hunt runs THE COVERAGE SWEEP (below) — ALL classes, not 1-2.** BOLA is FIRST (highest EV), NEVER ONLY. A hunt isn't "done" until every class is `tested` or `N/A — no surface`. (banked 2026-07-21, hunt-earned: 6/6 hunts tunnel-visioned on BOLA; the session's only confirmed finding — **class #5, not the BOLA we opened with** — surfaced only when the operator forced the wider look. Root cause: "highest-EV-first" silently became "only". Target+class kept private per program disclosure rules.)
+
+6. **DEFINITION OF DONE: a hunt is not complete until its knowledge is recorded IN THE ENGINE.** Not in your head, not in chat, not in a note — `ingest` the capture, run `sweep`, and bank every confirmed *and* ruled-out result against the target profile. Rule #2 says every hunt produces a finding/FP/miss/lesson; this says where that output has to LAND. (banked 2026-07-25: nine consecutive hunts produced real knowledge and the engine received none of it, because recording was treated as optional cleanup instead of part of finishing.)
 
 ## THE COVERAGE SWEEP — mandatory per-hunt SOP (the methodology)
 **Phase 0 — TARGET MODEL first (before any class).** From the HAR, build the mental model: API type (REST/GraphQL/SPA) · auth (JWT/cookie/key) · roles/tenants · object model + relationships · trust boundaries · external integrations (uploads/payments/search/messaging/imports/exports/webhooks). *Attack classes only make sense after you understand the app — the model tells you WHERE each lens is even relevant.* **Phase 1 — walk EVERY class below** through that model. For each: **test it, or write `N/A — no surface`.** Never default to BOLA and stop. This is a MANUAL co-pilot checklist (the "lenses" you view the same traffic through), NOT new engine code — the engine already has the probes; the gap was the hunt loop.
