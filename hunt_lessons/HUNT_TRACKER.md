@@ -70,6 +70,28 @@ Capture per hunt (deepen the table below with these when relevant):
 - **"Hunch here" flag** — even a checkbox on the smell moments; crude but signal.
 A lesson only becomes an earned build at 3–5× recurrence. Everything else stays human judgment.
 
+## The per-hunt scorecard (added 2026-07-25 — fill one per hunt, no exceptions)
+The milestone is **25 real hunts**, and the question at the end of it is *"is this getting more effective,
+or just bigger?"* That question is unanswerable unless the numbers are captured **as you go** — retro-fitting
+a metric at hunt 25 means 25 hunts of missing data. Deliberately a template and not code: half of it is
+already printed by tools you run anyway, and if filling it by hand turns out to hurt across several hunts,
+*that* is the recurrence that earns automating it.
+
+| Metric | Where it comes from |
+|---|---|
+| Capture analyzed | ✓/✗ — did `ingest`/`sweep` actually run, or did the hunt bypass the engine again |
+| Attack classes applicable | **X/10** — `sweep` prints this directly |
+| Candidates surfaced | N — sum of the TESTABLE counts in the matrix |
+| Confirmed findings | N — manual (reproduced ≥2×, impact stated) |
+| False reports filed | N — manual. **This one must stay 0** |
+| New engine bug found | Y/N — dogfooding hit; if Y, it should have a regression test |
+| New regression added | Y/N — the fix that keeps the bug dead |
+| New ruled-out knowledge | N — `ruled-out <host>` count, before vs after |
+
+**Read the last three as one signal:** a hunt that finds no vulnerability but hardens the engine and banks
+negative knowledge is a *productive* hunt. That is the whole reason this scorecard is not just "findings".
+Filled scorecards are per-target records → they live in the PRIVATE hunt log, never here.
+
 ## Rules while hunting (the sticky note)
 - ❌ Don't add features mid-hunt. ❌ Don't stop to build a "cool subsystem." ❌ Don't patch every miss immediately.
 - ✅ Record every miss. ✅ Finish the hunt. ✅ Look for patterns ACROSS hunts. ✅ Only then earn one improvement.
