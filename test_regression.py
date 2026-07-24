@@ -4864,8 +4864,47 @@ def _sweep_formats():
     return True
 
 
+def _sweep_ingest():
+    """One entry point for any capture -> inventory + profile (kills the scratch-parser reflex)."""
+    from core import sweep as sw
+    r = sw.ingest(_SWEEP_HAR)
+    if not r.get("success"):                                  return f"ingest failed: {r.get('message')}"
+    d = r["data"]
+    if not d["endpoints"]:                                    return "no endpoints inventoried"
+    if d["auth"] not in ("none", "cookie", "bearer", "basic"): return f"bad auth: {d['auth']}"
+    if "path:drive" not in d["object_ids"]:                   return f"path id not inventoried: {list(d['object_ids'])}"
+    if not d["third_party_excluded"]:                         return "telemetry not excluded from inventory"
+    if any("matomo" in e for e in d["endpoints"]):            return "telemetry endpoint inventoried"
+    return True
+
+
+def _ruled_out_memory():
+    """Negative knowledge: what came back CLEAN, so the next session doesn't re-walk dead ground."""
+    from core import target_profiles as tp
+    host = "regtest-ruledout.example"
+    tp.record_ruled_out(host, "BOLA/IDOR", "ids re-checked against the session on every read", scope="systemic")
+    tp.record_ruled_out(host, "SQLi", "quote returns a clean empty result, no error", "/search")
+    r = tp.ruled_out(host)
+    if not r.get("success"):                                  return "ruled_out read failed"
+    rows = r["data"]["ruled_out"]
+    if len(rows) != 2:                                        return f"expected 2 rows, got {len(rows)}"
+    if "SYSTEMIC" not in r["message"]:                        return "systemic scope not surfaced to the operator"
+    # dedup by (class, endpoint), and a systemic verdict must not be downgraded to endpoint-only
+    tp.record_ruled_out(host, "BOLA/IDOR", "re-verified on a second account", scope="endpoint")
+    rows = tp.ruled_out(host)["data"]["ruled_out"]
+    if len(rows) != 2:                                        return f"dedup failed: {len(rows)} rows"
+    bola = [x for x in rows if x["class"] == "BOLA/IDOR"][0]
+    if bola["scope"] != "systemic":                           return "systemic verdict was downgraded"
+    if "second account" not in bola["evidence"]:              return "evidence not updated"
+    if not tp.record_ruled_out(host, "", "x").get("success") is False:
+        return "accepted a ruled-out with no class"
+    return True
+
+
 run_test("Coverage Sweep: capture -> 10-class tested-or-N/A matrix", _sweep_core)
 run_test("Coverage Sweep: Burp+HAR parity, deterministic", _sweep_formats)
+run_test("Ingest: any capture -> inventory + profile", _sweep_ingest)
+run_test("Target profile: ruled-out (negative knowledge) memory", _ruled_out_memory)
 
 
 _GQL_INTRO = {"data": {"__schema": {
