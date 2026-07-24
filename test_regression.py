@@ -4767,6 +4767,107 @@ run_test("Hunt Mode: HAR -> ranked BOLA candidates (core)", _hunt_mode_core)
 run_test("Hunt Mode: JWT enrichment (ultron)", _hunt_mode_ultron)
 
 
+# --- Coverage Sweep (capture -> per-class matrix) --------------------------------------------------
+# The fixture encodes the two real defects this module was caught on while dogfooding it against the
+# captures from live hunts: (1) path-borne ids were invisible, so BOLA read N/A on a capture whose whole
+# hunt WAS path-id swapping; (2) self-hosted analytics beacons faked SSRF surface.
+def _swp_entry(method, url, body="", ctype="", resp="", status=200, resp_hdrs=None):
+    return {"request": {"method": method, "url": url,
+                        "headers": ([{"name": "Content-Type", "value": ctype}] if ctype else []),
+                        "postData": {"text": body}},
+            "response": {"status": status,
+                         "headers": [{"name": k, "value": v} for k, v in (resp_hdrs or {}).items()],
+                         "content": {"text": resp}}}
+
+
+_SWEEP_HAR = {"log": {"entries": [
+    _swp_entry("GET", "https://t/api/v1/drive/3585113/files/6"),           # path-id BOLA
+    _swp_entry("GET", "https://t/api/v1/products/123"),                    # public catalog -> NOT BOLA
+    _swp_entry("POST", "https://t/api/v1/import", '{"url":"https://evil.test/x"}', "application/json"),
+    _swp_entry("GET", "https://t/search?search=needle99", resp="<p>no result for needle99</p>",
+               resp_hdrs={"Content-Type": "text/html"}),                   # SQLi + reflected XSS
+    _swp_entry("POST", "https://t/upload", "--b\r\n", "multipart/form-data; boundary=b"),
+    _swp_entry("POST", "https://t/login", "user=a&pass=b"),
+    # self-hosted telemetry on the TARGET's own host: must be excluded, and must not fake SSRF
+    _swp_entry("POST", "https://t/matomo.php?idsite=36&send_image=0&url=https%3A%2F%2Ft%2Fa"),
+    # Segment ingest behind a first-party cname: its traits.* payload faked ~100 path/SSTI targets
+    _swp_entry("POST", "https://t.tgt.com/v1/i", '{"traits":{"firstName":"a"},"userId":"1"}',
+               "application/json"),
+    # generic words that must NOT read as path sinks: operationName/appName, per_page, is_hosted_page
+    _swp_entry("GET", "https://t/api/v1/flags?appName=studio&per_page=50&is_hosted_page=0"),
+]}}
+
+
+def _sweep_core():
+    from core import sweep as sw
+    r = sw.sweep(_SWEEP_HAR)
+    if not r.get("success"):                                  return f"sweep failed: {r.get('message')}"
+    d = r["data"]
+    cls = d["classes"]
+    if len(cls) != 10:                                        return f"expected 10 classes, got {len(cls)}"
+    # the contract: EVERY class is tested-or-N/A, and an N/A always carries its reason
+    for name, v in cls.items():
+        if v["status"] not in ("TESTABLE", "N/A"):            return f"{name}: bad status {v['status']}"
+        if not v["signal"]:                                   return f"{name}: no signal/reason given"
+        if v["status"] == "TESTABLE" and not v["test"]:       return f"{name}: no manual test suggested"
+    bola = cls["1. BOLA / IDOR"]
+    if bola["status"] != "TESTABLE":                          return "path-id BOLA surface missed"
+    wheres = " ".join(t["where"] for t in bola["targets"])
+    if "drive" not in wheres:                                 return f"path-id endpoint not ranked: {wheres}"
+    if "products" in wheres:                                  return "public catalog path id wrongly flagged"
+    ssrf = cls["5. SSRF / XSPA"]
+    if ssrf["status"] != "TESTABLE":                          return "SSRF url param missed"
+    params = {t["param"] for t in ssrf["targets"]}
+    if "url" not in params:                                   return f"json url sink missed: {params}"
+    if any("send_image" in p or "idsite" in p for p in params):
+        return f"telemetry beacon faked SSRF surface: {params}"
+    if not d["third_party_excluded"]:                         return "self-hosted telemetry not excluded"
+    if cls["3. SQLi / NoSQLi"]["status"] != "TESTABLE":       return "search param missed"
+    if cls["9. Auth / session"]["status"] != "TESTABLE":      return "login endpoint missed"
+    if cls["10. cmd/SSTI/XXE/path"]["status"] != "TESTABLE":  return "upload/path surface missed"
+    if d["micro"]["File upload"]["status"] != "TESTABLE":     return "multipart upload missed"
+    # precision: generic words must not read as path sinks (bare `name`/`page` matched
+    # operationName/appName/per_page/is_hosted_page and buried the real upload sinks under ~100 FPs)
+    path_params = {t.get("param", "") for t in cls["10. cmd/SSTI/XXE/path"]["targets"]}
+    for junk in ("appName", "per_page", "is_hosted_page"):
+        if junk in path_params:                               return f"generic word '{junk}' read as path sink"
+    if "traits.firstName" in path_params:                     return "Segment ingest not excluded"
+    return True
+
+
+def _sweep_formats():
+    """Burp XML and HAR must land on the same shape, and the sweep must be deterministic."""
+    import base64 as _b64, os as _os, tempfile as _tf
+    from core import sweep as sw
+    raw_req = "GET /api/v1/drive/42/files/7 HTTP/1.1\r\nHost: t\r\nCookie: s=1\r\n\r\n"
+    xml = ('<?xml version="1.0"?><items><item><url>https://t/api/v1/drive/42/files/7</url>'
+           '<method>GET</method><status>200</status>'
+           f'<request base64="true">{_b64.b64encode(raw_req.encode()).decode()}</request>'
+           '<response base64="true"></response></item></items>')
+    fd, path = _tf.mkstemp(suffix=".xml")
+    try:
+        with _os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(xml)
+        r = sw.sweep(path)
+        if not r.get("success"):                              return f"burp parse failed: {r['message']}"
+        if r["data"]["context"]["auth"] != "cookie":          return "auth mechanism not detected from Burp"
+        if r["data"]["classes"]["1. BOLA / IDOR"]["status"] != "TESTABLE":
+            return "burp path-id BOLA missed"
+    finally:
+        try:
+            _os.unlink(path)
+        except Exception:
+            pass
+    a = sw.sweep(_SWEEP_HAR)["message"]
+    b = sw.sweep(_SWEEP_HAR)["message"]
+    if a != b:                                                return "sweep is not deterministic"
+    return True
+
+
+run_test("Coverage Sweep: capture -> 10-class tested-or-N/A matrix", _sweep_core)
+run_test("Coverage Sweep: Burp+HAR parity, deterministic", _sweep_formats)
+
+
 _GQL_INTRO = {"data": {"__schema": {
     "queryType": {"fields": [
         {"name": "paste", "args": [{"name": "id", "type": {"kind": "SCALAR", "name": "Int"}}]},
