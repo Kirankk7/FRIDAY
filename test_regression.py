@@ -4835,6 +4835,33 @@ def _sweep_core():
     return True
 
 
+def _sweep_hunt10_fixes():
+    """Three false-positive classes caught while dogfooding hunt #10 against a real browser capture:
+    telemetry hosts written as brand.tld leaked through, a CSS `--warning:` matched the stacktrace
+    regex, and a bare `GET /` label gave no way to tell an in-scope host from an out-of-scope one."""
+    from core import sweep as sw
+    from core.sweep import _THIRD_PARTY, _STACKTRACE
+    # brand.tld telemetry (the trailing-dot bug) + browser extensions must be excluded; target kept
+    for host in ("www.google.com", "o11y.sentry.io", "app.pendo.io", "www.clarity.ms",
+                 "api2.immersivetranslate.com"):
+        if not _THIRD_PARTY.search(host):                     return f"telemetry host leaked: {host}"
+    for host in ("api.target.example", "app.target.example", "shop.example.com"):
+        if _THIRD_PARTY.search(host):                         return f"target host wrongly excluded: {host}"
+    # CSS custom property must NOT read as a verbose error; a real PHP warning must
+    if _STACKTRACE.search("--warning: #ffb822 !important"):   return "CSS --warning matched stacktrace"
+    if _STACKTRACE.search("--danger: #f4516c"):              return "CSS --danger matched stacktrace"
+    if not _STACKTRACE.search("Warning: include(): failed"):  return "real PHP warning not matched"
+    if not _STACKTRACE.search("Fatal error: Uncaught Error"): return "real fatal error not matched"
+    # every lead must name its host (a bare 'GET /path' is unusable on a multi-host capture).
+    # the fixture's host is 't', so a BOLA label should read 'GET t/api/v1/drive/...'
+    bola = sw.sweep(_SWEEP_HAR)["data"]["classes"]["1. BOLA / IDOR"]["targets"]
+    if not bola:                                              return "BOLA fixture produced no targets"
+    if not all(t["where"].startswith(("GET t/", "POST t/", "PUT t/", "DELETE t/", "PATCH t/"))
+               for t in bola):
+        return f"BOLA label missing host: {[t['where'] for t in bola][:3]}"
+    return True
+
+
 def _sweep_formats():
     """Burp XML and HAR must land on the same shape, and the sweep must be deterministic."""
     import base64 as _b64, os as _os, tempfile as _tf
@@ -4903,6 +4930,7 @@ def _ruled_out_memory():
 
 run_test("Coverage Sweep: capture -> 10-class tested-or-N/A matrix", _sweep_core)
 run_test("Coverage Sweep: Burp+HAR parity, deterministic", _sweep_formats)
+run_test("Coverage Sweep: hunt-10 FP fixes (telemetry/CSS/host-label)", _sweep_hunt10_fixes)
 run_test("Ingest: any capture -> inventory + profile", _sweep_ingest)
 run_test("Target profile: ruled-out (negative knowledge) memory", _ruled_out_memory)
 

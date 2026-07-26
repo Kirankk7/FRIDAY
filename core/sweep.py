@@ -37,12 +37,20 @@ _URLISH_KEY = re.compile(r"url|uri|endpoint|callback|webhook|src|link|feed|impor
 _URLISH_VAL = re.compile(r"^(https?|ftp|file|gopher|dict)://", re.I)
 # Third-party telemetry/support SaaS. Never in a program's scope, and their beacon params (idsite,
 # urlref, _ref...) mimic real sinks. Excluded from the whole sweep so every class stays signal.
+# Terminate on `(\.|$)`, not a bare dot: with a trailing `\.` every entry written as brand.tld
+# (google.com, sentry.io, pendo.io) could never match, because nothing follows the tld in a hostname.
+# Browser extensions are in the list because a capture taken in a REAL browser carries their traffic —
+# hunt #10's first capture was 254 requests of which over half were extension and search-engine noise.
 _THIRD_PARTY = re.compile(
-    r"(^|\.)(google-analytics|googletagmanager|doubleclick|google\.com|gstatic|googleapis|"
-    r"matomo|piwik|segment|mixpanel|amplitude|hotjar|fullstory|optimizely|"
+    r"(^|\.)("
+    r"google-analytics|googletagmanager|doubleclick|gstatic|googleapis|googleusercontent|"
+    r"google\.com|play\.google|translate\.google|chromewebstore|adtrafficquality|clients\d*\.google|"
+    r"matomo|piwik|segment|mixpanel|amplitude|hotjar|fullstory|optimizely|clarity\.ms|"
     r"sentry\.io|datadoghq|newrelic|bugsnag|rollbar|"
     r"intercom|zendesk|zopim|drift|crisp|freshchat|"
-    r"facebook|fbcdn|twitter|linkedin|tiktok|pendo\.io|cloudflareinsights)\.", re.I)
+    r"facebook|fbcdn|twitter|linkedin|tiktok|pendo\.io|cloudflareinsights|"
+    r"immersivetranslate|grammarly|lastpass|bitwarden|deepl"
+    r")(\.|$)", re.I)
 # Telemetry is often SELF-HOSTED on the target's own domain (matomo.php, sentry /envelope/), so the
 # host list alone misses it — that beacon traffic then fakes SSRF/param surface. Match the path too.
 _TELEMETRY_PATH = re.compile(r"/(matomo|piwik|ga|gtm|analytics|beacon|telemetry|rum)\.(php|js)$|"
@@ -71,8 +79,11 @@ _FILE_KEY = re.compile(r"(?:^|[_.\-]|(?<=[a-z]))(file|filename|filepath|path|dir
                        r"template|include|attachment|document)(?:$|[_.\-]|(?=[A-Z0-9]))", re.I)
 _SECRET_VAL = re.compile(r"(?:api[_-]?key|secret|passwd|password|token|bearer|aws_|private[_-]?key|"
                          r"client[_-]?secret)[\"']?\s*[:=]\s*[\"']?[A-Za-z0-9_\-\.]{12,}", re.I)
-_STACKTRACE = re.compile(r"Traceback \(most recent|Fatal error:|Warning: |Exception in thread|"
-                         r"\.java:\d+\)|stack trace|SQLSTATE|ORA-\d{5}|at [\w.$]+\([\w]+\.java", re.I)
+# The lookbehind matters: `--warning: #ffb822` in a CSS variable block matched "Warning: " and reported
+# every styled page as a verbose error. An engine-error prefix never follows a dash or word character.
+_STACKTRACE = re.compile(r"Traceback \(most recent|Exception in thread|\.java:\d+\)|SQLSTATE|ORA-\d{5}|"
+                         r"at [\w.$]+\([\w]+\.java|"
+                         r"(?<![-\w])(?:Fatal error|Warning|Notice|Parse error|Uncaught \w+):\s", re.I)
 _JWT = re.compile(r"eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]*")
 _WRITE = ("POST", "PUT", "PATCH", "DELETE")
 
@@ -227,7 +238,12 @@ def _path_ids(path: str) -> list:
 
 
 def _label(r: dict) -> str:
-    return f"{r['gql_op']} (GraphQL)" if r["is_gql"] and r["gql_op"] else f"{r['method']} {r['path']}"
+    """Host is part of the label: a capture routinely spans in-scope and out-of-scope hosts, and a bare
+    `GET /` gives the operator no way to tell which. Hunt #10 surfaced leads on an out-of-scope WordPress
+    site that read identically to leads on the real target."""
+    if r["is_gql"] and r["gql_op"]:
+        return f"{r['gql_op']} (GraphQL @ {r['host']})"
+    return f"{r['method']} {r['host']}{r['path']}"
 
 
 def _hit(targets, test, signal):
