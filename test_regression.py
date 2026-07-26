@@ -4862,6 +4862,19 @@ def _sweep_hunt10_fixes():
     return True
 
 
+def _sweep_hunt11_fixes():
+    """Dogfood FP on a real SFCC/Cloudflare storefront capture: Cloudflare injects its own beacons
+    under /cdn-cgi/ ON THE FIRST-PARTY host (rum, challenge-platform, ...). /cdn-cgi/rum's
+    referrer/memory/timings payload faked SSRF/XSS/param surface - host+file rules both missed it."""
+    from core.sweep import _TELEMETRY_PATH
+    for path in ("/cdn-cgi/rum", "/cdn-cgi/challenge-platform/scripts/x.js", "/cdn-cgi/speculation"):
+        if not _TELEMETRY_PATH.search(path):                  return f"cdn-cgi telemetry leaked: {path}"
+    # a real app path that merely contains 'cdn' must NOT be swallowed
+    if _TELEMETRY_PATH.search("/api/cdn-assets/list"):        return "over-matched a real /api/cdn-assets path"
+    if _TELEMETRY_PATH.search("/account/orders"):             return "over-matched a normal app path"
+    return True
+
+
 def _sweep_formats():
     """Burp XML and HAR must land on the same shape, and the sweep must be deterministic."""
     import base64 as _b64, os as _os, tempfile as _tf
@@ -4931,6 +4944,7 @@ def _ruled_out_memory():
 run_test("Coverage Sweep: capture -> 10-class tested-or-N/A matrix", _sweep_core)
 run_test("Coverage Sweep: Burp+HAR parity, deterministic", _sweep_formats)
 run_test("Coverage Sweep: hunt-10 FP fixes (telemetry/CSS/host-label)", _sweep_hunt10_fixes)
+run_test("Coverage Sweep: hunt-11 FP fix (Cloudflare /cdn-cgi/ beacons)", _sweep_hunt11_fixes)
 run_test("Ingest: any capture -> inventory + profile", _sweep_ingest)
 run_test("Target profile: ruled-out (negative knowledge) memory", _ruled_out_memory)
 

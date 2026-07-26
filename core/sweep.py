@@ -55,6 +55,10 @@ _THIRD_PARTY = re.compile(
 # host list alone misses it — that beacon traffic then fakes SSRF/param surface. Match the path too.
 _TELEMETRY_PATH = re.compile(r"/(matomo|piwik|ga|gtm|analytics|beacon|telemetry|rum)\.(php|js)$|"
                              r"/envelope/?$|/csp-report|/collect$|/batch/?$|"
+                             # Cloudflare injects its own infra endpoints under /cdn-cgi/ ON THE FIRST-PARTY
+                             # host (rum, challenge-platform, speculation, ...). /cdn-cgi/rum's referrer/memory/
+                             # timings payload then fakes SSRF/XSS/param surface - host+file rules both miss it.
+                             r"^/cdn-cgi/|"
                              # Segment's ingest API (identify/track/page/group/alias/batch). Routed through
                              # a FIRST-PARTY cname (t.<target>.com) so neither the host nor the file-name
                              # rules above catch it - its `traits.*` payload then fakes ~100 path/SSTI targets.
