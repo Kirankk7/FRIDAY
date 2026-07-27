@@ -51,6 +51,14 @@ After the 10 main classes, walk the micro-tier for any RELEVANT surface (same te
 
 **Every real hunt from 2026-07-23 on = Phase 0 (target model) → Phase 1 (10 classes) → Phase 2 (micro + auth deep-dive), each test-or-N/A.** That's the standard. (Proven exhaustive on the first target it ran against.)
 
+## Coverage taxonomy — Core / Emerging / Tech-Modules (banked 2026-07-27, GPT↔Claude converged; NOTHING built)
+A cleaner frame than Phase-1/2 for *what belongs in the sweep*. **All three tiers are governed by Rule #1: a class is promoted only after it hurts in ≥2 real hunts across different programs — a review NEVER earns it.**
+- **CORE (always run) = the current 10.** Frozen. Already covers the high-value web space; the work now is *investigating* them better, not adding siblings.
+- **EMERGING (deferred, add on 2× recurrence):** Prototype Pollution · Deserialization (Java/​.NET/PHP/pickle/YAML) · HTTP Request Smuggling / desync · Cache Poisoning (CDN/deception/key-confusion). All real, all *uncommon vs the top 10*. **At 13 hunts we've hit ZERO of them → correct to build none.**
+- **TECHNOLOGY MODULES (surface only when the sweep detects the tech):** GraphQL (already a micro-class) · cloud storage (S3/Azure/GCP) · Solr/Elasticsearch/Redis/Kafka · WebSockets · k8s/Docker. **These are investigator-bookshelf, NOT engine code** — the sweep already prints `context.servers`; when it flags tech X the operator consults X's playbook mid-hunt. Don't build a module system (YAGNI, no recurring pain).
+- **Deferred cosmetic:** split Class 10 (Injection) → "Server-side code exec (CMD/SSTI)" + "File & parser (XXE/path/LFI/RFI)". Cleaner, but cosmetic → only if a hunt makes the conflation actually hurt.
+- **The gate (unchanged):** not *"is this a real vuln?"* but *"have we hit it ≥2× in real hunts?"* No → don't build. This keeps the engine a hunting workflow, not an OWASP checklist. See [[phase-shift-hunt-not-build]], [[bank-reviews-rule]].
+
 *What 100 hunts produces isn't features — it's experience the software can't invent without data:
 "German retailers consistently expose X", "party-IDs on GraphQL APIs behave like Y". That's the asset.*
 
