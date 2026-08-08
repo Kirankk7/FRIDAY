@@ -185,6 +185,31 @@ def _records(src) -> list:
 
 
 # ---------------------------------------------------------------- helpers
+def _registrable(host: str) -> str:
+    p = host.split(".")
+    return ".".join(p[-2:]) if len(p) >= 2 else host
+
+
+def _target_domains(recs) -> set:
+    """The capture's own target = the most-requested registrable domain. `_THIRD_PARTY` lists APM/
+    analytics vendors (datadog, sentry, segment, amplitude...) that are 3rd-party ON OTHER sites but
+    ARE THE TARGET when you hunt the vendor itself — the blocklist then nukes the whole capture (it drops
+    the vendor's app host and keeps its own beacon endpoints, exactly backwards). Infer the target so a
+    vendor host under it survives; genuine 3rd-parties (minority hosts) are still excluded."""
+    from collections import Counter
+    c = Counter(_registrable(r["host"]) for r in recs if r.get("host"))
+    return {c.most_common(1)[0][0]} if c else set()
+
+
+def _in_scope(r, targets) -> bool:
+    """Keep a record unless it's a beacon PATH, or a vendor host that is NOT the inferred target."""
+    if _TELEMETRY_PATH.search(r["path"]):
+        return False
+    if _THIRD_PARTY.search(r["host"]) and _registrable(r["host"]) not in targets:
+        return False
+    return True
+
+
 def _params(r: dict) -> dict:
     """Every attacker-controlled name->value on a request: query + form body + JSON body (flat)."""
     out = dict(r["query"])
@@ -518,8 +543,8 @@ def ingest(src) -> dict:
         return {"success": False, "message": "No HTTP requests in that capture.", "data": {}}
 
     total = len(recs)
-    recs = [r for r in recs
-            if not _THIRD_PARTY.search(r["host"]) and not _TELEMETRY_PATH.search(r["path"])]
+    _t = _target_domains(recs)
+    recs = [r for r in recs if _in_scope(r, _t)]
     if not recs:
         return {"success": False, "message": f"All {total} request(s) were third-party telemetry.", "data": {}}
 
@@ -575,8 +600,8 @@ def sweep(src, micro: bool = True) -> dict:
         return {"success": False, "message": "No HTTP requests in that capture.", "data": {}}
 
     total = len(recs)
-    recs = [r for r in recs
-            if not _THIRD_PARTY.search(r["host"]) and not _TELEMETRY_PATH.search(r["path"])]
+    _t = _target_domains(recs)
+    recs = [r for r in recs if _in_scope(r, _t)]
     dropped = total - len(recs)
     if not recs:
         return {"success": False,

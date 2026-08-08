@@ -45,9 +45,12 @@ def _save_wav(path: str, audio: np.ndarray):
         wf.writeframes(audio_int16.tobytes())
 
 
-def _record_command() -> str | None:
+def _record_command(endpoint_check=None) -> str | None:
     """
-    Record until SILENCE_AFTER seconds of silence after speech begins.
+    Record until end-of-turn. Default (endpoint_check=None): fixed SILENCE_AFTER seconds of silence —
+    byte-identical to the original behavior. When endpoint_check is supplied (SMART_TURN on), a
+    transcript-aware two-stage endpoint runs: at each ~0.5s silence candidate it calls
+    endpoint_check(partial_wav_path, silence_secs) -> bool to decide end-or-wait, capped so it never hangs.
     Returns path to temp WAV or None if no speech detected.
     """
     try:
@@ -59,6 +62,8 @@ def _record_command() -> str | None:
     chunks = []
     speech_started  = False
     silence_chunks  = 0
+    _soft = max(1, int(0.5 / CHUNK_SECS))            # SMART_TURN: first candidate endpoint (~0.5s silence)
+    _hard = max(_MAX_SILENCE_CHUNKS, int(3.0 / CHUNK_SECS))   # SMART_TURN: absolute cap so it can't hang
 
     for _ in range(_MAX_RECORD_CHUNKS):
         try:
@@ -83,8 +88,26 @@ def _record_command() -> str | None:
         elif speech_started:
             chunks.append(chunk)
             silence_chunks += 1
-            if silence_chunks >= _MAX_SILENCE_CHUNKS:
-                break
+            if endpoint_check is None:
+                if silence_chunks >= _MAX_SILENCE_CHUNKS:
+                    break                              # original fixed-silence path, unchanged
+            else:
+                end = False
+                if silence_chunks >= _soft:
+                    try:
+                        _t = tempfile.NamedTemporaryFile(suffix='.wav', delete=False)
+                        _p = _t.name
+                        _t.close()
+                        _save_wav(_p, np.concatenate(chunks))
+                        end = bool(endpoint_check(_p, silence_chunks * CHUNK_SECS))
+                        try:
+                            os.remove(_p)
+                        except Exception:
+                            pass
+                    except Exception:
+                        end = silence_chunks >= _MAX_SILENCE_CHUNKS
+                if end or silence_chunks >= _hard:
+                    break
         # No speech yet — keep waiting, don't accumulate
 
     if not chunks:
@@ -226,7 +249,18 @@ class VoiceLoop:
                 # (short enough to not feel laggy)
                 # speak_async("Yes?")   <- optional, uncomment if desired
 
-                wav_path = _record_command()
+                _ec = None
+                try:
+                    import config as _cfg
+                    if getattr(_cfg, "SMART_TURN", False):
+                        def _ec(partial_wav, silence_secs):
+                            from core import turn_detector
+                            txt = _transcribe(self._model, partial_wav) if self._model else ""
+                            end, _reason = turn_detector.should_end_turn(txt, silence_secs)
+                            return end
+                except Exception:
+                    _ec = None
+                wav_path = _record_command(_ec)
                 if not wav_path:
                     print("[voice_loop] No speech detected")
                     continue

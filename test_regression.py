@@ -4941,6 +4941,95 @@ def _ruled_out_memory():
     return True
 
 
+def _app_mapper():
+    """Application Semantic Mapper (Cyber-VNext substrate): id params -> role + scheme + embedded-tenant.
+
+    Guards two defects: (1) firmographic noise (`company_annual_revenue`) is NOT id-shaped and must
+    never be collected; (2) a base64 GUID that decodes to `<tenant>|WORD|...` must be flagged object_id
+    with the embedded tenant extracted. Synthetic values only.
+    """
+    from core import app_mapper
+    # MTAwMHxWSVp8REFTSEJPQVJEfDU1 == base64("1000|VIZ|DASHBOARD|55")
+    guid = "MTAwMHxWSVp8REFTSEJPQVJEfDU1"
+    har = {"log": {"entries": [
+        {"request": {"method": "GET",
+                     "url": f"https://app.regtest.example/api?accountId=1000&entityGuid={guid}",
+                     "headers": []},
+         "response": {"status": 200, "headers": [], "content": {"text": ""}}},
+        {"request": {"method": "GET",
+                     "url": "https://app.regtest.example/api2?userId=42"
+                            "&company_annual_revenue=5000000&productId=7",
+                     "headers": []},
+         "response": {"status": 200, "headers": [], "content": {"text": ""}}},
+    ]}}
+    r = app_mapper.map_application(har)
+    if not r.get("success"):                                  return f"map failed: {r.get('message')}"
+    by = {d["name"]: d for d in r["data"]["ids"]}
+    if "company_annual_revenue" in by:                        return "firmographic noise collected as an id"
+    if by.get("accountId", {}).get("role") != "tenant_id":   return f"accountId role: {by.get('accountId')}"
+    if not by.get("accountId", {}).get("enumerable"):        return "sequential accountId not flagged enumerable"
+    if by.get("userId", {}).get("role") != "user_id":        return f"userId role: {by.get('userId')}"
+    if by.get("productId", {}).get("role") != "public_id":   return "productId not ruled a public catalog id"
+    g = by.get("entityGuid", {})
+    if g.get("role") != "object_id":                         return f"guid role: {g.get('role')}"
+    if g.get("embedded_tenant") != "1000":                   return f"embedded tenant not extracted: {g}"
+    if g.get("scheme") != "composite":                       return f"guid scheme: {g.get('scheme')}"
+    if "accountId" not in r["data"]["authz_boundary"]:       return "tenant id missing from oracle boundary queue"
+    return True
+
+
+def _replay_oracle():
+    """Identity Replay Oracle: diff verdict discipline (200 != bug) + A->B swap prepare (name-agnostic)."""
+    from core import replay_oracle as O
+    # diff — the confirm-or-kill logic that kept 25 hunts at zero false reports, now in code:
+    deny = O.diff("me@a.com id=1",
+                  '[{"error":{"code":"UNAUTHORIZED_ACCOUNT","message":"not authorized"}}]',
+                  foreign_markers=["victimB@x.com"])
+    if deny["verdict"] != "ENFORCED":                        return f"deny -> {deny['verdict']}, want ENFORCED"
+    conf = O.diff("base", '{"email":"victimB@x.com","ssn":"9"}', foreign_markers=["victimB@x.com"])
+    if conf["verdict"] != "CONFIRMED":                       return f"foreign data -> {conf['verdict']}"
+    incon = O.diff("base", '{"ok":true}', foreign_markers=["victimB@x.com"])
+    if incon["verdict"] != "INCONCLUSIVE":                   return "200 w/o foreign proof must be INCONCLUSIVE"
+    # prepare — swap the tenant VALUE wherever a boundary param carries it (name-agnostic), never sends:
+    har = {"log": {"entries": [
+        {"request": {"method": "POST", "url": "https://api.regtest.example/graphql", "headers": [],
+                     "postData": {"text": '{"variables":{"accountId":100}}'}},
+         "response": {"status": 200, "headers": [], "content": {"text": ""}}}]}}
+    p = O.prepare(har, {"100": "200"})
+    if not p.get("success"):                                 return f"prepare failed: {p.get('message')}"
+    pairs = p["data"]["pairs"]
+    if not any(x["test_class"].startswith("cross_tenant") and x["a_value"] == "100" and x["b_value"] == "200"
+               for x in pairs):                              return f"no cross_tenant swap: {pairs}"
+    # property-level: a write carrying `role` -> property_flip on it + a mass_assignment spec
+    wh = {"log": {"entries": [
+        {"request": {"method": "PATCH", "url": "https://api.regtest.example/me", "headers": [],
+                     "postData": {"text": '{"name":"x","role":"user"}'}},
+         "response": {"status": 200, "headers": [], "content": {"text": ""}}}]}}
+    mp = O.mass_assign_probes(wh)
+    cls = {x["test_class"] for x in mp["data"]["probes"]}
+    if "property_flip" not in cls or "mass_assignment" not in cls:
+        return f"mass-assign classes missing: {cls}"
+    if not any(x["test_class"] == "property_flip" and x["field"] == "role" for x in mp["data"]["probes"]):
+        return "property_flip did not target the existing role field"
+    return True
+
+
+run_test("App Mapper: id -> role/scheme/embedded-tenant (NR dogfood guards)", _app_mapper)
+def _turn_detector():
+    """Voice-v2 transcript-aware endpoint: end early on complete, wait on dangling, cap so it can't hang."""
+    from core.turn_detector import should_end_turn as s
+    if s("check the target and", 0.7)[0]:                    return "dangling tail ended too early"
+    if not s("what is the status", 0.6)[0]:                  return "complete question did not end"
+    if not s("stop", 0.2)[0]:                                return "short command did not end immediately"
+    if s("i want to", 1.0)[0]:                               return "dangling 'to' ended too early"
+    if s("", 0.5)[0]:                                        return "ended on silence with no speech"
+    if not s("", 1.7)[0]:                                    return "did not end at hard cap when empty"
+    if not s("and", 2.5)[0]:                                 return "dangling never hit its cap"
+    return True
+
+
+run_test("Replay Oracle: diff verdicts (200!=bug) + A->B swap prepare", _replay_oracle)
+run_test("Voice-v2 Turn Detector: complete=end / dangling=wait / caps", _turn_detector)
 run_test("Coverage Sweep: capture -> 10-class tested-or-N/A matrix", _sweep_core)
 run_test("Coverage Sweep: Burp+HAR parity, deterministic", _sweep_formats)
 run_test("Coverage Sweep: hunt-10 FP fixes (telemetry/CSS/host-label)", _sweep_hunt10_fixes)

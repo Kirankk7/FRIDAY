@@ -73,6 +73,11 @@ def stt_language():
 STT_BACKEND = "whisper"
 PARAKEET_MODEL = "nvidia/parakeet-tdt-0.6b"   # 0.6b = ~2GB VRAM, fast. 1.1b = ~4GB, more accurate
 
+# SMART TURN (Voice-Engine-v2, Track B) — transcript-aware end-of-turn vs fixed 1.6s silence.
+# OFF by default: default recorder behavior is byte-identical. On -> two-stage adaptive endpoint
+# (end early on a complete utterance, wait longer on a dangling tail). Needs live mic tuning.
+SMART_TURN = os.getenv("SMART_TURN", "0") not in ("0", "false", "False")
+
 # TTS BACKEND
 # "edge" = edge-tts (cloud, Microsoft Azure, requires internet)
 # "kokoro" = local Kokoro-82M neural TTS (offline, no internet needed)
