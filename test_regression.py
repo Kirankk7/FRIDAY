@@ -5029,7 +5029,134 @@ def _turn_detector():
 
 
 run_test("Replay Oracle: diff verdicts (200!=bug) + A->B swap prepare", _replay_oracle)
+def _hunt_loop():
+    """Coverage GATE: a hunt can't be 'complete' while any TESTABLE class is UNTESTED (kills BOLA-tunnel)."""
+    from core import hunt_loop as H
+    # synthetic capture with BOLA + a URL param (SSRF) + a login (auth) => several TESTABLE classes
+    har = {"log": {"entries": [
+        {"request": {"method": "GET", "url": "https://app.regtest.example/api/orders/1002?next=http://x/",
+                     "headers": []},
+         "response": {"status": 200, "headers": [], "content": {"text": '{"id":1002,"total":9}'}}},
+        {"request": {"method": "POST", "url": "https://app.regtest.example/login", "headers": [],
+                     "postData": {"text": '{"user":"a","pass":"b"}'}},
+         "response": {"status": 200, "headers": [], "content": {"text": "{}"}}},
+    ]}}
+    p = H.plan(har)
+    if not p.get("success"):                                 return f"plan failed: {p.get('message')}"
+    if p["data"]["mode"] != "assist":                        return "live host should be assist mode"
+    s = H.HuntSession(p["data"])
+    testable = [n for n, v in s.verdicts.items() if v is None]
+    if not testable:                                         return "no TESTABLE classes planned"
+    if s.complete():                                         return "fresh session must NOT be complete"
+    # completeness != truth: a bare verdict with NO justifying evidence must be REFUSED
+    if s.record(testable[0], "ENFORCED", "").get("success"): return "accepted a bare verdict w/o evidence"
+    # the tunnel: record ONE class (with evidence), must still be blocked
+    s.record(testable[0], "ENFORCED", "403 on cross-account read, boundary exercised")
+    if s.complete():                                         return "gate failed: complete after one class"
+    # record the rest (each justified) -> now complete
+    for n in list(s.untested()):
+        s.record(n, "NA", "no applicable surface in capture")
+    if not s.complete():                                     return "should be complete once all recorded"
+    # anti-rubber-stamp: reopening a class re-blocks the gate until re-verdicted
+    reo = [n for n, v in s.verdicts.items() if v == "NA"]
+    if reo:
+        s.reopen(reo[0], "N/A reason not justified")
+        if s.complete():                                     return "reopen did not re-block the gate"
+        s.record(reo[0], "NA", "re-verified: truly no surface")   # re-verdict -> complete again
+        if not s.complete():                                 return "re-verdict after reopen failed"
+    # lab host detection
+    if not H.is_lab("127.0.0.1") or H.is_lab("app.box.com"): return "lab-host detection wrong"
+    # bad verdict rejected
+    if s.record(testable[0], "BOGUS").get("success"):        return "accepted an invalid verdict"
+    return True
+
+
 run_test("Voice-v2 Turn Detector: complete=end / dangling=wait / caps", _turn_detector)
+def _retro():
+    """Backward memory: new technique retro-matches past hunt snapshots; retest_authorized gate holds."""
+    import os, tempfile
+    from core import retro
+    saved = retro._STORE
+    retro._STORE = os.path.join(tempfile.gettempdir(), "retro_regtest.json")
+    try:
+        if os.path.exists(retro._STORE):
+            os.remove(retro._STORE)
+        # parked program, BOLA already ENFORCED (tested) -> a new tenant technique = REOPEN_CANDIDATE
+        retro.save_snapshot("Parked-X", ["tenant_id", "account_id", "graphql"],
+                            {"BOLA/IDOR": "ENFORCED"}, scope_status="parked", hunt="#1")
+        # active program, BAC unknown (untested) -> notification technique = REVIEW, retest allowed
+        retro.save_snapshot("Live-Y", ["notification", "invitation", "recipient", "organization"],
+                            {"Broken Access Control": "UNKNOWN"}, scope_status="active", hunt="#2")
+        if not retro.retest_authorized("active") or retro.retest_authorized("parked"):
+            return "retest_authorized gate wrong"
+        # notification/BAC technique -> Live-Y REVIEW + authorized
+        r1 = retro.check(["notification", "invitation", "recipient", "organization"], lane="Broken Access Control")
+        y = [x for x in r1 if x["program"] == "Live-Y"]
+        if not y or y[0]["state"] != "REVIEW":              return f"Live-Y not REVIEW: {r1}"
+        if not y[0]["retest_authorized"]:                   return "active program should be retest_authorized"
+        # tenant technique -> Parked-X REOPEN_CANDIDATE (BOLA tested) + NOT authorized (parked)
+        r2 = retro.check(["tenant", "account", "graphql"], lane="BOLA")
+        x = [z for z in r2 if z["program"] == "Parked-X"]
+        if not x or x[0]["state"] != "REOPEN_CANDIDATE":    return f"Parked-X not REOPEN_CANDIDATE: {r2}"
+        if x[0]["retest_authorized"]:                       return "parked program must NOT be retest_authorized"
+        # unrelated technique -> NO_MATCH (omitted)
+        if retro.check(["xml", "xxe", "entity"], lane="XXE"):  return "unrelated technique should NO_MATCH"
+        return True
+    finally:
+        try:
+            os.remove(retro._STORE)
+        except Exception:
+            pass
+        retro._STORE = saved
+
+
+run_test("Hunt Loop: coverage gate blocks 'done' until all classes verdicted", _hunt_loop)
+run_test("Retro: new technique -> REVIEW/REOPEN past hunts, retest_authorized gate", _retro)
+def _target_gate():
+    """Target-softness gate: soft->HUNT, fortress->DEPRIORITIZE, mid->NEED_REASON, unreachable gated, override needs written reason."""
+    import os, tempfile
+    from core import target_gate as tg
+    saved = tg._LOG
+    tg._LOG = os.path.join(tempfile.gettempdir(), "target_gate_regtest.json")
+    try:
+        if os.path.exists(tg._LOG):
+            os.remove(tg._LOG)
+        # soft OSS target -> HUNT
+        soft = tg.score({"source_available": True, "self_hostable": True, "recent_major_release": True,
+                         "report_count": 10, "program_age_years": 0.5, "geo_reachable": True,
+                         "tech_surface": ["api", "multi_tenant", "roles"]})
+        if soft["verdict"] != tg.HUNT:                       return f"soft OSS should HUNT: {soft}"
+        # clear fortress -> DEPRIORITIZE
+        fort = tg.score({"heavily_hunted": True, "report_count": 800, "program_age_years": 8,
+                         "source_available": False, "geo_reachable": True,
+                         "tech_surface": ["api", "multi_tenant"]})
+        if fort["verdict"] != tg.DEPRIORITIZE:               return f"fortress should DEPRIORITIZE: {fort}"
+        # mid target -> NEED_WRITTEN_REASON
+        mid = tg.score({"report_count": 200, "program_age_years": 4, "geo_reachable": True,
+                        "tech_surface": ["multi_tenant", "roles"]})
+        if mid["verdict"] != tg.NEED_REASON:                 return f"mid should NEED_REASON: {mid}"
+        # unreachable -> hard DEPRIORITIZE regardless of other signals
+        unr = tg.score({"source_available": True, "self_hostable": True, "report_count": 5,
+                        "recent_major_release": True, "geo_reachable": False})
+        if unr["verdict"] != tg.DEPRIORITIZE or unr["reachable"]:  return f"unreachable must gate: {unr}"
+        # override without reason -> rejected
+        bad = tg.record_decision("Fortress-Co", {"heavily_hunted": True, "report_count": 800, "geo_reachable": True}, "HUNT")
+        if bad.get("ok"):                                    return "override without written reason must be rejected"
+        # override WITH reason -> logged as override
+        ok = tg.record_decision("Fortress-Co", {"heavily_hunted": True, "report_count": 800, "geo_reachable": True},
+                                "HUNT", reason="new billing feature shipped last week, source partially public")
+        if not ok.get("ok") or not ok.get("override"):       return f"reasoned override should log: {ok}"
+        # decision persisted + readable back
+        d = tg.decisions("Fortress-Co")
+        if not d or d[-1]["reason"] == "":                   return "override reason not persisted"
+        return True
+    finally:
+        try:
+            os.remove(tg._LOG)
+        except Exception:
+            pass
+        tg._LOG = saved
+run_test("Target gate: softness score + verdict + reachability gate + logged override", _target_gate)
 run_test("Coverage Sweep: capture -> 10-class tested-or-N/A matrix", _sweep_core)
 run_test("Coverage Sweep: Burp+HAR parity, deterministic", _sweep_formats)
 run_test("Coverage Sweep: hunt-10 FP fixes (telemetry/CSS/host-label)", _sweep_hunt10_fixes)
