@@ -8022,6 +8022,62 @@
       "validated": false,
       "verify": "Complete the order and confirm it reaches the merchant's order queue. NOTE: this exact report was closed INFORMATIVE because orders were manually verified before fulfilment - always check for a human step before claiming financial impact.",
       "added": "2026-08-17"
+    },
+    {
+      "id": "pb0574",
+      "class": "waf-bypass",
+      "stack": "waf",
+      "difficulty": "low",
+      "technique": "WAF body-inspection SIZE LIMIT: inspection engines only read the first N bytes of a request body. Pad past the limit and the payload is never examined. AWS WAF inspects ~8KB, so 8192 filler bytes before the payload defeats it on POST.",
+      "payload": "POST body: 'A'*8192 + <actual payload>",
+      "tell": "Applies to EVERY injection class, not just XSS - if the WAF cannot see the body it cannot block SQLi, SSTI, command injection or SSRF either. Fingerprint the WAF first, then look up its documented inspection ceiling; every vendor has one and it is in their own docs.",
+      "source": "Edr4/XSS-Bypass-Filters; kloudle.com AWS WAF 8KB body inspection limitation",
+      "ref": "",
+      "validated": false,
+      "verify": "Send the same payload with and without the padding. Blocked -> allowed while the app behaviour is identical proves the bypass, not luck. Confirm the app actually parsed the padded body.",
+      "added": "2026-08-17"
+    },
+    {
+      "id": "pb0575",
+      "class": "xss",
+      "stack": "web",
+      "difficulty": "medium",
+      "technique": "Fingerprint the SANITIZER and its VERSION, then apply that version's known mXSS bypass, instead of spraying payloads. DOMPurify <2.1 and <2.0.1 both fall to namespace-confusion via math/mtext/table/mglyph/style, where the parser re-interprets the sanitized output.",
+      "payload": "<math><mtext><table><mglyph><style><!--</style><img title=\"--&gt;&lt;/mglyph&gt;&lt;img&Tab;src=1&Tab;onerror=alert(1)&gt;\">",
+      "tell": "Client-side sanitizers ship their version in the bundle - grep the JS for DOMPurify.version / sanitize-html / xss / js-xss and read it. A pinned old version in package-lock or a vendored copy is the finding; the payload is then a lookup, not research.",
+      "source": "Edr4/XSS-Bypass-Filters - DOMPurify <2.1 / <2.0.1",
+      "ref": "",
+      "validated": false,
+      "verify": "Confirm execution in the DOM, and record the exact library version from the bundle in the report - version + known-CVE mapping is what makes it undeniable rather than a filter-bypass opinion.",
+      "added": "2026-08-17"
+    },
+    {
+      "id": "pb0576",
+      "class": "xss",
+      "stack": "web",
+      "difficulty": "low",
+      "technique": "Markdown renderers are a distinct XSS sink: the LINK TARGET is attacker-controlled and often not scheme-validated. Try javascript: and data: in link and image syntax, plus entity/whitespace-split variants.",
+      "payload": "[a](javascript:alert(1))  |  [a](javascript://%0d%0aprompt(1))  |  ![a](data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==)  |  ![a](x\"onerror=\"alert(1))",
+      "tell": "Anywhere users write formatted text: comments, issue/ticket bodies, product descriptions, profile bios, chat, PR reviews, wiki pages. The HTML sanitizer usually runs AFTER markdown->HTML, so it never sees the raw scheme; and image syntax lets you break out of the src attribute.",
+      "source": "Edr4/XSS-Bypass-Filters - Markdown XSS",
+      "ref": "",
+      "validated": false,
+      "verify": "Render it where OTHER users will see it - markdown fields are usually stored and shared, so this is stored XSS, not self-XSS. Confirm the anchor's href in the DOM, not just that the text appeared.",
+      "added": "2026-08-17"
+    },
+    {
+      "id": "pb0577",
+      "class": "xss",
+      "stack": "web",
+      "difficulty": "low",
+      "technique": "Prefer NO-CLICK delivery: tags whose events fire on render or on state change, with no user interaction. Raises the finding from UI:R to UI:N.",
+      "payload": "<details open ontoggle=[JS]>  |  <svg onload=[JS]>  |  <input autofocus onfocus=[JS]>  |  <marquee width=1 loop=1 onfinish=[JS]>  |  <svg><animate onbegin=[JS]>",
+      "tell": "If your only working payload needs a click, keep going before filing - the same filter gap usually admits a self-firing tag, and several WAF-specific bypasses are published around <details/open/ontoggle>. Zero-click also removes the 'requires social engineering' objection triagers use to downgrade.",
+      "source": "Edr4/XSS-Bypass-Filters - Without closing tag / Events / WAF sections",
+      "ref": "",
+      "validated": false,
+      "verify": "Load the page in a clean session and touch nothing. Then state UI:N in the CVSS vector deliberately - it is a whole severity band.",
+      "added": "2026-08-17"
     }
   ]
 }
