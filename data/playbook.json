@@ -8078,6 +8078,48 @@
       "validated": false,
       "verify": "Load the page in a clean session and touch nothing. Then state UI:N in the CVSS vector deliberately - it is a whole severity band.",
       "added": "2026-08-17"
+    },
+    {
+      "id": "pb0578",
+      "class": "recon",
+      "stack": "web",
+      "difficulty": "low",
+      "technique": "CROSS-ROOT ENDPOINT TRANSPLANT: harvest known paths from every subdomain of the organisation's OTHER root domains, then replay that path list against the in-scope target. Archive tools only know indexed hosts, so dev/staging/uat/regional assets return nothing - but they reuse the same framework and route table as their indexed siblings.",
+      "payload": "gau across all subdomains of rootA.com, rootB.org -> strip to bare paths -> probe each against dev.target.tld with httpx",
+      "tell": "Any programme with MANY assets, or an in-scope host that returns almost nothing from passive sources. Sibling roots are found from the programme scope itself, WHOIS/ASN, favicon hash and TLS SAN entries. The paths are free - you are transplanting, not guessing.",
+      "source": "ph5i/gauhop",
+      "ref": "",
+      "validated": false,
+      "verify": "Probe with status + title + content-length and diff against the target's 404 body; a soft-404 template makes 200s meaningless. Only in-scope hosts.",
+      "added": "2026-08-17"
+    },
+    {
+      "id": "pb0579",
+      "class": "recon",
+      "stack": "web",
+      "difficulty": "medium",
+      "technique": "PIN THE EXACT PRODUCT VERSION PRE-AUTH by hashing theme-independent STATIC ASSETS against a per-release database, bounding the range by which files exist at all, and intersecting with a behavioural floor (which protocol features the endpoint supports). Works even when the version string is masked.",
+      "payload": "hash /common/<product>/**.css|.js -> match per-release table; file present/absent -> bounds; OIDC discovery fields (e.g. RFC 9207 iss param, DPoP) -> minimum version",
+      "tell": "Off-the-shelf components in scope - SSO/IdP (Keycloak), CMS (TYPO3, PrestaShop, WordPress), admin panels. Version + public advisory beats hunting a custom bug, and the ASSET-HASH method survives a masked version banner where a header or /version endpoint does not.",
+      "source": "Vozec/keycloak-version-detector, typo3-version-detector, prestashop-version-detector",
+      "ref": "",
+      "validated": false,
+      "verify": "Report the exact version and how it was determined (which asset hashes, which behavioural floor) - that is what turns 'possibly vulnerable' into a defensible finding. Then confirm the advisory's actual precondition, do not assume version implies exploitable.",
+      "added": "2026-08-17"
+    },
+    {
+      "id": "pb0580",
+      "class": "methodology",
+      "stack": "tooling",
+      "difficulty": "low",
+      "technique": "MAKE IDENTITY STRUCTURAL, NOT A DISCIPLINE: one isolated browser profile per test identity (separate cookie jar/storage), a colour bar injected into every page, and a per-identity header stamped by an upstream proxy so the intercepting proxy's history shows WHICH account sent each request.",
+      "payload": "profile-per-user browser configs -> mitmdump instance per profile injecting X-<Tag>-Color -> single Burp listener",
+      "tell": "Every multi-account test (BOLA, BFLA, cross-tenant, invite flows) depends on knowing which identity fired a request. Doing that by remembering which tab you are in is how a self-access gets written up as cross-tenant access - the failure is silent and every status code still looks right.",
+      "source": "Vozec/playwright-pwnchrome (PwnFox pattern)",
+      "ref": "",
+      "validated": false,
+      "verify": "Before trusting any multi-identity result, confirm the marker in the proxy history matches the identity you believe you used. This replaces the manual identity-guard step rather than adding to it.",
+      "added": "2026-08-17"
     }
   ]
 }
