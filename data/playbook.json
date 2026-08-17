@@ -8134,6 +8134,50 @@
       "validated": false,
       "verify": "Diff the documented operations against what the UI actually calls. The gap - operations no UI touches, especially ones taking a caller-supplied tenant/merchant id in the PATH - is the attack surface. Confirm each still exists before building on it; docs drift.",
       "added": "2026-08-17"
+    },
+    {
+      "id": "pb0582",
+      "class": "recon",
+      "stack": "web,nextjs",
+      "difficulty": "medium",
+      "technique": "Next.js SERVER ACTIONS are an invisible endpoint class: they never appear in a HAR as a named route and are absent from any OpenAPI/route list, yet they are server-side mutations reachable by anyone. Recover them from the client bundle and call them directly.",
+      "payload": "grep -ho 'createServerReference(\"[0-9a-f]\\{40\\}\",[^)]*' *.js   # -> id + the ACTION NAME as the last string arg\nPOST /<any-app-route>\n  Next-Action: <40-hex id>\n  Content-Type: text/plain;charset=UTF-8\n  body: [\"arg1\",\"arg2\"]   # positional JSON array",
+      "tell": "Bundle contains createServerReference(\"<40 hex>\", callServer, void 0, findSourceMapURL, \"<actionName>\"). The name tells you what it does (switchAccount, clearSession, redirectToExternal). Actions that take a TENANT/ACCOUNT/ORG id are the prize.",
+      "verify": "Response is an RSC stream and is often IDENTICAL for valid, cross-tenant and garbage input (all 303) — the action's response proves nothing. Verdict on STATE: run the action, then read a tenant-scoped endpoint and check WHOSE data comes back, with an own-object control in the same batch.",
+      "source": "hunt #29, 2026-08-18"
+    },
+    {
+      "id": "pb0583",
+      "class": "recon",
+      "stack": "web,spa",
+      "difficulty": "low",
+      "technique": "Mine bundles PER HOST and AFTER login. An unauthenticated page ships only the auth chunks, and a multi-host app (Rails admin + Next.js dashboard) has a different bundle set per host. 'It is server-rendered, there is nothing to mine' is a false conclusion drawn from one host, logged out.",
+      "payload": "login -> capture session cookie -> curl -L each authed route -> extract \"/_next/static/...js\" (or /packs/js/...) from EVERY page -> dedupe -> fetch -> extract paths",
+      "tell": "Pre-login chunk count is small (27 chunks -> 10 paths). Post-login it jumps (35 chunks -> 24 paths, 8 never seen). Also check whether the auth cookie's Domain is the PARENT domain — if so ONE token authenticates every host in the flow, including the one you thought needed separate creds.",
+      "verify": "Diff the post-login path set against the HAR and against any published API list; the gap is the target.",
+      "source": "hunt #29, 2026-08-18"
+    },
+    {
+      "id": "pb0584",
+      "class": "auth",
+      "stack": "web",
+      "difficulty": "low",
+      "technique": "Password-reset host poisoning: the HTTP status NEVER decides it. X-Forwarded-Host / X-Host / X-Forwarded-Server are commonly accepted at the HTTP layer (302, request queued) while the mailer still builds the link from a configured host. Only the EMAIL BODY is the verdict.",
+      "payload": "POST /password  user[email]=<own>  -H 'X-Forwarded-Host: <attacker>'   then READ THE INBOX and check the link's host",
+      "tell": "An absolute 'Host:' override usually 422s at the edge/CDN, which tempts you to declare the class tested. It is not — the forwarded-header variants are the real test, and they answer 302 either way.",
+      "verify": "Send ONE poisoned reset in isolation, then read the NEWEST mail. Most frameworks (Devise) keep only the newest token, so an older link behaves EXACTLY like garbage — a stale token makes the whole test void, never 'enforced'.",
+      "source": "hunt #29, 2026-08-18"
+    },
+    {
+      "id": "pb0585",
+      "class": "mass-assignment",
+      "stack": "web,rails",
+      "difficulty": "low",
+      "technique": "Aim mass assignment at the UNAUTHENTICATED endpoints that still WRITE the user record — password reset, email verification, signup completion, invite acceptance. They update a privileged row with no session, so a permitted-params slip there is a direct privilege grant.",
+      "payload": "PUT /password  user[reset_password_token]=<tok>&user[password]=<new>&user[password_confirmation]=<new>&user[role]=admin&user[account_role]=admin&user[admin]=true&user[super_admin]=true",
+      "tell": "Any pre-auth flow whose form posts a user[...] hash. The visible fields are 2-3; the model has dozens.",
+      "verify": "Re-read the identity endpoint (/me) after the write and compare the role field to its PRE-TEST baseline — a role that was already 'admin' of its own tenant looks like success and is not. Confirm the write landed at all (login with the new password / check last_password_change_at) or a no-op reads as 'enforced'.",
+      "source": "hunt #29, 2026-08-18"
     }
   ]
 }
