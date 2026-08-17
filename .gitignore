@@ -12,7 +12,12 @@ venv/
 env/
 
 # ─── Runtime state / user data (regenerated at runtime) ───────────────────
-data/
+data/*
+# …but the technique playbook is a curated, publishable asset, not runtime state.
+# It is distilled from PUBLICLY disclosed reports only — no target, account or
+# credential data. Scrub before every commit (see docs/HANDOFF.md).
+!data/playbook.json
+!data/chat_ideals.jsonl
 # …but the HackingTool fleet index is a shipped asset, not runtime state:
 !agents/ultron/hackingtool/data/
 !agents/ultron/hackingtool/data/tools.json
