@@ -8120,6 +8120,20 @@
       "validated": false,
       "verify": "Before trusting any multi-identity result, confirm the marker in the proxy history matches the identity you believe you used. This replaces the manual identity-guard step rather than adding to it.",
       "added": "2026-08-17"
+    },
+    {
+      "id": "pb0581",
+      "class": "recon",
+      "stack": "web,api",
+      "difficulty": "low",
+      "technique": "Before mining JS bundles for a route table, check the docs site for /llms.txt — the 'index for AI agents' convention. It lists EVERY documented page and API operation, and on ReadMe-hosted docs each page has a .md twin (<host>/reference/<slug>.md) that carries the RAW OpenAPI definition: exact path, method, path/query params and request-body schema.",
+      "payload": "curl -s https://<docs-host>/llms.txt  then  curl -s https://<docs-host>/reference/<slug>.md",
+      "tell": "Server-rendered apps (Rails/Django/Laravel) have no SPA bundle to mine, so bundle-mining returns nothing and it is easy to conclude there is no route table. Vendors publishing a public API almost always ship docs, and the docs ARE the route table - deliberately served, zero traffic on the target app, no scanner, no ToS risk. Look for a hidden 'For AI agents: visit /llms.txt' div on the docs home. Also read robots.txt on the app itself: Disallow entries name real path families.",
+      "source": "komoju phase-0",
+      "ref": "",
+      "validated": false,
+      "verify": "Diff the documented operations against what the UI actually calls. The gap - operations no UI touches, especially ones taking a caller-supplied tenant/merchant id in the PATH - is the attack surface. Confirm each still exists before building on it; docs drift.",
+      "added": "2026-08-17"
     }
   ]
 }
