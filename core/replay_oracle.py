@@ -6,8 +6,8 @@ other identity's boundary-id values, `prepare()` emits the A->B swapped request 
 them; the operator fires from their own IP — attribution + RoE stay with the human, never the engine),
 and `diff()` renders the verdict from the two captured responses.
 
-`diff` encodes the discipline that kept 25 hunts at zero false reports (idor-claude's 3-part proof +
-tonight's TeamViewer accountId-swap catch): a 200 is NOT a bug. CONFIRMED requires FOREIGN DATA in the
+`diff` encodes the discipline that kept 25 hunts at zero false reports (a 3-part proof, plus a live
+account-id-swap catch that a status code alone would have called a bug): a 200 is NOT a bug. CONFIRMED requires FOREIGN DATA in the
 mutated response; a deny/empty/error is ENFORCED; a 200 with no foreign marker is INCONCLUSIVE, never
 filed. Offline; sends nothing.
 """
