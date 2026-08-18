@@ -77,18 +77,29 @@ SIGNALS = {
         # a retired bounty reads as a live one unless "no longer" is caught: one policy
         # says "we no longer offer monetary rewards ... now a points-based programme"
         r"|no longer (?:offer|pay|provide|run)[^.]{0,40}(?:reward|boun|monetar)"
-        r"|points[- ]only|points[- ]based (?:programme|program)", re.I),
+        r"|points[- ]only|points[- ]based (?:programme|program)"
+        # "does not operate a bug bounty or financial reward program" was reading as
+        # PAYING, and "rewards will be in the form of reputation points" likewise
+        r"|(?:do|does) not (?:operate|run|have)[^.]{0,40}(?:boun|reward)"
+        r"|no (?:active )?boun(?:ty|ties)[- ]?(?:program|programme)?\b"
+        r"|reward[s]? (?:will be|are)[^.]{0,30}(?:reputation|points)", re.I),
     "platform": re.compile(r"hackerone|bugcrowd|synack|intigriti|yeswehack|openbugbounty", re.I),
     # ANTI-SIGNAL, safety critical. Some policies invite REPORTS while explicitly
     # withholding permission to TEST ("we do not authorize or encourage active testing,
     # scanning, or auditing of our systems"). That is a receiving address, not
     # authorisation, and under UK CMA 1990 the difference is the whole offence.
     # This must HARD-BLOCK the gate, never merely fail to raise it.
+    # NARROWED after a false positive that would have killed the best target found so
+    # far: a policy saying "we do not condone research targeting us or our users with
+    # malware, spam, physical entry" is banning MALICIOUS METHODS, not withholding
+    # permission to test. "condone" and a bare "research" object are therefore out; the
+    # signal must be an explicit refusal to authorise TESTING/SCANNING/AUDITING itself.
     "no_authorisation": re.compile(
-        r"do(?:es)? not (?:authori[sz]e|permit|allow|condone)[^.]{0,60}"
-        r"(?:test|scan|audit|research|probe)"
+        r"do(?:es)? not (?:authori[sz]e|permit|allow)[^.]{0,60}"
+        r"(?:active )?(?:test|scan|audit|penetration test)"
         r"|without (?:our )?(?:prior )?(?:express |written )+(?:consent|permission|authori)"
-        r"|(?:testing|scanning) is (?:not permitted|prohibited|forbidden)", re.I),
+        r"|(?:testing|scanning|auditing) is (?:not permitted|not authoris|prohibited|forbidden)",
+        re.I),
     # ANTI-SIGNAL. Distinct from no_authorisation: manual research is welcome, but
     # TOOLING is not. This collides directly with our default method - console-batch
     # sends batched fetch() calls, which is automated traffic no matter how few.
