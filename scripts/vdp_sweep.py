@@ -73,7 +73,11 @@ SIGNALS = {
     "no_reward": re.compile(
         r"(?:do|does|will) not (?:offer|provide|pay|be paid)[^.]{0,40}(?:reward|boun|compensat)"
         r"|not be (?:paid|eligible for)[^.]{0,30}(?:reward|boun)"
-        r"|no (?:financial|monetary) reward|unable to (?:offer|provide)[^.]{0,30}reward", re.I),
+        r"|no (?:financial|monetary) reward|unable to (?:offer|provide)[^.]{0,30}reward"
+        # a retired bounty reads as a live one unless "no longer" is caught: one policy
+        # says "we no longer offer monetary rewards ... now a points-based programme"
+        r"|no longer (?:offer|pay|provide|run)[^.]{0,40}(?:reward|boun|monetar)"
+        r"|points[- ]only|points[- ]based (?:programme|program)", re.I),
     "platform": re.compile(r"hackerone|bugcrowd|synack|intigriti|yeswehack|openbugbounty", re.I),
     # ANTI-SIGNAL, safety critical. Some policies invite REPORTS while explicitly
     # withholding permission to TEST ("we do not authorize or encourage active testing,
@@ -85,6 +89,31 @@ SIGNALS = {
         r"(?:test|scan|audit|research|probe)"
         r"|without (?:our )?(?:prior )?(?:express |written )+(?:consent|permission|authori)"
         r"|(?:testing|scanning) is (?:not permitted|prohibited|forbidden)", re.I),
+    # ANTI-SIGNAL. Distinct from no_authorisation: manual research is welcome, but
+    # TOOLING is not. This collides directly with our default method - console-batch
+    # sends batched fetch() calls, which is automated traffic no matter how few.
+    # Where this fires, hunt by hand or not at all.
+    "no_automation": re.compile(
+        r"(?:do not|don't|never) (?:run|use)[^.]{0,40}automated"
+        r"|automated (?:scanning|tools|scanners)[^.]{0,30}(?:out of scope|prohibited|not permitted)"
+        r"|avoid automated scanner|no automated (?:tool|scan)"
+        r"|use of vulnerability assessment tools", re.I),
+    # A programme that is not currently accepting reports is not a venue.
+    "reports_paused": re.compile(
+        r"paus(?:e|ing|ed)[^.]{0,40}(?:new )?reports?"
+        r"|temporarily (?:closed|suspend|not accepting)"
+        r"|not (?:currently )?accepting (?:new )?(?:reports?|submissions?)", re.I),
+}
+
+# GPT's correction, adopted: one boolean cannot express these. A policy can authorise
+# research yet forbid tooling; pay yet refuse active testing; define scope yet be closed.
+# The verdict is what we act on; the dimensions are why.
+VERDICTS = {
+    "BLOCKED":     "policy withholds permission to test - incidental discovery only",
+    "PAUSED":      "not accepting reports right now - no venue",
+    "MANUAL_ONLY": "authorised, but automated tooling is forbidden (no console-batch)",
+    "HUNT":        "authorised, scoped, open, tooling not forbidden",
+    "WEAK":        "no explicit safe harbour or no defined scope",
 }
 
 
@@ -164,18 +193,45 @@ def score_policy(rec, args):
     rec["policy_status"] = code
     if code != 200 or not body:
         return rec
-    text = strip_html(body)
+    apply_signals(rec, strip_html(body))
+    return rec
+
+
+def apply_signals(rec, text):
+    """Score one policy page into independent dimensions, then a single verdict."""
     hits = {k: bool(p.search(text)) for k, p in SIGNALS.items()}
     if hits.pop("no_reward", False):
         hits["reward"] = False
+        hits["monetary_reward"] = False
         rec["reward_explicitly_declined"] = True
-    blocked = hits.pop("no_authorisation", False)
-    if blocked:
-        rec["testing_not_authorised"] = True
-    rec["signals"] = hits
-    # Gate = scope + safe harbour + an intake channel. Reward is a milestone filter, not a gate.
-    rec["gate_pass"] = bool(hits["scope"] and hits["safe_harbour"]
-                            and rec.get("fields", {}).get("contact"))
+
+    dims = {
+        "scope_defined": hits["scope"],
+        "safe_harbour": hits["safe_harbour"],
+        "active_testing_allowed": not hits.pop("no_authorisation"),
+        "automated_testing_allowed": not hits.pop("no_automation"),
+        "reports_open": not hits.pop("reports_paused"),
+        "monetary_reward": hits["monetary_reward"],
+        "any_reward": hits["reward"],
+        "platform_managed": hits["platform"],
+        "intake": bool(rec.get("fields", {}).get("contact")),
+    }
+    rec["dimensions"] = dims
+    rec["signals"] = hits  # kept for backwards compatibility with older runs
+
+    # Order matters: a hard prohibition outranks everything a policy offers.
+    if not dims["active_testing_allowed"]:
+        v = "BLOCKED"
+    elif not dims["reports_open"]:
+        v = "PAUSED"
+    elif not (dims["scope_defined"] and dims["safe_harbour"] and dims["intake"]):
+        v = "WEAK"
+    elif not dims["automated_testing_allowed"]:
+        v = "MANUAL_ONLY"
+    else:
+        v = "HUNT"
+    rec["verdict"] = v
+    rec["gate_pass"] = v in ("HUNT", "MANUAL_ONLY")
     return rec
 
 
@@ -191,20 +247,12 @@ def score_url(url, args):
         return rec
     text = strip_html(body)
     rec["text_len"] = len(text)
-    hits = {k: bool(p.search(text)) for k, p in SIGNALS.items()}
-    if hits.pop("no_reward", False):
-        hits["reward"] = False
-        rec["reward_explicitly_declined"] = True
-    blocked = hits.pop("no_authorisation", False)
-    if blocked:
-        rec["testing_not_authorised"] = True
-    rec["signals"] = hits
+    # Intake must be resolved BEFORE scoring - the verdict depends on it.
     mails = re.findall(r"[\w.+-]+@[\w-]+\.[\w.-]+", text)
     forms = re.findall(r"(?i)(hackerone\.com|bugcrowd\.com|intigriti\.com|forms\.gle|/report)", body)
     intake = sorted(set(m for m in mails if not m.lower().endswith((".png", ".jpg"))))[:3]
     rec["fields"]["contact"] = intake or (["form: " + forms[0]] if forms else [])
-    rec["gate_pass"] = bool(hits["scope"] and hits["safe_harbour"]
-                            and rec["fields"]["contact"] and not blocked)
+    apply_signals(rec, text)
     return rec
 
 
@@ -265,36 +313,44 @@ def main():
     report(args.out)
 
 
+ORDER = {"HUNT": 0, "MANUAL_ONLY": 1, "WEAK": 2, "PAUSED": 3, "BLOCKED": 4}
+
+
 def report(path):
     rows, blocked_rows = [], []
     for line in open(path, encoding="utf-8"):
         r = json.loads(line)
         if not (r.get("security_txt") or r.get("policy_url")):
             continue
-        s = r.get("signals", {})
-        if r.get("testing_not_authorised"):
+        d = r.get("dimensions", {})
+        v = r.get("verdict", "-")
+        if v == "BLOCKED":
             blocked_rows.append(r["domain"])
         rows.append((
-            bool(r.get("gate_pass")), bool(s.get("reward")), bool(s.get("platform")),
+            ORDER.get(v, 9), v, d.get("monetary_reward"), d.get("any_reward"),
+            d.get("automated_testing_allowed", True), d.get("platform_managed"),
             r["domain"],
-            (r.get("fields", {}).get("contact") or [""])[0][:38],
-            (r.get("fields", {}).get("policy") or [r.get("policy_url", "")])[0][:46],
+            (r.get("fields", {}).get("contact") or [""])[0][:34],
         ))
-    # gate-passing first, then reward-bearing, then self-hosted before platform-managed
-    rows.sort(key=lambda x: (-x[0], -x[1], x[2], x[3]))
-    print("\n{:<5}{:<7}{:<8}{:<30}{:<40}{}".format(
-        "GATE", "REWARD", "MANAGED", "DOMAIN", "CONTACT", "POLICY"))
-    print("-" * 150)
-    for g, rw, pf, d, c, p in rows:
-        print("{:<5}{:<7}{:<8}{:<30}{:<40}{}".format(
-            "PASS" if g else ".", "yes" if rw else ".",
-            "platform" if pf else ".", d, c, p))
-    print("\n{} with security.txt . {} pass the gate".format(len(rows), sum(r[0] for r in rows)))
+    # verdict first, then cash, then self-hosted before platform-managed
+    rows.sort(key=lambda x: (x[0], not x[2], bool(x[5]), x[6]))
+    print("\n{:<13}{:<6}{:<7}{:<7}{:<10}{:<30}{}".format(
+        "VERDICT", "CASH", "REWARD", "AUTO", "MANAGED", "DOMAIN", "CONTACT"))
+    print("-" * 122)
+    for _, v, cash, rw, auto, pf, dom, c in rows:
+        print("{:<13}{:<6}{:<7}{:<7}{:<10}{:<30}{}".format(
+            v, "yes" if cash else ".", "yes" if rw else ".",
+            "ok" if auto else "NO", "platform" if pf else ".", dom, c))
+
+    counts = {}
+    for row in rows:
+        counts[row[1]] = counts.get(row[1], 0) + 1
+    print("\n" + " . ".join("{}={}".format(k, counts[k]) for k in sorted(counts, key=lambda k: ORDER.get(k, 9))))
     if blocked_rows:
-        print("\n!! TESTING EXPLICITLY NOT AUTHORISED - report-only, do NOT test: "
-              + ", ".join(blocked_rows))
-    print("GATE = scope + safe-harbour + contact, detected by regex. NOT permission -\n"
-          "read the policy page yourself before touching any host.")
+        print("\n!! BLOCKED - policy withholds permission to test. Incidental discovery and\n"
+              "   reporting only, never active testing: " + ", ".join(blocked_rows))
+    print("\nAUTO=NO means automated tooling is forbidden -> NO console-batch, hunt by hand.")
+    print("Verdicts are regex triage, NOT permission. Read the policy before touching a host.")
 
 
 if __name__ == "__main__":
