@@ -8266,6 +8266,39 @@
       "tell": "Multi-step flows whose progress is carried in GET params, redirects or hidden fields instead of a server-side session flag. Removing a parameter is the most under-tested of the four - most testers change values, few delete the key.",
       "verify": "Verdict on the FINAL state, never the step response: was the order fulfilled, the role granted, the change applied. Control = the same flow completed honestly, so you know what a legitimate success looks like.",
       "source": "PortSwigger business-logic KB, workflow and state machine flaws"
+    },
+    {
+      "id": "pb0594",
+      "class": "privesc",
+      "stack": "web,api",
+      "difficulty": "low",
+      "technique": "RAISE YOUR OWN PRIVILEGE FIELD. The permission/membership object is legitimately YOURS, so an ownership check passes - but the endpoint never asks whether you may raise the LEVEL inside it. Not IDOR: the id is correct. The object is yours, the FIELD is privileged.",
+      "payload": "PATCH /api/.../permissions/{YOUR_OWN_id}   Authorization: Bearer <low-role token>\n{\"attributes\":{\"permissions_level\":\"Administrator\",\"product_permissions\":{...:true}}}\nAlso try: role, roleId, isAdmin, owner, custom_role, member_role on your OWN member/profile record",
+      "tell": "A product with named tiers (Viewer/Editor/Administrator, Reader/Writer/Admin) where the UI hides permission management from low roles. Capture the request AS THE ADMIN to learn the exact body shape, then replay it as the low role against your own id.",
+      "verify": "Verdict on STATE, never the 200: refresh as the low user and confirm the new capability actually works (perform an admin-only action). Control = the identical call as the high role must succeed, so a 403 means authz and not a malformed body.",
+      "source": "Disclosed writeup - Viewer to Administrator on a SaaS calendar via PATCH on the user's own permissions object, $2,150"
+    },
+    {
+      "id": "pb0595",
+      "class": "authz",
+      "stack": "web,api,saas",
+      "difficulty": "low",
+      "technique": "RUN THE CROSS-TENANT TEST AS EVERY ROLE, NOT JUST THE HIGHEST. Where tenant isolation is re-implemented per role/handler instead of enforced centrally, the gap is usually in a LOW or secondary role - the one nobody tests, because testers assume the most privileged role reaches furthest. Isolation held for Admin and Support and broke for Sales.",
+      "payload": "for role in (admin, manager, support, member, viewer, billing, readonly): repeat the SAME cross-tenant request with that role's session/token and the other tenant's identifier",
+      "tell": "Multi-tenant SaaS with 3+ named roles, especially where tenants are addressed by subdomain, Host header, or a tenant/org id in the path. Per-role handlers are the smell - if two roles return DIFFERENT error text for the same cross-tenant call, isolation is not central.",
+      "verify": "Plant a marker in the victim tenant and verify on the MARKER, not the status - a 200 with an empty list means nothing. Control = each role's own-tenant read must succeed, proving the session is live and the request well formed.",
+      "source": "Disclosed writeup - cross-tenant CRM access blocked for Admin and Support, succeeded for Sales"
+    },
+    {
+      "id": "pb0596",
+      "class": "business-logic",
+      "stack": "web,api,graphql",
+      "difficulty": "medium",
+      "technique": "FIND THE SECOND PATH THAT CREATES OR MUTATES A GOVERNED OBJECT. Policy (approval required, muted, admins-only, review needed) is enforced on the PRIMARY path. Newer or peripheral features that produce the same object type frequently never consult it. Enumerate every path that can create or modify the governed object, then use the least-obvious one.",
+      "payload": "primary:   POST /posts            -> policy enforced (approval, mute, admins-only)\nsecondary: GraphQL mutation for a side feature carrying a client-supplied parent id\n           (watch-party, copy, import, template, pipeline, scheduled job, bulk edit)\n-> same object created, policy skipped",
+      "tell": "Any object under a governance rule: posts needing approval, flags needing review, documents needing sign-off. List EVERY producer of that object - copy/clone, import, template, automation, scheduled and bulk paths are the usual misses. A client-supplied parent/target id in a side feature is the strongest tell.",
+      "verify": "Verdict on the governed state: the object must actually appear/publish/apply without the approval or despite the restriction. Control = attempt the same thing through the PRIMARY path and confirm it is correctly blocked, which proves the policy is real and the bypass is the second path.",
+      "source": "Disclosed writeup - Facebook group Watch Party mutation took a client-supplied group_id, bypassing mute, admin approval and admins-only posting"
     }
   ]
 }
