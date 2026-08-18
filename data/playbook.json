@@ -8299,6 +8299,28 @@
       "tell": "Any object under a governance rule: posts needing approval, flags needing review, documents needing sign-off. List EVERY producer of that object - copy/clone, import, template, automation, scheduled and bulk paths are the usual misses. A client-supplied parent/target id in a side feature is the strongest tell.",
       "verify": "Verdict on the governed state: the object must actually appear/publish/apply without the approval or despite the restriction. Control = attempt the same thing through the PRIMARY path and confirm it is correctly blocked, which proves the policy is real and the bypass is the second path.",
       "source": "Disclosed writeup - Facebook group Watch Party mutation took a client-supplied group_id, bypassing mute, admin approval and admins-only posting"
+    },
+    {
+      "id": "pb0597",
+      "class": "privesc",
+      "stack": "web,api",
+      "difficulty": "low",
+      "technique": "A CONTROL YOU CAN TURN OFF IS NOT A CONTROL. When a role is explicitly DENIED a permission (bypass-approval, skip-review, force-merge, override-limit), stop attacking the enforcement and attack the PRECONDITION. Ask which permission the same role DOES hold that can change the setting that produces the check. Disable the requirement, perform the governed action, restore the setting - the config ends byte-identical and no approval artefact is created. Test the MUTABILITY of a security setting, never only its enforcement.",
+      "payload": "denied:   action 'bypassRequiredApproval'          -> allowed:false\ngranted:  action 'updateApprovalSettings'           -> allowed:true\n\n1. PATCH /projects/{p}/environments/{e}\n   [{\"op\":\"replace\",\"path\":\"/approvalSettings/required\",\"value\":false}]   -> 200\n2. <the identical request that returned 405 require-approval>              -> 200, state moves\n3. PATCH ... /approvalSettings/required  value:true                        -> 200",
+      "tell": "The governed write returns a policy refusal (405/403 'requires approval', 'review required') while a settings endpoint for the same object accepts a write from the same session. Any settings object named approval*, review*, protection*, required*, minNumApprovals, canReviewOwnRequest, requiredApprovalTags is a candidate.",
+      "verify": "Run the governed write BEFORE the settings change and record the refusal - that is the control. Re-read object STATE after step 2, never trust the 200. Restore the setting and re-read to prove the config is unchanged. CRITICAL: run this as the CONSTRAINED role only. An admin/owner legitimately holds the bypass permission, so the same chain as owner is the product working as designed, not a bug.",
+      "source": "self:hunt32-2026-08-19"
+    },
+    {
+      "id": "pb0598",
+      "class": "recon",
+      "stack": "web,api",
+      "difficulty": "low",
+      "technique": "FIND THE UI'S OWN PERMISSION ORACLE. An RBAC app must decide client-side which buttons to grey out, so it ships an endpoint that answers 'may I do X to Y'. That endpoint enumerates the entire permission model for you: it names the actions you lack, which is the same as naming what to attack. Distinct error strings for an unknown RESOURCE vs an unknown ACTION make it a two-sided enumerator - map the resource grammar and the action list separately.",
+      "payload": "POST /internal/authorization/access-check/<app>/bulk\n[{\"resource\":\"proj/default:env/test:flag/*\",\"action\":\"bypassRequiredApproval\"}]\n-> [{\"allowed\":false,\"reason\":\"Access denied\", ...}]\n\nunknown action   -> \"Invalid action name\"   (resource grammar was accepted)\nunknown resource -> \"Invalid resource\"      (action name was accepted)",
+      "tell": "Search the SPA bundle for access-check, can-i, permissions/check, authz/evaluate, capabilities, entitlements, feature-gate. Also present as a batch call fired once on page load carrying every action the page renders.",
+      "verify": "Send pairs ONE AT A TIME - a batch containing a single malformed pair is often rejected wholesale with a 400 and you lose every result. Confirm the oracle is honest by checking one action you know you hold (expect allowed:true) alongside one you know you lack. Then, for every allowed:false, look for a DIFFERENT granted action that reaches the same outcome (see pb0597).",
+      "source": "self:hunt32-2026-08-19"
     }
   ]
 }
