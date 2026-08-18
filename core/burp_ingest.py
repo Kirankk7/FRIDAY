@@ -22,6 +22,10 @@ except Exception:
     BURP_MCP_URL = os.getenv("BURP_MCP_URL", "")
 
 
+_STREAM_THRESHOLD = 50 * 1024 * 1024   # bytes; above this, stream instead of ET.parse
+_BODY_CAP = 8192                       # chars kept per message when streaming
+
+
 def _decode(node) -> str:
     """Decode a Burp <request>/<response> node (base64 attr or plain text)."""
     if node is None:
@@ -45,8 +49,11 @@ def _params_from_request(raw_req: str, url: str) -> set:
     if raw_req:
         # body params (after the blank line) for form-encoded bodies
         parts = raw_req.split("\r\n\r\n", 1) if "\r\n\r\n" in raw_req else raw_req.split("\n\n", 1)
-        if len(parts) == 2 and "=" in parts[1] and "{" not in parts[1][:1]:
-            params.update(k for k, _ in parse_qsl(parts[1].strip()))
+        body = parts[1].lstrip() if len(parts) == 2 else ""
+        # JSON bodies (object OR array) are not form-encoded -- an array body full of
+        # "key":"value=..." text was being shredded into fake param names.
+        if body and "=" in body and body[:1] not in "{[":
+            params.update(k for k, _ in parse_qsl(body))
     return params
 
 
@@ -55,34 +62,56 @@ def parse_export(path: str) -> dict:
     path = os.path.expanduser(path)
     if not os.path.exists(path):
         return {"success": False, "message": "I couldn't find that Burp export, boss.", "data": {}}
+    # Big exports (multi-hundred-MB proxy history) blow up ET.parse, which builds the
+    # whole tree in memory. Stream those instead and truncate bodies -- param names and
+    # auth tags all live in the head of a message, so the tail costs memory and adds
+    # nothing.
+    big = os.path.getsize(path) > _STREAM_THRESHOLD
+    records, n_items = [], 0
     try:
-        tree = ET.parse(path)
-        root = tree.getroot()
+        if big:
+            for _, el in ET.iterparse(path, events=("end",)):
+                if el.tag != "item":
+                    continue
+                n_items += 1
+                url = (el.findtext("url") or "").strip()
+                if url:
+                    records.append({
+                        "url": url,
+                        "method": el.findtext("method") or "GET",
+                        "status": el.findtext("status") or "",
+                        "request": _decode(el.find("request"))[:_BODY_CAP],
+                        "response": _decode(el.find("response"))[:_BODY_CAP],
+                    })
+                # clear ONLY the item -- clearing every element wipes child text
+                # before the parent has been read.
+                el.clear()
+        else:
+            root = ET.parse(path).getroot()
+            items = root.findall(".//item")
+            n_items = len(items)
+            for it in items:
+                url = (it.findtext("url") or "").strip()
+                if not url:
+                    continue
+                records.append({
+                    "url": url,
+                    "method": it.findtext("method") or "GET",
+                    "status": it.findtext("status") or "",
+                    "request": _decode(it.find("request")),
+                    "response": _decode(it.find("response")),
+                })
     except Exception as e:
         return {"success": False, "message": f"That doesn't look like a Burp XML export: {str(e)[:60]}", "data": {}}
-
-    items = root.findall(".//item")
-    records = []
-    for it in items:
-        url = (it.findtext("url") or "").strip()
-        if not url:
-            continue
-        records.append({
-            "url": url,
-            "method": it.findtext("method") or "GET",
-            "status": it.findtext("status") or "",
-            "request": _decode(it.find("request")),
-            "response": _decode(it.find("response")),
-        })
 
     if not records:
         return {"success": False, "message": "No HTTP items found in that export.", "data": {}}
 
     inv = _build_inventory(records)
-    inv["items"] = len(items)   # back-compat: count ALL xml items, incl url-less ones
+    inv["items"] = n_items   # back-compat: count ALL xml items, incl url-less ones
     tags = inv["tags"]
     tagbits = [f"{len(v)} {k}" for k, v in tags.items() if v]
-    msg = (f"Ingested {len(items)} Burp items: {len(inv['endpoints'])} unique endpoints "
+    msg = (f"Ingested {n_items} Burp items: {len(inv['endpoints'])} unique endpoints "
            f"across {len(inv['hosts'])} host(s), {len(inv['params'])} parameters. "
            f"Methods: {', '.join(f'{m} x{c}' for m, c in sorted(inv['methods'].items()))}."
            + (f" Tagged: {', '.join(tagbits)}." if tagbits else ""))
