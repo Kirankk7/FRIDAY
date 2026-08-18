@@ -12,6 +12,12 @@ policy page states **all three**:
 1. **Scope** — which hosts/assets may be tested (a policy with no scope is not authorisation).
 2. **Safe harbour / non-prosecution wording** — explicit "we will not pursue legal action".
 3. **A working intake channel** — mailbox, form, or platform link ([[venue-first-rule]]).
+4. **Domain ownership verified** — the scoped domains must actually belong to the
+   publisher. Cross-check branding, product names and outbound links on each claimed
+   host. Policies get copied between companies, list domains not yet owned, or name a
+   domain that has since changed hands. **A scope list is a claim, not a title deed**,
+   and a claim by party A over party B's domain authorises nothing. This one is manual
+   — no regex can settle it.
 
 Then the existing screens still apply: reachability from UAE, then product class
 (money / limits / roles first — that is what produced both filed bugs).
