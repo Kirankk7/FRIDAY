@@ -8222,6 +8222,28 @@
       "tell": "An update endpoint whose body echoes an identifier the UI never lets you edit. If the id is present in the body at all, the server had a chance to trust it.",
       "verify": "Two accounts. Verdict on the VICTIM object: log in as the victim and confirm the field changed. Control = the same request with your own id must succeed.",
       "source": "MTN Group disclosed report - /app/updateUser had no authorisation check on the target id"
+    },
+    {
+      "id": "pb0590",
+      "class": "recon",
+      "stack": "api,fastapi,python",
+      "difficulty": "low",
+      "technique": "FastAPI (and most Python API frameworks) mount an INTERACTIVE SCHEMA at default paths that are frequently left unauthenticated in production. Hitting them hands you the complete route table, request bodies and auth requirements for free - the same win as a published OpenAPI, but on apps that never intended to publish one.",
+      "payload": "/docs   /redoc   /openapi.json   /api/docs   /api/v1/docs   /api/openapi.json   /swagger   /swagger-ui",
+      "tell": "The framework fingerprint is the trigger: a 422 whose body is {'detail':[{'type':...,'loc':['body','field'],'msg':'Field required'}]} is Pydantic, i.e. FastAPI. Also uvicorn in errors or Server headers. Check the schema paths on EVERY host of the app, not just the main one - internal or secondary subdomains are where it survives.",
+      "verify": "Compare the schema against what the UI actually calls. The operations present in the schema but absent from the UI are the target set - especially anything under an auth or admin prefix.",
+      "source": "Disclosed writeup - /docs exposed on a FastAPI subdomain led to an unauthenticated reset-password route"
+    },
+    {
+      "id": "pb0591",
+      "class": "auth-bypass",
+      "stack": "api",
+      "difficulty": "low",
+      "technique": "AUTH-ROUTE SIBLING SWEEP. When one route in the auth family is missing its check, the siblings usually are too - they are written together and reviewed together. Having found reset-password unauthenticated, immediately test change-password, verify-email, confirm, set-password, resend, and any MFA enrol/disable route with the SAME shape. Two weak siblings chain into a full takeover that neither gives alone.",
+      "payload": "POST /auth/reset-password {username}            -> resets to a known default and RETURNS it\nPOST /auth/change-password {username, old_password, new_password}  -> no session required\nPOST /auth/login {username, new_password}        -> takeover, and the real owner is locked out",
+      "tell": "Reset/change endpoints whose body carries the IDENTITY (username, email, userId) rather than a token. If the identity is in the body, the server had the chance to trust it. A response that states the new credential in plain text is the strongest possible confirmation.",
+      "verify": "Two invariants, test both: (1) a reset must require proof of mailbox control - a token - not just a username; (2) a reset must NEVER disclose the resulting credential in the response. Use only accounts you own on BOTH sides; resetting a real user's password locks them out and is destructive.",
+      "source": "Disclosed writeup - unauthenticated reset-password + change-password chained to account takeover"
     }
   ]
 }
