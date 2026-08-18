@@ -8244,6 +8244,28 @@
       "tell": "Reset/change endpoints whose body carries the IDENTITY (username, email, userId) rather than a token. If the identity is in the body, the server had the chance to trust it. A response that states the new credential in plain text is the strongest possible confirmation.",
       "verify": "Two invariants, test both: (1) a reset must require proof of mailbox control - a token - not just a username; (2) a reset must NEVER disclose the resulting credential in the response. Use only accounts you own on BOTH sides; resetting a real user's password locks them out and is destructive.",
       "source": "Disclosed writeup - unauthenticated reset-password + change-password chained to account takeover"
+    },
+    {
+      "id": "pb0592",
+      "class": "privesc",
+      "stack": "web,api",
+      "difficulty": "low",
+      "technique": "REPLAY THE COMMIT STEP, NOT THE ENTRY STEP. A privileged multi-step action checks authorisation when the FORM loads, then assumes the confirm/commit request can only be reached legitimately - so the final request carries no check of its own. Perform the action as the HIGH role, capture the final request, replay it with the LOW role's session or token.",
+      "payload": "as admin: load admin form (step 1, ACL enforced) -> submit confirm (step 2)\ncapture step 2, swap in the low-privilege session/token, replay verbatim\ne.g. POST /admin-roles  username=SELF&action=upgrade&confirmed=true",
+      "tell": "Any action that spans two requests: load-then-confirm, request-then-apply, draft-then-publish, review-then-approve. The wider the gap between the gating screen and the committing call, the likelier only the screen is guarded.",
+      "verify": "Control both ways: the SAME captured request must succeed with the high-role credential (proves the request is well formed) and the low-role credential must be able to do the entry step legitimately (proves the session is live). Verdict on state - re-read the object as the high role and confirm the change landed.",
+      "source": "PortSwigger access-control KB, multi-step and context-dependent enforcement"
+    },
+    {
+      "id": "pb0593",
+      "class": "business-logic",
+      "stack": "web,api",
+      "difficulty": "low",
+      "technique": "WORKFLOW STATE FLAWS - skip, drop, strip, or re-context. Steps linked by redirects and client-supplied params rather than server-side state can be (a) SKIPPED by replaying a later step directly, (b) DROPPED by discarding a request the client was supposed to make, (c) STRIPPED by removing a parameter that carries the check, or (d) RE-CONTEXTED by changing an attribute AFTER validation passed.",
+      "payload": "skip:      replay the confirmation/success request without completing the paid or approved step\ndrop:      intercept and DISCARD the role-selector / consent / step request, then continue - the state may default open\nstrip:     remove the parameter that carries the check entirely (e.g. current-password on a change-password call)\nre-context: register with an ordinary value, pass validation, then CHANGE it to the privileged one",
+      "tell": "Multi-step flows whose progress is carried in GET params, redirects or hidden fields instead of a server-side session flag. Removing a parameter is the most under-tested of the four - most testers change values, few delete the key.",
+      "verify": "Verdict on the FINAL state, never the step response: was the order fulfilled, the role granted, the change applied. Control = the same flow completed honestly, so you know what a legitimate success looks like.",
+      "source": "PortSwigger business-logic KB, workflow and state machine flaws"
     }
   ]
 }
