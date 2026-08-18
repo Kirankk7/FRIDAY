@@ -50,11 +50,17 @@ SIGNALS = {
         r"|(?:will )?not (?:be )?prosecut|no legal action|not (?:report|refer) you"
         r"|good.?faith[^.]{0,80}(?:research|report|accordance|polic)"
         r"|authoris(?:e|ed|ation)[^.]{0,40}(?:test|research)", re.I),
-    # missed hyphenated "in-scope"
+    # Missed hyphenated "in-scope". Also missed a bare "Scope" heading followed by a
+    # domain list, which is how the strongest candidate of the first batch wrote it.
+    # The negated class below must exclude NEWLINE, not DOT: a domain such as
+    # *.example.ai is full of dots, so a dot-negated class stops at the first dot and
+    # the whole alternation silently never fires.
     "scope": re.compile(
         r"\bin[- ]scope\b|\bout[- ]of[- ]scope\b"
         r"|scope of (?:this|the) (?:policy|programme|program)"
-        r"|following (?:domains|assets|systems)|assets? (?:covered|in[- ]scope)", re.I),
+        r"|following (?:domains|assets|systems)|assets? (?:covered|in[- ]scope)"
+        r"|\bscope\b[^\n]{0,80}(?:\*\.[a-z0-9-]+\.[a-z]{2,}|[a-z0-9-]+\.[a-z]{2,}[,/\s])"
+        r"|this policy covers", re.I),
     "reward": re.compile(
         r"\breward|\bboun(?:ty|ties)\b|monetary|compensat|remunerat|\bswag\b"
         r"|hall of fame|acknowledg(?:e|ment)s? page|£\s?\d|€\s?\d|\$\s?\d", re.I),
@@ -69,6 +75,16 @@ SIGNALS = {
         r"|not be (?:paid|eligible for)[^.]{0,30}(?:reward|boun)"
         r"|no (?:financial|monetary) reward|unable to (?:offer|provide)[^.]{0,30}reward", re.I),
     "platform": re.compile(r"hackerone|bugcrowd|synack|intigriti|yeswehack|openbugbounty", re.I),
+    # ANTI-SIGNAL, safety critical. Some policies invite REPORTS while explicitly
+    # withholding permission to TEST ("we do not authorize or encourage active testing,
+    # scanning, or auditing of our systems"). That is a receiving address, not
+    # authorisation, and under UK CMA 1990 the difference is the whole offence.
+    # This must HARD-BLOCK the gate, never merely fail to raise it.
+    "no_authorisation": re.compile(
+        r"do(?:es)? not (?:authori[sz]e|permit|allow|condone)[^.]{0,60}"
+        r"(?:test|scan|audit|research|probe)"
+        r"|without (?:our )?(?:prior )?(?:express |written )+(?:consent|permission|authori)"
+        r"|(?:testing|scanning) is (?:not permitted|prohibited|forbidden)", re.I),
 }
 
 
@@ -153,10 +169,42 @@ def score_policy(rec, args):
     if hits.pop("no_reward", False):
         hits["reward"] = False
         rec["reward_explicitly_declined"] = True
+    blocked = hits.pop("no_authorisation", False)
+    if blocked:
+        rec["testing_not_authorised"] = True
     rec["signals"] = hits
     # Gate = scope + safe harbour + an intake channel. Reward is a milestone filter, not a gate.
     rec["gate_pass"] = bool(hits["scope"] and hits["safe_harbour"]
                             and rec.get("fields", {}).get("contact"))
+    return rec
+
+
+def score_url(url, args):
+    """Score a policy page handed to us directly (e.g. a dork hit), skipping stage 1.
+    Intake cannot come from security.txt here, so look for a contact ON the page."""
+    from urllib.parse import urlparse
+    rec = {"domain": urlparse(url).netloc, "security_txt": None,
+           "fields": {}, "note": "direct policy URL", "policy_url": url}
+    code, body, final = get(url, args.ua, args.timeout, args.rate, maxlen=600000)
+    rec["policy_status"] = code
+    if code != 200 or not body:
+        return rec
+    text = strip_html(body)
+    rec["text_len"] = len(text)
+    hits = {k: bool(p.search(text)) for k, p in SIGNALS.items()}
+    if hits.pop("no_reward", False):
+        hits["reward"] = False
+        rec["reward_explicitly_declined"] = True
+    blocked = hits.pop("no_authorisation", False)
+    if blocked:
+        rec["testing_not_authorised"] = True
+    rec["signals"] = hits
+    mails = re.findall(r"[\w.+-]+@[\w-]+\.[\w.-]+", text)
+    forms = re.findall(r"(?i)(hackerone\.com|bugcrowd\.com|intigriti\.com|forms\.gle|/report)", body)
+    intake = sorted(set(m for m in mails if not m.lower().endswith((".png", ".jpg"))))[:3]
+    rec["fields"]["contact"] = intake or (["form: " + forms[0]] if forms else [])
+    rec["gate_pass"] = bool(hits["scope"] and hits["safe_harbour"]
+                            and rec["fields"]["contact"] and not blocked)
     return rec
 
 
@@ -171,14 +219,26 @@ def main():
     ap.add_argument("--timeout", type=float, default=8.0)
     ap.add_argument("--contact", default="researcher", help="identity for the User-Agent")
     ap.add_argument("--report", metavar="JSONL", help="print a ranked table from a previous run")
+    ap.add_argument("--urls", metavar="FILE",
+                    help="score policy URLs directly (dork hits), one per line")
     args = ap.parse_args()
     args.ua = UA.format(c=args.contact)
 
     if args.report:
         report(args.report)
         return
+    if args.urls:
+        with open(args.urls, encoding="utf-8") as f:
+            urls = [l.strip() for l in f if l.strip() and not l.startswith("#")]
+        with open(args.out, "w", encoding="utf-8") as out:
+            for u in urls:
+                rec = score_url(u, args)
+                out.write(json.dumps(rec, ensure_ascii=False) + chr(10))
+                out.flush()
+        report(args.out)
+        return
     if not args.domains:
-        ap.error("need a domains file (or --report)")
+        ap.error("need a domains file, --urls, or --report")
 
     with open(args.domains, encoding="utf-8") as f:
         domains = [l.strip().lstrip("*.").rstrip("/") for l in f
@@ -206,17 +266,19 @@ def main():
 
 
 def report(path):
-    rows = []
+    rows, blocked_rows = [], []
     for line in open(path, encoding="utf-8"):
         r = json.loads(line)
-        if not r.get("security_txt"):
+        if not (r.get("security_txt") or r.get("policy_url")):
             continue
         s = r.get("signals", {})
+        if r.get("testing_not_authorised"):
+            blocked_rows.append(r["domain"])
         rows.append((
             bool(r.get("gate_pass")), bool(s.get("reward")), bool(s.get("platform")),
             r["domain"],
             (r.get("fields", {}).get("contact") or [""])[0][:38],
-            (r.get("fields", {}).get("policy") or [""])[0][:46],
+            (r.get("fields", {}).get("policy") or [r.get("policy_url", "")])[0][:46],
         ))
     # gate-passing first, then reward-bearing, then self-hosted before platform-managed
     rows.sort(key=lambda x: (-x[0], -x[1], x[2], x[3]))
@@ -228,6 +290,9 @@ def report(path):
             "PASS" if g else ".", "yes" if rw else ".",
             "platform" if pf else ".", d, c, p))
     print("\n{} with security.txt . {} pass the gate".format(len(rows), sum(r[0] for r in rows)))
+    if blocked_rows:
+        print("\n!! TESTING EXPLICITLY NOT AUTHORISED - report-only, do NOT test: "
+              + ", ".join(blocked_rows))
     print("GATE = scope + safe-harbour + contact, detected by regex. NOT permission -\n"
           "read the policy page yourself before touching any host.")
 
