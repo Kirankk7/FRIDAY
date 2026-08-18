@@ -8178,6 +8178,50 @@
       "tell": "Any pre-auth flow whose form posts a user[...] hash. The visible fields are 2-3; the model has dozens.",
       "verify": "Re-read the identity endpoint (/me) after the write and compare the role field to its PRE-TEST baseline — a role that was already 'admin' of its own tenant looks like success and is not. Confirm the write landed at all (login with the new password / check last_password_change_at) or a no-op reads as 'enforced'.",
       "source": "hunt #29, 2026-08-18"
+    },
+    {
+      "id": "pb0586",
+      "class": "privesc",
+      "stack": "web,api,graphql",
+      "difficulty": "low",
+      "technique": "PER-OPERATION PERMISSION, NOT PER-SCREEN. The UI hides an admin screen from a low role, but the underlying operation (REST route or GraphQL mutation) never checks which permission it requires. Log in as the LOW role, then call the operations that role's UI never renders. This is the field-level lesson of our own #941 promoted to the OPERATION level: the UI exposes a subset, the API accepts the whole set.",
+      "payload": "as low-role user: enumerate operations from the published OpenAPI/GraphQL schema, diff against what the low-role UI actually renders, then invoke the missing ones directly with that role's own token/session",
+      "tell": "A product with granular permission names (Store Management vs User Management, Reader vs Writer vs Admin) and a large operation count. The more operations, the worse the odds every one re-checks. Published OpenAPI or introspection makes the diff free.",
+      "verify": "Own-object control first: the SAME call as the HIGH role must succeed, so a failure is authz and not a malformed request. Verdict on STATE - re-read the object as the high role and confirm the change actually landed; a 200 from a turbo-stream or generic handler proves nothing.",
+      "source": "Shopify disclosed report - Store Management permission could call changeDomainEnforcementState"
+    },
+    {
+      "id": "pb0587",
+      "class": "privesc",
+      "stack": "web,api",
+      "difficulty": "medium",
+      "technique": "DELEGATION MUST INTERSECT, NEVER EXCEED. Where a user can re-share, re-delegate or invite onward, check whether the second grant can be WIDER than the first. Classic shape: A grants B read-only but with re-share rights; B then shares to C and adds WRITE. The re-share path never intersects the new permission set with the original one.",
+      "payload": "A -> B: read-only + may-reshare. B -> C: read+write. Then act as C and attempt the write A never authorised.",
+      "tell": "Any re-share, sub-team, nested group, service-account, or invite-onward feature. Same family as token capability intersection but at the SHARING layer, where it is far less often tested.",
+      "verify": "Three identities are required, and the control is A's own grant: confirm A really is read-only first. Verdict on state - C must actually modify the object, not merely receive a 200 on a share record.",
+      "source": "Nextcloud disclosed report - re-sharing allows increase of privileges"
+    },
+    {
+      "id": "pb0588",
+      "class": "revocation",
+      "stack": "web,api,cdn",
+      "difficulty": "medium",
+      "technique": "REVOCATION MUST KILL ALREADY-GRANTED ACCESS PATHS. Removing a user, downgrading a role or deleting a membership usually updates the permission table - but leaves previously issued artefacts alive: direct object/CDN URLs, signed links, cached responses, existing sessions, and API tokens minted while the role was higher.",
+      "payload": "as the low role, capture a direct artefact/CDN URL and mint an API token; have the owner REMOVE the member or downgrade the role; then replay both the URL and the token",
+      "tell": "Artefacts served from a different host than the app (CDN, object storage, static domain) are the usual miss, because the permission check lives in the app and the URL does not go through it. Also: tokens minted at a higher role and never re-evaluated after downgrade.",
+      "verify": "Capture BEFORE revoking, replay AFTER. Control = a second URL/token that should still work (own object, untouched membership), so a failure is revocation and not an expired link.",
+      "source": "GitLab disclosed report - removed guest still read job artefacts via the CDN URL"
+    },
+    {
+      "id": "pb0589",
+      "class": "authz",
+      "stack": "web,api",
+      "difficulty": "low",
+      "technique": "IDENTITY FROM THE BODY INSTEAD OF THE SESSION on profile/settings UPDATE endpoints. The read path is scoped to the session, so the object looks safe, but the WRITE path takes id/email/userId out of the request body and updates whatever it names.",
+      "payload": "POST /updateUser with the victim id and email substituted for your own, everything else unchanged",
+      "tell": "An update endpoint whose body echoes an identifier the UI never lets you edit. If the id is present in the body at all, the server had a chance to trust it.",
+      "verify": "Two accounts. Verdict on the VICTIM object: log in as the victim and confirm the field changed. Control = the same request with your own id must succeed.",
+      "source": "MTN Group disclosed report - /app/updateUser had no authorisation check on the target id"
     }
   ]
 }
