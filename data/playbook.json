@@ -8321,6 +8321,39 @@
       "tell": "Search the SPA bundle for access-check, can-i, permissions/check, authz/evaluate, capabilities, entitlements, feature-gate. Also present as a batch call fired once on page load carrying every action the page renders.",
       "verify": "Send pairs ONE AT A TIME - a batch containing a single malformed pair is often rejected wholesale with a 400 and you lose every result. Confirm the oracle is honest by checking one action you know you hold (expect allowed:true) alongside one you know you lack. Then, for every allowed:false, look for a DIFFERENT granted action that reaches the same outcome (see pb0597).",
       "source": "self:hunt32-2026-08-19"
+    },
+    {
+      "id": "pb0599",
+      "class": "recon",
+      "stack": "web,api",
+      "difficulty": "low",
+      "technique": "A NO-OP WRITE IS NOT AN AUTHZ PROBE. Many apps check authorisation only when a write would actually MOVE state. A PATCH whose path does not exist, or whose value equals the current value, is short-circuited and returns 200/204 WITHOUT consulting authorisation. Treating that 200 as 'the boundary is open' invents a finding; treating it as 'enforced' misses one. Probe with a REAL field AND a REAL different value, against a DISPOSABLE object you own, then revert.",
+      "payload": "non-diagnostic:  PATCH /account [{\"op\":\"replace\",\"path\":\"/plan\",\"value\":\"enterprise\"}]\n                 -> 200, but /plan does not exist on the object -> nothing checked\nnon-diagnostic:  PATCH /members/{other} [{\"op\":\"replace\",\"path\":\"/role\",\"value\":\"<current role>\"}]\n                 -> 200, value unchanged -> nothing checked\ndiagnostic:      same route, real field, genuinely different value -> 403",
+      "tell": "Same endpoint answers 200 for some bodies and 403 for others with no obvious pattern; the 200s all correspond to fields absent from the object or values equal to the current ones. Get the REAL field names by reading the object first, never by guessing.",
+      "verify": "Re-read the object and diff the whole thing before/after. If nothing moved, the result is INCONCLUSIVE, not ENFORCED - record it that way and re-probe with a value that must change. Also distinguish VALIDATION from AUTHORISATION: a 400 on a malformed or reserved value means the request never reached the authz check.",
+      "source": "self:hunt32-2026-08-19"
+    },
+    {
+      "id": "pb0600",
+      "class": "recon",
+      "stack": "web,api",
+      "difficulty": "low",
+      "technique": "READ THE OBJECT'S OWN PERMISSION BLOCK AS A DENY LIST. Objects in RBAC apps often embed the caller's effective permissions on themselves (_access, _permissions, access, capabilities, viewerCan). The denied array is a list of every action the current role must not perform - and each entry names a FIELD to go looking for on a writable object. Combine with pb0597: for each denied action, find the object that stores its backing field and try to write it.",
+      "payload": "GET /internal/account\n{\"requireMfa\":false,\"sessionConfig\":{\"durationMins\":20160,\"refresh\":false},\n \"_access\":{\"denied\":[{\"action\":\"updateRequireMfa\"},{\"action\":\"updateSessionDuration\"},\n            {\"action\":\"revokeSessions\"},{\"action\":\"updateSamlSsoUrl\"}, ...38 total],\n            \"allowed\":[]}}\n=> denied 'updateSessionDuration' <-> writable path /sessionConfig/durationMins",
+      "tell": "Any GET whose body carries an _access / _permissions / capabilities sub-object. Also check whether the SAME object is writable via PATCH on the same URL - embedded permissions plus a JSON-Patch write handler on one resource is the pb0597 shape.",
+      "verify": "Cross-check the deny list against a separate permission oracle if one exists (pb0598) - they may DISAGREE. Trust whichever matches observed enforcement, and never cite an oracle as proof; only state settles it. An action that appears in NEITHER the allowed nor the denied list is unmodelled, which is a lead, not a finding (see pb0601).",
+      "source": "self:hunt32-2026-08-19"
+    },
+    {
+      "id": "pb0601",
+      "class": "recon",
+      "stack": "web,api",
+      "difficulty": "low",
+      "technique": "BEFORE BUILDING A REPORT ON AN INTENT CLAIM, CHECK THE VENDOR'S OWN ROLE DOCUMENTATION. A finding of the form 'role X should not be able to do Y' asserts intent. 'This control feels like it should be admin-only' is a hypothesis, not evidence. Vendors document what each built-in role may do, often naming the ONLY exclusions - and that sentence can kill or confirm the report in one line, before any prose is written.",
+      "payload": "docs role page: \"<mid-tier roles> can manage all top-level resources, but cannot\n                 manage your payment method or plans.\"\n=> the mid-tier role's ONLY documented exclusions are billing-related\n=> a mid-tier role writing some OTHER account-level setting is INTENDED, not a bug\nfeature page for the control in question: names no required role at all -> no support",
+      "tell": "You are about to write the words 'should not', 'is not intended to', or 'a low-privilege role must not' and cannot point to a source. Docs sites often expose machine-readable twins - append .md to a page URL, or fetch /llms.txt for the full index.",
+      "verify": "Weigh FOUR signals, not one: the role documentation, the feature's own docs, observed enforcement, and any permission oracle. If three say intended, drop it. If the docs are silent, say so in the report rather than asserting undocumented behaviour. Cost of skipping this: a speculative report to a programme that rejects low-effort submissions, filed while an earlier report is still in triage.",
+      "source": "self:hunt32-2026-08-19"
     }
   ]
 }
