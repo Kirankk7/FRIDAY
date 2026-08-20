@@ -8365,6 +8365,17 @@
       "tell": "Every 'leak' in the run is on an endpoint that returned 4xx, and the matched text sits inside an error message. Or: every cross-tenant read returns 200 with plausible data and the ids in the response are the CALLER'S, not the victim's.",
       "verify": "Diff the marker set against the request bodies and URLs before trusting any hit - no marker may appear in what you sent. Then confirm each hit contains a value that exists ONLY in the victim tenant. Also run the identical battery as EVERY role (pb0595): isolation is often re-implemented per role and the gap sits in the lowest one.",
       "source": "self:hunt32-2026-08-20"
+    },
+    {
+      "id": "pb0603",
+      "class": "recon",
+      "stack": "web",
+      "difficulty": "low",
+      "technique": "ONE BROWSER PROFILE PER IDENTITY, OR THE RIG MANUFACTURES ITS OWN CROSS-TENANT EVIDENCE. Incognito shares localStorage/sessionStorage/cookies across tabs of the SAME incognito window, so logging in as a second tenant there inherits the first tenant's client state. Analytics SDKs (Segment, Amplitude, Intercom) are the usual carriers: their group/account id is set at login and frequently NOT reset on account change, so tenant B's UI renders tenant A's identity from stale local state. It looks exactly like cross-tenant exposure and it is entirely self-inflicted. When something looks cross-tenant, first ask whether the SERVER ever said it.",
+      "payload": "tenant B session, but:\n  cookie ajs_group_id = <TENANT A's account id>   <- stale, set at A's login\n  cookie ajs_user_id  = <tenant B's member id>    <- correctly updated\n  localStorage ajs_group_properties.account_created_at = <A's creation date>\nUI switcher then renders A's org name inside B's session.",
+      "tell": "Another tenant's name/domain appears in the UI but never in any JSON response body. document.body.innerText no longer contains it on reload. Storage keys prefixed ajs_ / amplitude / __exp / intercom carry the other tenant's ids.",
+      "verify": "Grep localStorage, sessionStorage and document.cookie for the other tenant's identifiers before writing a single line of report. Then reproduce in a FULLY CLOSED and reopened incognito window (or a separate browser profile) where only the victim-side account has ever logged in. If it disappears, it was your own bleed. Corollary for setup: give every account its own profile from the start.",
+      "source": "self:hunt32-2026-08-20"
     }
   ]
 }
