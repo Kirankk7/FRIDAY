@@ -8376,6 +8376,17 @@
       "tell": "Another tenant's name/domain appears in the UI but never in any JSON response body. document.body.innerText no longer contains it on reload. Storage keys prefixed ajs_ / amplitude / __exp / intercom carry the other tenant's ids.",
       "verify": "Grep localStorage, sessionStorage and document.cookie for the other tenant's identifiers before writing a single line of report. Then reproduce in a FULLY CLOSED and reopened incognito window (or a separate browser profile) where only the victim-side account has ever logged in. If it disappears, it was your own bleed. Corollary for setup: give every account its own profile from the start.",
       "source": "self:hunt32-2026-08-20"
+    },
+    {
+      "id": "pb0604",
+      "class": "ssrf",
+      "stack": "web,api",
+      "difficulty": "low",
+      "technique": "SEPARATE THE THREE INDEPENDENT CONTROLS ON A SERVER-SIDE FETCHER, AND TEST EACH: (1) does save-time validation filter the DESTINATION, (2) does the fetcher actually FIRE, (3) does it FOLLOW REDIRECTS at delivery. They are implemented in different places and a target can pass one and fail another. The decisive save-time probe is a HOSTNAME that resolves to an internal address (nip.io, localtest.me): rejecting it proves the server RESOLVES and checks the resulting IP; accepting it proves the check is a string blocklist or absent entirely. Prove (2) with a listener you control before claiming anything about (3) - and read a duplicate delivery to the FIRST listener as retry-on-non-2xx, not as a redirect.",
+      "payload": "save-time battery (expect 201 vs 400):\n  http://169.254.169.254/  http://metadata.google.internal/  http://127.0.0.1/\n  http://[::1]/  http://10.0.0.1/  http://2130706433/  http://0177.0.0.1/\n  http://169.254.169.254.nip.io/   <- the decisive one\n  file:///etc/passwd   gopher://127.0.0.1:11211/   <- scheme/port allowlist probes\nfire test:   url -> your listener, trigger the event, read source IP + User-Agent\nredirect:    listener returns 302 -> SECOND listener; hit on #2 = follows redirects\n             repeat hits on #1 = non-2xx treated as failed delivery and retried",
+      "tell": "A URL/URI/endpoint field on any integration, webhook, destination, relay or import config. Error strings distinguish the layers: 'Invalid URL' = scheme check; 'Port ... not allowed' = port allowlist; silence on internal IPs = no destination filter at all.",
+      "verify": "Before writing a report, decide which of the three you actually proved. 'The field stored an internal address' proves storage, NOT fetch. Check whether the product exposes ANY oracle (delivery status field, delivery log, test/ping route) - if none exists, internal reach is unprovable through that surface and you must say so. Note the METHOD matters too: a POST-only fetcher cannot read IMDSv1 (needs GET) or IMDSv2 (needs PUT + token), so metadata retrieval may be structurally impossible no matter how open the filter is. Programmes that demand metadata proof will close it; ask them before filing.",
+      "source": "self:hunt32-2026-08-20"
     }
   ]
 }
