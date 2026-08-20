@@ -267,7 +267,10 @@ def build_test_plan(target: str, findings: list, pipeline_data: dict) -> list:
         from core import playbook as pb
         feat_q = " ".join(k for k, v in feats.items() if v)
         stack_q = (("" if db == "generic" else db) + " " + feat_q).strip()
-        hits = pb.recall(query=stack_q or "injection", stack=stack_q, top_k=6)
+        # No stack and no features => nothing to recall FOR. The old `or "injection"`
+        # fallback invented a query and surfaced stack-irrelevant techniques (a GraphQL
+        # RCE on a target with no GraphQL) into an otherwise empty plan.
+        hits = pb.recall(query=stack_q, stack=stack_q, top_k=6) if stack_q else []
         if hits:
             L += ["### From your playbook (recalled for this stack)"]
             for e in hits:
