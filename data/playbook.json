@@ -8453,6 +8453,61 @@
       "tell": "Any agent that consumes user-generated content on behalf of another identity: scanners, summarisers, triage bots, support copilots, explain-this-ticket features. Impact scales with the AGENT's session, not yours - so ask what the agent can reach, not what you can.",
       "verify": "Verdict on the ACTION, not the agent's reply: confirm the destructive or privileged operation actually happened (record deleted, mail sent, role granted). Test with your OWN second account as the victim identity - never a real user's. If the agent merely repeats the injected text back, that is content reflection, not injection. Log which framings were REFUSED as well as which worked; the refusals are what make the finding credible.",
       "source": "medium:2026-ingest"
+    },
+    {
+      "id": "pb0611",
+      "class": "recon",
+      "stack": "web,api,baas",
+      "difficulty": "low",
+      "technique": "IN A BaaS APP (Supabase / Firebase / Appwrite / Lovable-style), THE FRONTEND IS THE API DOCUMENTATION. The browser talks straight to the backend with a public anon key plus the user JWT, so every table, database function and serverless function name is present in the JS bundle. Grep the bundle for the client SDK's call sites and you get the complete backend inventory without guessing a single endpoint - the BaaS equivalent of a route-table sweep.",
+      "payload": "grep the bundle for the supabase-js / firebase call sites:\n  .from(\"        -> table names\n  .rpc(\"         -> database functions\n  functions.invoke(   -> Edge Function inventory\n  .storage.from(  -> bucket names\nnames are often minified into backtick template strings - grep the call, not the name.\nreal haul from one grep: admin-operations, backup-export, backup-import,\n  create-portal-session, zip-submission-files",
+      "tell": "Requests going directly to <project>.supabase.co / firebaseio.com / appwrite endpoints with an apikey or anon key in the header, and a JWT alongside it. If the browser holds the database client, the bundle holds the schema.",
+      "verify": "The bundle often also ships in-app API docs and the exact invoke body shape - read the contract before attacking. Then treat EVERY client-supplied field as a question: what does the server do with this, and does it check it? Confirm each discovered name resolves (a call returning a schema or auth error proves existence) before building on it.",
+      "source": "medium:2026-ingest"
+    },
+    {
+      "id": "pb0612",
+      "class": "bola",
+      "stack": "web,api,baas",
+      "difficulty": "medium",
+      "technique": "A PRIVILEGED SERVERLESS FUNCTION IS THE WAY AROUND ROW-LEVEL SECURITY. In BaaS apps tenancy is enforced by RLS on direct client calls - but Edge/Cloud Functions run with the SERVICE ROLE, which bypasses RLS by design. Any such function that accepts a client-supplied identifier as a storage path or row key writes wherever you point it. The direct write is correctly denied; the same write through the function succeeds. Look for a path component or tenant id in the function body that the function never validates against your membership.",
+      "payload": "functions.invoke('zip-submission-files', { body: {\n   files:[{url,name}], zipName, submissionId }})\n\n  files[].url   -> the server FETCHES it        (full-response SSRF: the fetched\n                                                  body is handed back inside the zip)\n  submissionId  -> becomes the OUTPUT PATH      task-submissions/<submissionId>/<zipName>\n\nset submissionId to a FOREIGN workspace id -> success:true, file written under\nthat tenant, because the function wrote with the service role.",
+      "tell": "Any serverless function that writes output somewhere, imports/exports, generates a report, or zips files. The tell is a path or id in the request body that the UI never lets you change. Function names like backup-import, admin-operations, *-export are the first to read.",
+      "verify": "See pb0613 - prove the boundary with the app's own authorisation answers. Also separate the two bugs: the URL fetch (SSRF) and the path write (cross-tenant) are independent findings with independent controls. For the SSRF half, note a locked-down runtime (Deno) may block link-local and internal hosts while still fetching arbitrary EXTERNAL URLs and returning the full body - that is still a real full-response SSRF, and it is more provable than a blind one.",
+      "source": "medium:2026-ingest"
+    },
+    {
+      "id": "pb0613",
+      "class": "bola",
+      "stack": "web,api",
+      "difficulty": "low",
+      "technique": "PROVE A CROSS-TENANT WRITE FROM A SINGLE SESSION BY MAKING THE APP'S OWN AUTHORISATION TESTIFY THAT YOU ARE AN OUTSIDER. You do not always need a second account. Ask the server, in order, to state your identity, your memberships, and your access to the victim tenant - all of which it will answer honestly and negatively - then show the privileged path writing there anyway, and finish by showing the DIRECT write correctly refused. The contradiction between 'the server says I have no relationship to A' and 'the server wrote my content into A' is the finding, and every line of it comes from the target itself.",
+      "payload": "[1] who am I?             -> user in WORKSPACE_B only\n[2] my workspaces         -> [WORKSPACE_B]                  victim ABSENT\n[3] my membership in A    -> []                             not a member\n[3b] can I read A?        -> []                             RLS denies\n[4] write to A via the fn -> success, path A/poc.zip        IT WROTE ANYWAY\n[5] direct upload to A    -> 400 row-level security policy   boundary is REAL\n\n[2][3][3b] are the app's own authz answers. [5] proves the control exists.\n[4] is the crossing.",
+      "tell": "Use whenever a second tenant is expensive, slow, or forbidden to create - and as a supplement even when you have one, because it removes any doubt that you simply mixed up sessions.",
+      "verify": "Step [5] is the one people skip and it is the most important: without a correctly-refused direct write you have not shown the boundary exists at all, only that a function wrote a file. Capture all five in one console run so the timestamps and session are visibly identical. Complements, does not replace, marker discipline (pb0602) when a second tenant IS available.",
+      "source": "medium:2026-ingest"
+    },
+    {
+      "id": "pb0614",
+      "class": "auth-bypass",
+      "stack": "web,saml,sso",
+      "difficulty": "medium",
+      "technique": "SAML: THE SIGNATURE IS OFTEN VERIFIED ONLY WHEN IT IS PRESENT, AND THE ASSERTED IDENTITY IS OFTEN PARSED WITH XML-COMMENT TRUNCATION. Two independent, long-lived flaw families in SAML service providers. (1) Strip the <Signature> element entirely, or empty its value - many SPs treat an absent signature as nothing to verify rather than as a failure. (2) Insert an XML comment inside NameID: several XML parsers return only the text before the comment, so the SP reads a different identity from the one the IdP signed.",
+      "payload": "(1) remove the whole <ds:Signature> block, or blank <SignatureValue>, then replay:\n    <NameID>victim-username</NameID>      -> logged in as victim\n\n(2) comment truncation - the signature stays VALID over the full string:\n    <NameID>victim-id-here<!---->.attacker-suffix</NameID>\n    parser returns 'victim-id-here'  (et.fromstring(...).text stops at the comment)\n    CVE-2017-11427/11428/11429/11430 (python-saml, ruby-saml, saml2-js,\n    omniauth-saml), CVE-2018-0489 (Shibboleth), CVE-2018-7340 (Duo NG)",
+      "tell": "A SAMLResponse parameter in the login flow (base64 XML). Burp's SAML Raider decodes and re-signs it. Also test: swapping only the NameID with the signature intact, replaying another tenant's assertion, and an expired NotOnOrAfter.",
+      "verify": "Use your OWN two accounts as attacker and victim - never a real user's identity. Verdict on reaching an authenticated session AS the other identity (fetch that account's own profile endpoint), not on the login page redirecting. Note the comment attack does NOT work where the SP re-canonicalises before comparison, and 2FA on the target account blocks it end-to-end - state that in the report rather than letting triage find it.",
+      "source": "medium:2026-ingest"
+    },
+    {
+      "id": "pb0615",
+      "class": "auth-bypass",
+      "stack": "web,api",
+      "difficulty": "low",
+      "technique": "CHECK WHETHER A ONE-TIME CODE IS BOUND TO THE ACCOUNT IT WAS ISSUED FOR. The high-value member of the 2FA/OTP checklist is missing integrity binding: a code legitimately issued to YOUR account is accepted when submitted against ANOTHER account, because the server validates that the code is valid-and-unused but never that it belongs to this user. Related same-family checks: code reuse after success, the code echoed in the trigger response, and 2FA silently disabled by a password or email change.",
+      "payload": "1. trigger 2FA on your own account -> receive code 481920\n2. start login as the victim, reach the 2FA step\n3. submit 481920 against the VICTIM's session   -> accepted\n\nsame family:\n  reuse the same code twice                       -> should fail, often does not\n  read the trigger response body / JS             -> code sometimes returned\n  change password or email                        -> is 2FA silently disabled?\n  backup-code flow                                -> often skips the rate limit",
+      "tell": "A 2FA step whose request carries only the code and a session/flow id, with no per-user binding visible. If the code field is validated by an endpoint that does not also take the user identifier, the binding is probably server-side state - test it rather than assume.",
+      "verify": "CAUTION - the neighbouring checklist item, flipping success:false to true or a 4xx to 200 in the RESPONSE, proves nothing on its own: it changes only what your browser renders. Confirm the SESSION is genuinely authenticated afterwards by calling an authenticated API endpoint and getting the victim's data back. A great many invalid 2FA and payment-bypass reports are exactly this mistake. Use two accounts you own, and never brute-force the code.",
+      "source": "medium:2026-ingest"
     }
   ]
 }
