@@ -8354,6 +8354,17 @@
       "tell": "You are about to write the words 'should not', 'is not intended to', or 'a low-privilege role must not' and cannot point to a source. Docs sites often expose machine-readable twins - append .md to a page URL, or fetch /llms.txt for the full index.",
       "verify": "Weigh FOUR signals, not one: the role documentation, the feature's own docs, observed enforcement, and any permission oracle. If three say intended, drop it. If the docs are silent, say so in the report rather than asserting undocumented behaviour. Cost of skipping this: a speculative report to a programme that rejects low-effort submissions, filed while an earlier report is still in triage.",
       "source": "self:hunt32-2026-08-19"
+    },
+    {
+      "id": "pb0602",
+      "class": "bola",
+      "stack": "web,api",
+      "difficulty": "low",
+      "technique": "A CROSS-TENANT LEAK DETECTOR MUST EXCLUDE EVERY VALUE PRESENT IN THE REQUEST. Error bodies echo the identifier you sent ('Unknown project key <yours>'), so a grep for that identifier fires on your own input and reads as a breach. Match only on values the victim tenant HOLDS and the server would have to volunteer: the object's display NAME, its secret, its internal ids. Second trap in the same setup: when both tenants ship an identically-keyed default object (project 'default', env 'production', workspace 'personal'), a path built from that key resolves to the CALLER'S OWN object and returns 200 forever -- which reads as enforced no matter what the boundary does. Create a uniquely-keyed object in the victim tenant first.",
+      "payload": "WRONG marker set: /bproj7731|BMARKER-7731/    <- bproj7731 is what we SENT\n  404 {\"message\":\"Unknown project key bproj7731\"}  -> matches -> fake leak\nRIGHT marker set: /BMARKER-7731-FLAG|sdk-a14a32e3|6a86b94f6e987d0aaa817ca/\n  victim's NAME, victim's SECRET, victim's OBJECT IDS -- none appear in our request\n\nWRONG target:  GET /api/v2/projects/default        (exists in BOTH tenants -> own data)\nRIGHT target:  GET /api/v2/projects/<victim-only-key>",
+      "tell": "Every 'leak' in the run is on an endpoint that returned 4xx, and the matched text sits inside an error message. Or: every cross-tenant read returns 200 with plausible data and the ids in the response are the CALLER'S, not the victim's.",
+      "verify": "Diff the marker set against the request bodies and URLs before trusting any hit - no marker may appear in what you sent. Then confirm each hit contains a value that exists ONLY in the victim tenant. Also run the identical battery as EVERY role (pb0595): isolation is often re-implemented per role and the gap sits in the lowest one.",
+      "source": "self:hunt32-2026-08-20"
     }
   ]
 }
