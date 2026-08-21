@@ -8651,6 +8651,17 @@
       "tell": "An upload feature whose stored files are served from the APPLICATION's hostname rather than a separate sandbox domain or a signed CDN URL. Serving user files from the same origin as the session cookie is the precondition; a dedicated usercontent domain kills the whole class.",
       "verify": "Three things decide it, and all three are in the response headers of the STORED file: (1) Content-Type must be renderable (text/html, image/svg+xml) rather than application/octet-stream, (2) there must be NO Content-Disposition: attachment, and (3) the host must be the app's own origin, not a separate sandbox domain. If any one fails, the file is inert and the class closes - which is the usual outcome on a mature target, and worth recording as ENFORCED rather than untested. Use a marker that proves execution; never exfiltrate a real session on a live programme.",
       "source": "h1+medium:2026-ingest-c"
+    },
+    {
+      "id": "pb0629",
+      "class": "recon",
+      "stack": "web,api",
+      "difficulty": "low",
+      "technique": "WHEN NO SUCCESS PATH EXISTS, ERROR DIFFERENTIATION IS THE CONTROL. Sometimes you cannot produce a working baseline - the feature needs a resource you do not have, a plan you cannot buy, or a second object you cannot create. A plain refusal then proves nothing, because you cannot tell 'authorisation refused' from 'this never works'. The fix is to send the SAME request to the SAME endpoint as the SAME caller, varying ONLY the ownership of the identifier, and compare the ERROR STAGES. Two different messages mean two different checks fired, which locates where the request died and proves the ownership check exists and ran.",
+      "payload": "same endpoint, same session, one variable changed:\n\n  body names MY resource   -> 403 \"Service integration X is not available\n                                     for this service\"      <- CAPABILITY stage\n  body names THEIR resource-> 403 \"Not a project member\"    <- OWNERSHIP stage\n\nthe capability error is only reachable AFTER ownership passes,\nso the pair proves: ownership check ran, passed for mine, refused for theirs.\n\nsame trick with 404 vs 403:\n  404 \"organization_not_found\"  -> existence not even confirmed\n  403 \"Not a project member\"    -> the object exists, membership refused\n  (that asymmetry is itself a minor existence oracle - note it, weigh it)",
+      "tell": "You are about to write 'refused, therefore enforced' with no passing control anywhere in the run. Ask: could this endpoint refuse this way for a reason unrelated to authorisation? If yes, you need either a success baseline or an error-stage pair.",
+      "verify": "The two requests must differ in EXACTLY the ownership of one identifier - same verb, same body shape, same session, same everything else. Record both error strings verbatim; the argument IS the pair, and a summary that keeps only 'both 403' destroys it. Weakness to state honestly: this proves an ownership check ran, NOT that the feature would otherwise have worked - so it supports an ENFORCED verdict, never a bug claim.",
+      "source": "self:hunt33-2026-08-21"
     }
   ]
 }
