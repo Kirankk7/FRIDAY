@@ -8662,6 +8662,17 @@
       "tell": "You are about to write 'refused, therefore enforced' with no passing control anywhere in the run. Ask: could this endpoint refuse this way for a reason unrelated to authorisation? If yes, you need either a success baseline or an error-stage pair.",
       "verify": "The two requests must differ in EXACTLY the ownership of one identifier - same verb, same body shape, same session, same everything else. Record both error strings verbatim; the argument IS the pair, and a summary that keeps only 'both 403' destroys it. Weakness to state honestly: this proves an ownership check ran, NOT that the feature would otherwise have worked - so it supports an ENFORCED verdict, never a bug claim.",
       "source": "self:hunt33-2026-08-21"
+    },
+    {
+      "id": "pb0630",
+      "class": "mass-assignment",
+      "stack": "web,api",
+      "difficulty": "low",
+      "technique": "PROBE MASS ASSIGNMENT WITH FIELDS THAT ARE INERT IF ACCEPTED. The test asks whether the server accepts a field you should not control - it does NOT require that field to be consequential. Sending a REAL field with a REAL valid value means a successful probe actually performs the action: upgrading a plan, changing a tier, disabling protection, moving billing. Use invented field names (_internal_admin, is_staff, tenant) and out-of-range markers; they answer the same question and cost nothing when accepted. Reserve real fields for the moment you already know the schema is loose AND the value you send is harmless.",
+      "payload": "WRONG - accepted means you just bought something:\n  PUT /service/{s}  {\"plan\":\"business-4\"}   -> 200 \"updated\", service REBALANCING\n                                              onto a paid plan, burning credits\n\nRIGHT - same question, zero consequence:\n  PUT /service/{s}  {\"_internal_admin\":true,\"tenant\":\"other\",\"is_staff\":1}\n  -> 400 \"Additional properties are not allowed ('_internal_admin','tenant'\n          were unexpected)\"     = strict schema, ENFORCED, nothing changed\n\nif the schema IS loose, escalate deliberately with a harmless real field first\n(a description, a tag) before touching anything that costs money or access.",
+      "tell": "You are about to include a field whose accepted value provisions, bills, deletes, or grants. Ask before sending: if this SUCCEEDS, what have I just done to the account? On a trial or free tier, plan/tier/quota fields are the expensive ones.",
+      "verify": "Read the object back and compare the WHOLE thing, not the status - this is still verdict-on-state. If you did fire a consequential field, revert it immediately and record both the change and the revert in the notes; an unexplained paid-plan upgrade on a research account looks like abuse to the programme even when it was an accident. Same family as storing inert markers rather than live payloads.",
+      "source": "self:hunt33-2026-08-21"
     }
   ]
 }
