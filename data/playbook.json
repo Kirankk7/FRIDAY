@@ -9000,6 +9000,48 @@
       "validated": true,
       "verify": false,
       "added": "2026-08-25"
+    },
+    {
+      "id": "pb0658",
+      "class": "recon",
+      "stack": "any/spa",
+      "difficulty": "",
+      "technique": "a route table built from HAR ENTRIES is what the browser called; the BUNDLE BODIES are what exists. Grep every JS asset in the capture for quoted path literals and diff against the observed set - the gap is the unexercised surface. Then establish an ABSENT baseline (a path you invented) before judging any 404",
+      "payload": "regex the js blob for quoted /api/ /oauth/ /oidc/ literals + template-string variants, normalise ${...} and /:param to {v}, subtract the observed paths, then GET and POST each survivor alongside an invented control path",
+      "tell": "an empty-body 404 that MATCHES the invented control = route absent (usually a shared vendor bundle referencing another deployment). A 404 or 400 with a DIFFERENT body = live route, often POST-only or served by a different router - that error vocabulary is the tell. GET 404 alone never retires an endpoint",
+      "source": "proven",
+      "ref": "field-proven 2026-08-25",
+      "validated": true,
+      "verify": false,
+      "added": "2026-08-25"
+    },
+    {
+      "id": "pb0659",
+      "class": "recon",
+      "stack": "any/json-api",
+      "difficulty": "",
+      "technique": "when a schema error is INVARIANT across every payload shape - including a correct one - the validator's field-path renderer is broken, not your input. Stop varying the value and brute the WRAPPER KEY instead; the message stays identical until the key is right, then the status changes",
+      "payload": "send {}, [], [{}], [{a:1}] - if all return the same message, try {modules:[...]}, {items:[...]}, {packages:[...]}, {dependencies:[...]} until one returns a different status",
+      "tell": "a path rendered as '.function join() { [native code] }' means the server did path.join without calling it. Other validation branches on the SAME endpoint may render the path correctly ('.modules'), which confirms the endpoint is healthy and only one branch is broken - do not write the endpoint off as non-functional the way a genuinely broken one should be",
+      "source": "proven",
+      "ref": "field-proven 2026-08-25",
+      "validated": true,
+      "verify": false,
+      "added": "2026-08-25"
+    },
+    {
+      "id": "pb0660",
+      "class": "methodology",
+      "stack": "any",
+      "difficulty": "",
+      "technique": "a strict format gate on ONE field can close a whole vulnerability class structurally - check the gate before building the exploit rig. A package installer that requires an exact pinned semver cannot accept npm:, https://tarball, git+https:// or file: syntax, so the fetch-from-attacker-host vector dies at parse time and no listener probe is needed",
+      "payload": "probe the format gate first: send the exact valid form (control), then each alternative syntax the underlying tool would normally accept, and read which layer rejects",
+      "tell": "if every alternate syntax fails with the SAME format error as a nonsense value, the gate is structural rather than a blocklist. Say so plainly and do not run the outbound probe - an unrun probe on a closed vector is a clean verdict, not a coverage gap",
+      "source": "proven",
+      "ref": "field-proven 2026-08-25",
+      "validated": true,
+      "verify": false,
+      "added": "2026-08-25"
     }
   ]
 }
