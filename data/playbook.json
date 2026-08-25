@@ -8972,6 +8972,34 @@
       "validated": true,
       "verify": false,
       "added": "2026-08-25"
+    },
+    {
+      "id": "pb0656",
+      "class": "info-disclosure",
+      "stack": "oauth/oidc",
+      "difficulty": "",
+      "technique": "the token endpoint's audience errors sort into TWO vocabularies - 'service not enabled within domain' (no such resource server here) versus 'client is not authorized to access resource server' (exists, not granted). Establish both buckets with known inputs, then check which bucket a FOREIGN tenant's audience falls into",
+      "payload": "client_credentials with audience = own RS (200) | nonexistent RS in own tenant | a foreign tenant's /api/v2/ | a real-but-ungranted RS such as /userinfo",
+      "tell": "foreign tenant landing in the does-not-exist bucket = no cross-tenant existence oracle. Landing in the exists-but-denied bucket = you can enumerate other tenants' resource servers. The real-but-ungranted probe is what proves the two buckets differ at all - without it, matching strings prove nothing",
+      "source": "proven",
+      "ref": "field-proven 2026-08-25",
+      "validated": true,
+      "verify": false,
+      "added": "2026-08-25"
+    },
+    {
+      "id": "pb0657",
+      "class": "privesc",
+      "stack": "oauth/oidc",
+      "difficulty": "",
+      "technique": "scope escalation on client_credentials: grant the client exactly ONE scope, then request supersets. Decode the returned JWT's own scope claim - never trust the response envelope. Also request NO scope: a correct server returns the granted set, a broken one returns everything the resource server defines",
+      "payload": "grant scope=[read:clients], then request: read:clients (control) | omitted | read+update+create+delete | read:users read:logs | read:signing_keys read:client_keys",
+      "tell": "a 403 that ENUMERATES the ungranted scopes is an ACL oracle - the tenant's whole scope model is enumerable one request at a time. PRE-FLIGHT: the client must have the grant_type enabled or every row is access_denied for a reason that has nothing to do with scope, and assert the client_secret length before sending - a secret clipped by one character produces the same 401 as a real denial",
+      "source": "proven",
+      "ref": "field-proven 2026-08-25",
+      "validated": true,
+      "verify": false,
+      "added": "2026-08-25"
     }
   ]
 }
