@@ -8902,6 +8902,20 @@
       "validated": true,
       "verify": false,
       "added": "2026-08-25"
+    },
+    {
+      "id": "pb0651",
+      "class": "ssrf",
+      "stack": "any/webhook-delivery",
+      "difficulty": "",
+      "technique": "a create-time URL validator cannot protect a fetcher that follows redirects - store an ordinary public HTTPS endpoint that passes every check, then 3xx it to the real destination at delivery time. Test BOTH 302 and 307: Go's http.Client downgrades 302 to GET but preserves POST and body on 307, so 307 lands a full attacker-shaped POST on the internal host",
+      "payload": "listener /r302 -> 302 Location: /landed | /r307 -> 307 Location: /landed | /r302-loop -> 302 Location: http://127.0.0.1/x  then create a stream per path, fire the vendor test, watch YOUR log for the second hit",
+      "tell": "two hits ~40ms apart in your own log, second one on the redirect target = it follows. Method on hit 2 tells you which: GET after 302, POST after 307. A redirect target with a different SCHEME also probes whether an https-only rule survives the hop. Target-specific and NOT guessable - one target followed, another treated every 3xx as an unstructured delivery failure",
+      "source": "proven",
+      "ref": "field-proven 2026-08-25",
+      "validated": true,
+      "verify": false,
+      "added": "2026-08-25"
     }
   ]
 }
