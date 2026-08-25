@@ -9070,6 +9070,48 @@
       "validated": true,
       "verify": false,
       "added": "2026-08-25"
+    },
+    {
+      "id": "pb0663",
+      "class": "methodology",
+      "stack": "any",
+      "difficulty": "",
+      "technique": "DUPE-CHECK BEFORE FILING, not after. HackerOne's public GraphQL hacktivity endpoint is unauthenticated - query disclosed reports for the programme handle filtered by a keyword from your finding, and read the titles before you write a word",
+      "payload": "POST https://hackerone.com/graphql  {\"query\":\"{hacktivity_items(first:10,order_by:{field:popular,direction:DESC},where:{team:{handle:{_eq:\\\"<handle>\\\"}},report:{title:{_icontains:\\\"<keyword>\\\"}}}){nodes{... on HacktivityDocument{report{title severity_rating disclosed_at url state}}}}}\"}",
+      "tell": "public disclosed reports are only the visible tail - a hit is decisive (do not file), a miss proves nothing because private duplicates are invisible. Use it to KILL, never to confirm. Pair with discovery-rate reasoning: the most-tested input on a SaaS dupes regardless of what the search returns",
+      "source": "mined-repo",
+      "ref": "agentic-bug-hunter validator, 2026-08-25",
+      "validated": false,
+      "verify": true,
+      "added": "2026-08-25"
+    },
+    {
+      "id": "pb0664",
+      "class": "methodology",
+      "stack": "any",
+      "difficulty": "",
+      "technique": "gate an access-control finding on THREE identity proofs before it counts: session A read session B's data (not your own), reproduced on a FRESH session (not the existing logged-in cookie), and a confirmed anonymous-vs-authenticated delta. Any one missing = the finding is not proven",
+      "payload": "assert own_id != foreign_id | replay in a clean profile with a new login | run the same request unauthenticated and confirm it is blocked",
+      "tell": "the most common cause of an IDOR/ATO being closed N/A is the tester only ever read their own data. Field-proven the hard way: a sweep returned 200 on every endpoint because the collector had run in the same tenant, so own and foreign ids were the same objects",
+      "source": "mined-repo",
+      "ref": "agentic-bug-hunter validator, 2026-08-25",
+      "validated": true,
+      "verify": false,
+      "added": "2026-08-25"
+    },
+    {
+      "id": "pb0665",
+      "class": "methodology",
+      "stack": "any",
+      "difficulty": "",
+      "technique": "make 'no proof' a STRUCTURAL fail, not a judgement call: before filing, paste the exact curl that reproduces the finding. Blank or 'skip' is an automatic reject. Separately, treat 'reached the endpoint but never saw victim data' as a DOWNGRADE rather than a kill",
+      "payload": "require a literal reproducing command as a field in your own pre-filing checklist; if you cannot write it, you do not have a finding yet",
+      "tell": "a yes/no 'do you have proof' question always passes - a required verbatim command does not. The downgrade branch is what separates a report filed at an honest tier from one closed informative for describing impact instead of showing it",
+      "source": "mined-repo",
+      "ref": "agentic-bug-hunter validator, 2026-08-25",
+      "validated": true,
+      "verify": false,
+      "added": "2026-08-25"
     }
   ]
 }
