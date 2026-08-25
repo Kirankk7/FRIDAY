@@ -8952,7 +8952,7 @@
       "difficulty": "",
       "technique": "build the PoC so each half of the chain is logged by a DIFFERENT party - your listener records their agent arriving and the response you handed it, their own delivery log records what that response made them do. The vendor can then confirm the finding from their own telemetry without trusting any artifact you produced",
       "payload": "listener log: inbound request + source IP + User-Agent + the 3xx you returned || vendor log: the resulting connection attempt and its error. Quote both timestamps so the two halves pair",
-      "tell": "a report resting only on researcher screenshots invites 'cannot reproduce'; a report where the vendor holds half the evidence does not. Also harvest the egress source IPs - more than one usually appears, showing a NAT pool, and each is a correlation handle triage can grep for",
+      "tell": "a report resting only on researcher screenshots invites 'cannot reproduce'; a report where the vendor holds half the evidence does not. Also harvest the egress source IPs - more than one usually appears, showing a NAT pool, and each is a correlation handle triage can grep for GOLD: the agent's request usually carries the VENDOR'S OWN correlation id (x-request-id / x-amzn-trace-id / traceparent) - capture it off your listener and quote it as plain text in the report. Triage can grep their internal logs for that exact id and land on the precise event, verifying in seconds without reproducing anything. Quote the timestamp and egress IP alongside it.",
       "source": "proven",
       "ref": "field-proven 2026-08-25",
       "validated": true,
