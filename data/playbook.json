@@ -8958,6 +8958,20 @@
       "validated": true,
       "verify": false,
       "added": "2026-08-25"
+    },
+    {
+      "id": "pb0655",
+      "class": "methodology",
+      "stack": "any/multi-tenant",
+      "difficulty": "",
+      "technique": "before any cross-tenant sweep, PRINT THE FOREIGN IDS NEXT TO THE OWN IDS AND ASSERT THEY DIFFER. If the collector ran in the wrong tenant they are identical, every endpoint returns 200, and the run reads as a total cross-tenant breach when it is an object compared with itself",
+      "payload": "assert own[k] !== foreign[k] for every object type, and abort the batch if any pair matches. Derive the tenant from a value the SERVER echoes (resource-server identifier, object.tenant field, the dashboard URL path), never from a settings blob you hope contains a name",
+      "tell": "the tell is in the response body: every object carries the SAME tenant field, and own/foreign bodies are byte-identical. A second account that is a low-ROLE MEMBER of your own tenant is not a second TENANT - role 403s on users/logs/streams look like a tenant boundary and are not one",
+      "source": "proven",
+      "ref": "field-proven 2026-08-25",
+      "validated": true,
+      "verify": false,
+      "added": "2026-08-25"
     }
   ]
 }
