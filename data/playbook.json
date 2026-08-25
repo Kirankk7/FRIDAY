@@ -8944,6 +8944,20 @@
       "validated": true,
       "verify": false,
       "added": "2026-08-25"
+    },
+    {
+      "id": "pb0654",
+      "class": "methodology",
+      "stack": "any",
+      "difficulty": "",
+      "technique": "build the PoC so each half of the chain is logged by a DIFFERENT party - your listener records their agent arriving and the response you handed it, their own delivery log records what that response made them do. The vendor can then confirm the finding from their own telemetry without trusting any artifact you produced",
+      "payload": "listener log: inbound request + source IP + User-Agent + the 3xx you returned || vendor log: the resulting connection attempt and its error. Quote both timestamps so the two halves pair",
+      "tell": "a report resting only on researcher screenshots invites 'cannot reproduce'; a report where the vendor holds half the evidence does not. Also harvest the egress source IPs - more than one usually appears, showing a NAT pool, and each is a correlation handle triage can grep for",
+      "source": "proven",
+      "ref": "field-proven 2026-08-25",
+      "validated": true,
+      "verify": false,
+      "added": "2026-08-25"
     }
   ]
 }
