@@ -9042,6 +9042,20 @@
       "validated": true,
       "verify": false,
       "added": "2026-08-25"
+    },
+    {
+      "id": "pb0661",
+      "class": "bola",
+      "stack": "any",
+      "difficulty": "",
+      "technique": "before probing neighbours of an object id, DECOMPOSE the id. If it encodes several correlated fields (timestamp + counter + shard), incrementing one segment while holding the others produces an id that exists for NOBODY - the 404s are malformedness, not authorization, and reading them as ENFORCED is a false verdict",
+      "payload": "list several of your own ids and diff them column by column to find which segments co-vary. If two segments move together per record, you cannot synthesise a valid foreign id at all - the only source is sampling a tenant you control",
+      "tell": "the giveaway is that the id one BELOW your own also 404s even though that record demonstrably exists in your own listing - proof the segments must agree. When synthesis is impossible, the honest verdict is UNTESTED-blocked, never enforced",
+      "source": "proven",
+      "ref": "field-proven 2026-08-25",
+      "validated": true,
+      "verify": false,
+      "added": "2026-08-25"
     }
   ]
 }
