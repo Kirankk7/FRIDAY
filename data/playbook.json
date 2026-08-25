@@ -8916,6 +8916,34 @@
       "validated": true,
       "verify": false,
       "added": "2026-08-25"
+    },
+    {
+      "id": "pb0652",
+      "class": "ssrf",
+      "stack": "any/webhook-delivery",
+      "difficulty": "",
+      "technique": "a timeout argues, an RST does not - pick a blind-SSRF target that will ACTIVELY REFUSE. Loopback on a closed port returns 'connect: connection refused' in tens of ms, which is a completed TCP round trip (SYN out, RST back) and proves the fetcher reached the network layer. A link-local timeout only proves a packet left",
+      "payload": "aim at 127.0.0.1:80 / [::1]:443 via BOTH routes - a DNS hostname (localtest.me) and a 3xx redirect - then compare attempts[].error_message and duration against an NXDOMAIN control",
+      "tell": "four separable outcomes: NXDOMAIN ~6ms 'no such host' | firewalled 5000ms 'context deadline exceeded' | REFUSED ~33ms 'connect: connection refused' | delivered 200. Two independent paths landing on refused = no network-level destination restriction. Still no response body read, so report the missing control, never 'accessed an internal service'",
+      "source": "proven",
+      "ref": "field-proven 2026-08-25",
+      "validated": true,
+      "verify": false,
+      "added": "2026-08-25"
+    },
+    {
+      "id": "pb0653",
+      "class": "ssrf",
+      "stack": "any/webhook-delivery",
+      "difficulty": "",
+      "technique": "a scheme constraint enforced at CREATE dies at the first redirect - if the schema rejects http:// but the fetcher follows 3xx, point the redirect at http://127.0.0.1:80 and the plaintext hop happens anyway. Same hop also defeats port constraints",
+      "payload": "create with https:// (passes), redirect to http://127.0.0.1/x, read the attempt error for ':80'",
+      "tell": "error names 'dial tcp 127.0.0.1:80' after a create that only accepted https => scheme+port validated once, at the wrong layer. Also watch the resolved family: a hostname can return AAAA and Go will prefer [::1], so an IPv4-literal blocklist never fires",
+      "source": "proven",
+      "ref": "field-proven 2026-08-25",
+      "validated": true,
+      "verify": false,
+      "added": "2026-08-25"
     }
   ]
 }
