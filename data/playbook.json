@@ -9112,6 +9112,62 @@
       "validated": true,
       "verify": false,
       "added": "2026-08-25"
+    },
+    {
+      "id": "pb0666",
+      "class": "methodology",
+      "stack": "any",
+      "difficulty": "",
+      "technique": "HUNT THE FEATURE, NOT THE ENDPOINT. Before probing, reconstruct why the developer built it this way: what was the simplest implementation, what shortcut would a tired dev take, where is auth actually checked (controller / middleware / DB layer), and what happens if you call endpoint B without going through endpoint A first. Then map the trust boundary - where does the app STOP trusting input, and where does it ASSUME input was already validated upstream",
+      "payload": "per feature, not per URL: list every endpoint serving it, then test the INTERACTION between them. Pair with a business-logic vocabulary to name the hypothesis: price / quantity / workflow-state / coupon-redemption / referral / quota / entitlement / refund",
+      "tell": "this is the generator our invariant lens lacks - the lens asks what a field assumes, this asks WHY the code assumes it. The named vocabulary matters because a hypothesis phrased as 'check-and-consume must be atomic' or 'a merchant-fixed property must stay immutable' points at a technique, while 'try mass assignment' points at nothing",
+      "source": "mined-repo",
+      "ref": "agentic-bug-hunter SKILL.md + deep-eye taxonomy, 2026-08-25",
+      "validated": false,
+      "verify": true,
+      "added": "2026-08-25"
+    },
+    {
+      "id": "pb0667",
+      "class": "methodology",
+      "stack": "any",
+      "difficulty": "",
+      "technique": "INVARIANT NEIGHBOURHOOD SWEEP - the moment one trust assumption fails, the same mistake is most likely in code written by the same hand: sibling endpoints in the same controller, the other verbs on the same path, the same backend helper, the same state machine, the same field owner. Confirm A, map siblings, test siblings, and only claim a chain that is actually proven",
+      "payload": "found IDOR on GET -> try PUT/DELETE on the same path | found an auth bypass -> every sibling endpoint in that controller | found stored XSS -> does an admin view render it | found SSRF -> what does the same fetcher reach elsewhere",
+      "tell": "STOP RULE, and it is the part most people skip: if 3 sibling candidates come back clean the cluster is dry - move on rather than grinding. This is the highest-value move immediately AFTER a confirmed finding, which is exactly when attention usually shifts to report writing",
+      "source": "mined-repo",
+      "ref": "agentic-bug-hunter chain-builder, 2026-08-25",
+      "validated": false,
+      "verify": true,
+      "added": "2026-08-25"
+    },
+    {
+      "id": "pb0668",
+      "class": "methodology",
+      "stack": "any",
+      "difficulty": "",
+      "technique": "TURN EVERY KILLED FALSE POSITIVE INTO A REGRESSION FIXTURE. Each time a control kills a candidate, write the shape down as a named case; any future change to method or tooling must still kill all of them",
+      "payload": "fixture set to maintain: own-object-only (compared an id against itself) | DNS-callback-only | self-XSS | cosmetic 200 with no state change | publishable-by-design public key | stored-but-encoded-at-render | no-op write that never triggers authz",
+      "tell": "an FP that is only remembered gets re-made - twice in one session I re-shipped an identity guard I had already flagged as weak. A named fixture list is checkable; intention is not",
+      "source": "mined-repo",
+      "ref": "agentic-bug-hunter tests/test_false_positives.py, 2026-08-25",
+      "validated": true,
+      "verify": false,
+      "added": "2026-08-25"
+    },
+    {
+      "id": "pb0669",
+      "class": "recon",
+      "stack": "any",
+      "difficulty": "",
+      "technique": "DIFFS FIND BUGS - two implementations of one contract rarely enforce it identically. Compare mobile API vs web API, v1 vs v2 of the same route, free-tier vs paid response, documented API vs the console/dashboard API, pre- vs post-upgrade behaviour",
+      "payload": "same logical operation through both paths, diff the accepted fields and the enforced checks. A fix applied to /v2/ and missed on /v1/ is the classic; a dashboard API accepting fields the public docs never mention is the same shape",
+      "tell": "differential behaviour exposes a broken contract without needing to guess the invariant - one side shows you what the rule is SUPPOSED to be. Field-proven: a console API accepted a credential field that the documented API only exposes through a dedicated rotate endpoint",
+      "source": "mined-repo",
+      "ref": "agentic-bug-hunter SKILL.md, 2026-08-25",
+      "validated": false,
+      "verify": true,
+      "added": "2026-08-25"
     }
   ]
 }
