@@ -8860,6 +8860,48 @@
       "tell": "Fires on any brief containing a stop-at-discovery instruction: credential reporting, 'do not pivot', 'stop and report if you reach a server', 'do not access customer data'. Also fires whenever you are about to write 'I am not asserting what this grants' - that sentence is honest, but a triager cannot distinguish honesty-about-limits from absence-of-a-proof-of-concept.",
       "verify": "Judge your own report the way a triager will: strip out every sentence about what you did NOT do, and ask whether what remains demonstrates something. If the remainder is only 'this value is exposed', expect Not Applicable regardless of how correct you are. Appeal ONCE if the brief genuinely supports you - quote the clause, restate the reproduction as commands rather than prose, and offer the authorised next step. Then accept the outcome; re-litigating a triage decision costs standing with a programme worth more than one report. And record the loss honestly in the scoreboard - a Not Applicable is a result about your METHOD, not merely about the target.",
       "source": "self:2026-08-22"
+    },
+    {
+      "id": "pb0648",
+      "class": "ssrf",
+      "stack": "any/webhook-delivery",
+      "difficulty": "",
+      "technique": "destination allowlists that reject literal internal IPs at CREATE are usually string matchers with no DNS resolution: resubmit the same address as a resolving hostname (169-254-169-254.nip.io, localtest.me, 127-0-0-1.nip.io). Creation acceptance is NOT the finding - prove the dial by firing the vendor's own /test endpoint and reading the delivery attempt error STRING and DURATION against a control host that can never resolve",
+      "payload": "create: https://169.254.169.254/ -> 400 | https://169-254-169-254.nip.io/ -> 201 | POST /{id}/test | GET /{id}/deliveries",
+      "tell": "NXDOMAIN control fails in ~6ms with 'dial tcp: lookup X on <resolver>: no such host'; the bypass host burns the full client timeout (5000ms) with 'context deadline exceeded ... while awaiting headers' => resolved + packet sent + no destination policy at delivery time. Identical errors across both = no separation, no proof",
+      "source": "proven",
+      "ref": "field-proven 2026-08-25",
+      "validated": true,
+      "verify": false,
+      "added": "2026-08-25"
+    },
+    {
+      "id": "pb0649",
+      "class": "info-disclosure",
+      "stack": "any/go-backend",
+      "difficulty": "",
+      "technique": "read webhook/job delivery error strings in full - Go net/http surfaces the internal resolver address and VPC topology inside the failure message, and the attempt duration is a side channel separating DNS failure from TCP drop from refusal",
+      "payload": "GET /api/<resource>/{id}/deliveries -> attempts[].error_message + attempts[].duration",
+      "tell": "'dial tcp: lookup host on <rfc1918-resolver>:53: no such host' leaks the RFC1918 resolver IP and proves the fetcher runs inside a private subnet; egress source IP + User-Agent (Go-http-client/2.0) come free from your own listener",
+      "source": "proven",
+      "ref": "field-proven 2026-08-25",
+      "validated": true,
+      "verify": false,
+      "added": "2026-08-25"
+    },
+    {
+      "id": "pb0650",
+      "class": "methodology",
+      "stack": "any",
+      "difficulty": "",
+      "technique": "an async action that returns 202 pending is not evidence of anything - find the delivery/attempt log before running the ladder, and confirm the log records your KNOWN-GOOD control first. A metrics/stats endpoint can read all-zero while deliveries are actually happening",
+      "payload": "probe /{id}/events /{id}/deliveries /{id}/attempts /{id}/stats - keep whichever returns rows",
+      "tell": "stats showed successful_deliveries=0 and failed_deliveries=0 while /deliveries held the real failed attempts and the external listener logged a real POST; wrong oracle = false ENFORCED verdict",
+      "source": "proven",
+      "ref": "field-proven 2026-08-25",
+      "validated": true,
+      "verify": false,
+      "added": "2026-08-25"
     }
   ]
 }
