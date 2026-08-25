@@ -9056,6 +9056,20 @@
       "validated": true,
       "verify": false,
       "added": "2026-08-25"
+    },
+    {
+      "id": "pb0662",
+      "class": "mass-assignment",
+      "stack": "any/saas",
+      "difficulty": "",
+      "technique": "the vendor's DASHBOARD API is usually a superset of their DOCUMENTED public API - diff the two field lists and probe what only the dashboard accepts. A value the public docs say can only be ROTATED through a dedicated endpoint may be directly settable to an attacker-chosen value on the console API",
+      "payload": "for each object, list the documented PATCH fields, then PATCH the dashboard endpoint with fields the docs omit (credential fields, ownership fields, type/tier fields). Diff object state before and after, never the status",
+      "tell": "a 200 with NO state change means the schema accepted the field and the server discarded it - indistinguishable from a real write on status alone. Owner-only superset fields are an observation, not a finding; they become a finding only when a LOWER role can write them, so re-run the same battery as the least-privileged role and include a legitimate-field control write to tell field-denial from endpoint-denial",
+      "source": "proven",
+      "ref": "field-proven 2026-08-25",
+      "validated": true,
+      "verify": false,
+      "added": "2026-08-25"
     }
   ]
 }
