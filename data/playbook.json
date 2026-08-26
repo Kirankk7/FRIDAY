@@ -9392,6 +9392,48 @@
       "validated": true,
       "verify": false,
       "added": "2026-08-26"
+    },
+    {
+      "id": "pb0686",
+      "class": "sqli",
+      "stack": "any/managed-db-console",
+      "difficulty": "",
+      "technique": "A CONNECTION PARAMETER IS NOT AN INJECTION POINT, AND THE DRIVER'S OWN ERROR TELLS YOU WHICH IT IS. Marker zz'\\\"--/* sent as the `database` selector came back as: FATAL: database \"zz'\\\"--/*\" does not exist. The whole marker returned as ONE QUOTED IDENTIFIER, so it was passed to libpq as a connection field, never concatenated into SQL text",
+      "payload": "send a marker mixing ' and \\\" and -- and /* into every selector-style field (database, schema, table, collection). Read the error for HOW the value comes back: wrapped in quotes as a single name = parameterised; split, truncated at the quote, or a syntax-error near your marker = concatenation",
+      "tell": "faster and far more certain than boolean/time-based probing, and it works on the first request. Also inverts a habit: the verbose error here is the EVIDENCE OF SAFETY, not the finding. Do not file the leaked internal path as a bug when it is the thing proving the field is handled correctly",
+      "source": "self:hunt33-2026-08-26",
+      "ref": "own hunt - managed-database console, metadata selectors",
+      "validated": true,
+      "verify": false,
+      "added": "2026-08-26"
+    },
+    {
+      "id": "pb0687",
+      "class": "methodology",
+      "stack": "any/saas",
+      "difficulty": "",
+      "technique": "SQL EXECUTION IS NOT SQL INJECTION WHEN THE PRODUCT IS A SQL CONSOLE. A managed-database console hands you a query editor AND superuser credentials on your own instance. Injecting SQL into a database where you already hold superuser crosses no boundary - there is no privilege to gain. The class is N/A ON IMPACT, and the vendor's brief usually says so outright",
+      "payload": "before building any injection rig on a database product, ask: what does my existing credential already permit on this object? If the answer is everything, the only bug-shaped question left is whether the SAME endpoints reach an instance you do NOT own - test cross-service and cross-project id binding instead, and close the class there",
+      "tell": "stops the single biggest time sink on database SaaS. N/A here is defensible because you can name WHY no boundary exists, which is categorically different from 'we did not test it'. Pairs with the coverage rule: N/A needs a reason, never a shrug",
+      "source": "self:hunt33-2026-08-26",
+      "ref": "own hunt - managed-database console, class 3 verdict",
+      "validated": true,
+      "verify": false,
+      "added": "2026-08-26"
+    },
+    {
+      "id": "pb0688",
+      "class": "llm",
+      "stack": "any/ai-assistant",
+      "difficulty": "",
+      "technique": "A CLIENT-SUPPLIED chat_history IS NOT A BUG WITHOUT A CROSS-USER SINK. An AI console endpoint accepted chat_history as a caller-controlled array, so the caller can forge the assistant's own prior turns - the textbook prompt-injection primitive. It is still nothing: the conversation is self-directed and never rendered to any other user",
+      "payload": "for any LLM endpoint, do not stop at 'the model can be steered'. Ask the sink question: whose screen does the output reach? Test whether the conversation is persisted, shared, replayed to an admin/support view, or fed to a downstream automated action. No second reader and no privileged action = no finding, regardless of how cleanly the model is manipulated",
+      "tell": "prompt-injecting your own session is self-harm, not a vulnerability, and reports of it are exactly the AI-slop class programmes now ban researchers for. The sink question is what separates a real LLM finding from the commodity one everybody files",
+      "source": "self:hunt33-2026-08-26",
+      "ref": "own hunt - console AI chat endpoint",
+      "validated": true,
+      "verify": false,
+      "added": "2026-08-26"
     }
   ]
 }
