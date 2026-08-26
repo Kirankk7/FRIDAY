@@ -9434,6 +9434,34 @@
       "validated": true,
       "verify": false,
       "added": "2026-08-26"
+    },
+    {
+      "id": "pb0689",
+      "class": "recon",
+      "stack": "any/program-selection",
+      "difficulty": "",
+      "technique": "OPENNESS IS AN ANTI-SIGNAL FOR CROWDING, NOT A MOAT. An open-source, self-hostable target was picked BECAUSE it had no gates - no signup, no bot wall, no paywall, and readable source. Its brief then showed 743 researchers joined, twelve times the count on a gated retail programme screened the same day, and the lowest realised payout of the batch. No barrier for you is no barrier for anyone, and source everyone CAN read is source everyone HAS read",
+      "payload": "read the joined-researcher count and the realised average payout together, before any scope analysis. A target that is trivially easy to start on is a target thousands have already started on. Weight friction POSITIVELY: a paywall, a manual approval, a licence or a hardware requirement each subtract competitors, and if you can clear it you own that surface",
+      "tell": "inverts the instinct that easy access is good. The right frame is cost-to-enter versus payout: high friction plus a way through is the actual moat. Same family as a public artefact never being the edge - if the door is open, the room is full",
+      "source": "self:2026-08-26",
+      "ref": "own screen - OSS collaboration platform vs gated retail programme",
+      "validated": true,
+      "verify": false,
+      "added": "2026-08-26"
+    },
+    {
+      "id": "pb0690",
+      "class": "methodology",
+      "stack": "any/program-selection",
+      "difficulty": "",
+      "technique": "GREP THE OUT-OF-SCOPE LIST FOR YOUR OWN PROVEN CLASSES BEFORE RANKING A TARGET. Two programmes screened on the same day both excluded the limit-bypass and tier-bypass lanes BY NAME - one wrote 'race conditions that lead to bypassing the limit' straight into its known-issues list, the other spelled out 'upgrading tier without payment via API requests, using a discovered coupon code, extending the free trial'. Those are the exact two classes that had produced every self-found bug to date",
+      "payload": "before reading targets, assets or reward tables, search the brief's exclusions and known-issues sections for the classes YOU actually land. Also flag catch-all clauses like 'reports where a configuration option is available to mitigate the finding' - wide enough to close a whole permission-model finding after you have done the work",
+      "tell": "a scope gate is cheaper to check than any technical gate and it invalidates the entire target, not one lane. Doing it after the economics analysis means the ranking was built on a lane that cannot be filed. Structural gates beat exploit rigs, applied to programme selection rather than to an endpoint",
+      "source": "self:2026-08-26",
+      "ref": "own screen - two briefs, same excluded lanes",
+      "validated": true,
+      "verify": false,
+      "added": "2026-08-26"
     }
   ]
 }
