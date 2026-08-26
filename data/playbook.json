@@ -9462,6 +9462,34 @@
       "validated": true,
       "verify": false,
       "added": "2026-08-26"
+    },
+    {
+      "id": "pb0691",
+      "class": "methodology",
+      "stack": "any/program-selection",
+      "difficulty": "",
+      "technique": "READ THE UA-MARKER RULE BEFORE PLANNING THE RIG - it silently kills same-origin console batching. Three programmes now require a marker appended to User-Agent ('-MMS-BugBounty', 'BugBounty', a hunter handle). Browsers FORBID scripts from setting User-Agent, so fetch() from DevTools physically cannot comply, and a batch that ignores the marker is testing out of policy",
+      "payload": "grep the brief for 'user-agent', 'user agent', 'marker', 'append to your'. If a marker is mandated, the rig is curl or Burp from the start - do not write the console batch and discover it later. If only a custom HEADER is required (X-Bug-Bounty style) console batching still works, because arbitrary non-forbidden headers ARE settable from fetch()",
+      "tell": "the distinction is exactly forbidden-header-name: User-Agent, Cookie, Host and friends cannot be set from script, anything custom can. Our default SOP assumed the custom-header case; the marker case is now the majority of our targets, so the SOP is the exception not the default",
+      "source": "self:2026-08-26",
+      "ref": "own screen - third target mandating a UA marker",
+      "validated": true,
+      "verify": false,
+      "added": "2026-08-26"
+    },
+    {
+      "id": "pb0692",
+      "class": "methodology",
+      "stack": "any/program-selection",
+      "difficulty": "",
+      "technique": "STACKED REWARD DECAY MAKES THE COMMODITY BUG WORTHLESS - price it before you hunt it. One brief combined OneFixOneReward (the same weakness across eleven country storefronts sharing a codebase pays ONCE, the rest close Informative) with a systemic-issue ladder (3rd similar report 75%, 4th 50%, 5th 25%, 6th and beyond 10%). A class that everybody finds therefore pays a tenth of grid",
+      "payload": "before picking a lane, find the brief's duplicate-decay and one-fix clauses and multiply them against the grid. A EUR2,500 High that is the 6th report of its kind is EUR250. Then rank lanes by how few hunters can reach them, not by the grid number",
+      "tell": "this is rank-by-discovery-rate expressed in the programme's own arithmetic - they have written down exactly how little they will pay for the obvious finding. It also warns against the multi-locale illusion: eleven storefronts is one target, not eleven, whenever the code is shared",
+      "source": "self:2026-08-26",
+      "ref": "own screen - multi-locale retail brief",
+      "validated": true,
+      "verify": false,
+      "added": "2026-08-26"
     }
   ]
 }
