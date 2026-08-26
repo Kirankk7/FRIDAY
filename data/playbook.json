@@ -9350,6 +9350,48 @@
       "validated": false,
       "verify": true,
       "added": "2026-08-26"
+    },
+    {
+      "id": "pb0683",
+      "class": "methodology",
+      "stack": "any/rest",
+      "difficulty": "",
+      "technique": "A 405 IS NEVER ENFORCEMENT - read the Allow header before you pick a verb. Testing whether a nested object id was bound to its parent, PUT returned 405 and the object was unchanged; that reads like a rejected write, but the request never reached an authz check at all. The 405 carried 'Allow: DELETE,GET,OPTIONS,PATCH' - PATCH was the real update verb, and only PATCH produced an interpretable answer",
+      "payload": "send one deliberately wrong verb to the target path FIRST and read the Allow response header - it names the whole verb set for free, no bundle mining. On same-origin fetch every header is readable: r.headers.get('allow'). Then run the control with a verb that is actually in the set",
+      "tell": "405 and 403 and 400 all leave the object unchanged, so 'nothing happened' cannot distinguish a blocked write from an unrouted one. Same family as the benign-control rule: an unchanged object means something only after you have shown the verb CAN change it",
+      "source": "self:hunt33-2026-08-26",
+      "ref": "own hunt - managed-database console, nested object ids",
+      "validated": true,
+      "verify": false,
+      "added": "2026-08-26"
+    },
+    {
+      "id": "pb0684",
+      "class": "bola",
+      "stack": "any/rest",
+      "difficulty": "",
+      "technique": "TEST ID BINDING WITH TWO OBJECTS YOU OWN, NOT TWO TENANTS. A nested id (/parent/{p}/child/{id}) raises one question: is the child scoped to the parent in the path, or looked up globally? No second account is needed - create a SECOND parent in your OWN project and try the first parent's child id through it. Same user, same tenant, only the parent segment differs",
+      "payload": "create parent A and parent B under one account. Create child X under A, capture its id. Run GET/PATCH/DELETE on {B}/child/{X}, each with a passing control on {A}/child/{X}. If B resolves X, the id is global and the cross-tenant case follows without ever touching a foreign object",
+      "tell": "cheaper, faster and safer than a cross-tenant rig - no second signup, no risk of touching data you do not own, and it isolates ONE variable (the parent segment) instead of changing account, token and parent at once. If binding holds here it holds cross-tenant, so it also closes the lane fast on a clean target",
+      "source": "self:hunt33-2026-08-26",
+      "ref": "own hunt - managed-database console, nested object ids",
+      "validated": true,
+      "verify": false,
+      "added": "2026-08-26"
+    },
+    {
+      "id": "pb0685",
+      "class": "recon",
+      "stack": "any/json-api",
+      "difficulty": "",
+      "technique": "WALK THE SCHEMA OFF THE VALIDATOR - POST an empty body and let the 400 name the next required field, add it, repeat. A console query editor gave up its whole create shape this way: {} -> \"'name' is a required property\" -> {name} -> \"'database' is a required property\" -> {name,query,database} -> 200. The same walk exposed an undocumented AI endpoint's required field with no bundle reading at all",
+      "payload": "loop: send body, regex the response for \"'([^']+)' is a required property\", add that key with a dummy string, resend, stop on 2xx or when no new key appears. Catch type errors too (\"is not of type 'array'\") and coerce. Twelve iterations covers almost any endpoint",
+      "tell": "a strict schema validator is a defence against mass assignment but also a free API doc - each rejection is one bit of the shape. Fastest input inventory on an endpoint whose bundle you cannot read, and it satisfies the write-body inventory rule before any injection verdict",
+      "source": "self:hunt33-2026-08-26",
+      "ref": "own hunt - managed-database console, schema discovery",
+      "validated": true,
+      "verify": false,
+      "added": "2026-08-26"
     }
   ]
 }
