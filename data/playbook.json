@@ -9490,6 +9490,48 @@
       "validated": true,
       "verify": false,
       "added": "2026-08-26"
+    },
+    {
+      "id": "pb0693",
+      "class": "ssrf",
+      "stack": "any/url-validator",
+      "difficulty": "",
+      "technique": "SEVEN-CHECK SSRF FILTER MATRIX, taken from a CORRECT implementation and used backwards. A well-written public validator rejects: (1) substring host matching - it parses and uses hostname, killing evil-lookalikes like x.com.evil.test; (2) userinfo - username/password present at all, killing the userinfo form where the real host follows an at-sign; (3) malformed authority - it touches parsed.port purely to force a ValueError on out-of-range ports; (4) LEGACY IPv4 SPELLINGS via socket.inet_aton, catching 2130706433 and 0177.0.0.1; (5) non-global literals via ip_address().is_global; (6) cloud metadata names by explicit blocklist (metadata.google.internal, instance-data); (7) percent-encoding in the host",
+      "payload": "for any target's SSRF/webhook/URL field, walk these seven in order and find the one they did NOT implement. Reading a CORRECT filter is the cheapest way to enumerate the bypasses - the checks a careful author wrote down are exactly the tricks that work on authors who did not",
+      "tell": "most real filters implement two or three of the seven. Rank the untested ones by how obscure they are: legacy IPv4 spellings and userinfo are the two most often missed, because a naive regex-based validator never parses the authority at all",
+      "source": "self:2026-08-26",
+      "ref": "reference implementation read from a public agent repo",
+      "validated": false,
+      "verify": true,
+      "added": "2026-08-26"
+    },
+    {
+      "id": "pb0694",
+      "class": "ssrf",
+      "stack": "any/url-validator",
+      "difficulty": "",
+      "technique": "A FILTER THAT VALIDATES THE STRING BUT NEVER RESOLVES IT IS CHECKING SPELLING, NOT DESTINATION. A carefully written public SSRF validator - parsing structurally, rejecting userinfo, catching legacy IPv4 spellings, testing is_global - performs NO DNS resolution at all. It only inspects LITERAL addresses, so any hostname that resolves to 127.0.0.1 or 169.254.169.254 passes every single check it makes",
+      "payload": "give the validator the SAME address twice: once as a literal (expect a reject) and once as a hostname that resolves to it (nip.io, localtest.me, or your own A record). A reject-then-accept pair proves the filter stops at the parse. Then confirm DELIVERY actually dials it - a never-resolvable control separates a real connection attempt from a blocklist",
+      "tell": "this is exactly the Auth0 finding, and seeing the same gap in an implementation written by someone who clearly knew the class says it is structural, not sloppiness: resolving costs a DNS round trip on every call and invites TOCTOU, so authors skip it. Check it FIRST on any URL-accepting field",
+      "source": "self:2026-08-26",
+      "ref": "cross-checked against our own filed SSRF finding",
+      "validated": true,
+      "verify": false,
+      "added": "2026-08-26"
+    },
+    {
+      "id": "pb0695",
+      "class": "methodology",
+      "stack": "any/repo-review",
+      "difficulty": "",
+      "technique": "READ THE TESTS, NOT THE README - a repo's real contract is in its test names. Reviewing a public agent repo I read the README, grepped my red lines, saw a social-media reader and reported a complete evaluation. A second reader opened the test directory and found 30 files encoding boundaries the README never mentions: doctor must not start a credential-backed CLI, must not refresh a session, must report a STALE credential without refreshing it; private writes are 0600, atomic with rollback, and refuse a symlink at target, parent AND ancestor",
+      "payload": "on any repo evaluation, list tests/ FIRST and read the test NAMES before any source. `grep -n '^def test' tests/*.py` gives the authors' own statement of what must never happen. Then read the modules those tests guard - that is where the load-bearing logic lives",
+      "tell": "a README states intent, a test states a guarantee someone was willing to break the build over. This is the same error as ranking writeups by title: I judged by the surface and reported the judgement as a full read. Feature surface answers 'what is this for'; tests answer 'what does it promise'",
+      "source": "self:2026-08-26",
+      "ref": "own miss, caught by a second reader",
+      "validated": true,
+      "verify": false,
+      "added": "2026-08-26"
     }
   ]
 }
