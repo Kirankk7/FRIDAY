@@ -9602,6 +9602,34 @@
       "validated": true,
       "verify": false,
       "added": "2026-08-29"
+    },
+    {
+      "id": "pb0701",
+      "class": "recon",
+      "stack": "any/spa",
+      "difficulty": "",
+      "technique": "PASSIVE EXTRACTION BEATS ACTIVE PROBING ON EVERY AXIS THAT MATTERS. In one day: reading a JS bundle yielded a 313-operation GraphQL route table for ZERO requests, while a ten-probe batch against a registration endpoint burned the request budget in ninety seconds and earned a cooldown that left twenty-six hypotheses untestable. Same target, same hour, opposite outcomes",
+      "payload": "before sending anything, exhaust what the client already told you: JS bundles for route tables and persisted-query manifests, `.js.map` sourcemaps for original unminified source with internal routes, the HAR's own write bodies for the input inventory, and any shipped Postman/OpenAPI collection. Only then spend requests, and spend them on ONE hypothesis at a time",
+      "tell": "three independent pressures point the same way: every serious brief forbids automated scanning, active probes hit the commodity surfaces where duplicates live, and rate limits are enforced hardest on exactly the auth and registration endpoints worth testing. Passive reading is unlimited, unrestricted and undetectable - it is the only part of the hunt with no budget",
+      "source": "self:hunt35-2026-08-29",
+      "ref": "own hunt - one day, both outcomes",
+      "validated": true,
+      "verify": false,
+      "added": "2026-08-29"
+    },
+    {
+      "id": "pb0702",
+      "class": "methodology",
+      "stack": "any/tooling",
+      "difficulty": "",
+      "technique": "READ YOUR OWN CODE BEFORE DECLARING SOMETHING UNBUILT. I named an OOB-confirmation capability 'the one earned UNBUILT thing' and scheduled it as the next build. It was already written and wired: a 76-line module with mint()/poll(), two agent methods, and an action-router entry. The real gap was ONE LINE - the listener bound 127.0.0.1, so it could never catch a callback from a remote target, which is why we had hand-rolled an external worker instead",
+      "payload": "before any build decision, grep for the capability's own name across the codebase and read what turns up. Then ask the sharper question: not 'does it exist' but 'what is the one line that stops the existing thing from working in the real case?' Ninety percent of an earned build is often already sitting there, disabled by a default",
+      "tell": "the same failure as trusting a memory file over the artefact - I planned from what I remembered instead of what was on disk. And the corrected build is an order of magnitude smaller: an adapter behind an existing interface, not a feature. An external code reviewer caught this before I did, which is the strongest argument for pointing something at your own repo",
+      "source": "self:hunt35-2026-08-29",
+      "ref": "own error - caught by an external code review",
+      "validated": true,
+      "verify": false,
+      "added": "2026-08-29"
     }
   ]
 }
