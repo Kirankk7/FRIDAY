@@ -9672,6 +9672,34 @@
       "validated": true,
       "verify": false,
       "added": "2026-08-29"
+    },
+    {
+      "id": "pb0706",
+      "class": "methodology",
+      "stack": "any/multi-agent",
+      "difficulty": "",
+      "technique": "MULTI-AGENT REVIEW CONVERGES BY ROUND THREE AND THEN PRODUCES NOTHING - measure the round, not the agreement. Across seven rounds of three-agent review in one session, all substantive output arrived in rounds 1-3; rounds 4-7 were mutual agreement restated. The warning about conversational sycophancy was itself written in round 6 of an exchange that had already been agreeing since round 3",
+      "payload": "cap review at THREE rounds. Round 1 independent answers, round 2 cross-read and disagree, round 3 resolve. If round 4 opens with agreement, stop - the remaining value is zero. Track WHICH round each idea first appeared in; if nothing new lands in a round, that is the signal to close, not to ask again",
+      "tell": "the failure is invisible because agreement FEELS like progress and every round reads as productive. Two structural fixes: never let reviewers see each other before producing their own answer (agreement after cross-reading is contamination, not corroboration), and never let a synthesiser emit FINAL ANSWER - it should emit consensus / divergence / unresolved and leave authority with evidence",
+      "source": "self:2026-08-29",
+      "ref": "own session, self-demonstrating",
+      "validated": true,
+      "verify": false,
+      "added": "2026-08-29"
+    },
+    {
+      "id": "pb0707",
+      "class": "methodology",
+      "stack": "any/multi-agent",
+      "difficulty": "",
+      "technique": "THE QUESTION IS NOT WHICH MODEL IS RIGHT - IT IS WHICH HYPOTHESES SURVIVE INDEPENDENT GENERATION AND VERIFICATION. Build the table: hypothesis x model x verified. The informative cells are the off-diagonal ones - a claim made by ONE model that survives testing, and a claim ALL models made that dies. Consensus-and-wrong versus minority-and-right is the entire dataset",
+      "payload": "give N models an identical sealed input in isolation, collect verbatim, then verify every distinct hypothesis against the live system with controls. Record unique-per-model, overlap, and verified-rate separately. Over time this says 'this model finds the invariant class that one misses' rather than the useless 'this model is better'",
+      "tell": "agreement between models is NOT evidence - three assistants once agreed on a wrong reading of a field, and it stayed wrong. Only verification adjudicates. This also decides whether a multi-model harness is worth building at all: if one model dominates the verified column, the other two are cost with no yield",
+      "source": "self:2026-08-29",
+      "ref": "3-model lens run, grading pending",
+      "validated": false,
+      "verify": true,
+      "added": "2026-08-29"
     }
   ]
 }
