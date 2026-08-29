@@ -9532,6 +9532,48 @@
       "validated": true,
       "verify": false,
       "added": "2026-08-26"
+    },
+    {
+      "id": "pb0696",
+      "class": "ssrf",
+      "stack": "any/url-validator",
+      "difficulty": "",
+      "technique": "EXTENDED SSRF MATRIX - seven more checks, read off a filter that is stronger than the last one. Beyond the original seven (pb0693), a well-built validator also blocks: IPv4-MAPPED IPv6 (the ::ffff:127.0.0.1 and ::ffff:169.254.169.254 forms), IPv4-COMPATIBLE IPv6 (the deprecated ::127.0.0.1 form), 0.0.0.0/8 which routes to localhost on Linux, the unspecified addresses, multicast 224.0.0.0/4 and broadcast 255.255.255.255/32, Alibaba metadata at 100.100.100.200 alongside the AWS and Google endpoints - AND it actually RESOLVES the hostname, checking every address getaddrinfo returns",
+      "payload": "walk all fourteen against any URL-accepting field. The IPv6 embedding forms are the highest-yield untested ones because a validator built on an IPv4 blocklist never normalises them: ::ffff:169.254.169.254 reaches metadata on a filter that blocks the bare literal",
+      "tell": "a filter that resolves DNS is a different and much better class than one that only inspects the literal - it closes the hostname bypass. Score the target on WHICH tier it implements: literal-only (weak, use a resolving hostname), resolving (strong, go to pb0697 instead)",
+      "source": "self:2026-08-26",
+      "ref": "second reference implementation, richer than the first",
+      "validated": false,
+      "verify": true,
+      "added": "2026-08-26"
+    },
+    {
+      "id": "pb0697",
+      "class": "ssrf",
+      "stack": "any/url-validator",
+      "difficulty": "",
+      "technique": "THE TWO HOLES EVEN A RESOLVING SSRF FILTER LEAVES: REDIRECTS AND TOCTOU. Two independent reference implementations, one of them resolving DNS and checking every returned address, both validate the INITIAL url only and neither pins the address they approved. So (a) a 302/307 to an internal address after the check passes is never re-validated, and (b) the caller resolves AGAIN at fetch time, so a DNS answer that changes between check and fetch reaches the internal target - classic rebinding. One also fails OPEN on resolution failure, asserted by its own test",
+      "payload": "test redirects FIRST on any filter that survives the literal and hostname probes - host a 302 to the internal target on a domain that resolves publicly. For TOCTOU, a short-TTL record answering public then internal. Also try a name that fails to resolve: fail-open on gaierror means an unresolvable host skips the check entirely",
+      "tell": "the redirect hole is the SAME bypass that carried our own filed SSRF (307 preserves POST) and it survives in code written by people who clearly knew the class - because validating the redirect chain means hooking the HTTP client, not the URL parser, and that is a different layer. Check the layer, not just the function",
+      "source": "self:2026-08-26",
+      "ref": "two reference implementations, cross-checked against our filed finding",
+      "validated": true,
+      "verify": false,
+      "added": "2026-08-26"
+    },
+    {
+      "id": "pb0698",
+      "class": "methodology",
+      "stack": "any/source-audit",
+      "difficulty": "",
+      "technique": "VARIANT-ANALYSIS LADDER - when one bug is confirmed, pick the RIGHT breadth of detector, in this order: (1) VARIANT DETECTOR, source-to-sink or missing-guard across the whole bug family; (2) SCOPED BEHAVIOURAL REGRESSION, anchored on the affected API or trust boundary; (3) EXACT REGRESSION CANARY for the original shape, when broader variants would be too noisy; (4) NO DETECTOR AT ALL, when runtime state, product policy or external data is needed to tell vulnerable from safe. Step 4 is the one everybody skips",
+      "payload": "after any confirmed source-level finding, try the family-wide detector first and only narrow when it drowns in false positives. Quality contract: the rule must FIRE on the vulnerable code and must be SILENT on the fixed code where a fix exists - validate against vulnerable, fixed and current trees before trusting it",
+      "tell": "the silent-on-fixed half is the benign control applied to static analysis: a detector that never goes quiet proves nothing, exactly like a control that never passes. This is the practical form of the neighbourhood sweep for the WordPress and npm source-audit lane, where one confirmed pattern usually has siblings",
+      "source": "self:2026-08-26",
+      "ref": "rule-lifecycle doc from a large OSS product's shipped rulepack",
+      "validated": false,
+      "verify": true,
+      "added": "2026-08-26"
     }
   ]
 }
