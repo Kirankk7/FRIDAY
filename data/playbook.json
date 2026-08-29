@@ -9658,6 +9658,20 @@
       "validated": false,
       "verify": true,
       "added": "2026-08-29"
+    },
+    {
+      "id": "pb0705",
+      "class": "mass-assignment",
+      "stack": "any/json-api",
+      "difficulty": "",
+      "technique": "A HARDCODED PRIVILEGE WORDLIST SCORES ZERO ON A REAL TARGET - derive the candidates instead. A reviewer proposed mass-assignment detection keyed on {role, is_admin, is_staff, permissions, is_verified, tier, plan, credits, balance, tenant_id, org_id}. Run against an actual captured registration mutation it matched NOTHING, while the fields that mattered were isLoyaltyTermsVersionCheckRequired, activationChannel, isMergeLoyaltyStatusRequired, privacyPolicyVersion, loyaltyTermsVersion and outletId - zero overlap with the list",
+      "payload": "never ship a privilege wordlist. Derive candidates from the application: keys the server RETURNS minus keys the client SENDS (pb0704), plus every boolean or enum in a write body whose name implies a server DECISION (is*Required, *Check*, *Channel, *Version, *Status, merge*, allow*, skip*). The app names its own privileged fields and they are almost never the textbook ones",
+      "tell": "a wordlist encodes what SOMEBODY ELSE'S apps called their privileged fields. The give-away shape is not the word 'admin' - it is a client-supplied value that tells the SERVER what policy to apply to itself: a boolean asking whether validation should run, an enum choosing which channel or tier the request claims to come from, a version string stamping which terms were accepted",
+      "source": "self:hunt35-2026-08-29",
+      "ref": "external code review, falsified against our own sealed capture",
+      "validated": true,
+      "verify": false,
+      "added": "2026-08-29"
     }
   ]
 }
