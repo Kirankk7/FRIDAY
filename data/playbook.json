@@ -9630,6 +9630,34 @@
       "validated": true,
       "verify": false,
       "added": "2026-08-29"
+    },
+    {
+      "id": "pb0703",
+      "class": "recon",
+      "stack": "any/har-capture",
+      "difficulty": "",
+      "technique": "ONE GIANT SESSION HAR SILENTLY LOSES HALF THE RESPONSE BODIES. Measured on a 1,548-entry capture: 49% of the API and GraphQL responses had NO body, and 369 entries declared a non-zero content size while carrying no text at all. DevTools retains response bodies only while the panel holds them and evicts under memory pressure - this session moved 39.7MB across 1,367 requests, so eviction was certain",
+      "payload": "capture in SHORT FOCUSED BURSTS: clear the network log, perform exactly one flow (registration, checkout, one settings save), Save all as HAR with content immediately, then clear again. Several small HARs beat one session HAR. Verify before analysing: count entries where content.size > 0 but content.text is empty - if that number is large, the capture is half blind and any response-side analysis is void",
+      "tell": "this disables an entire analysis class without any error message. Response-to-request inversion - diffing the keys a GET returns against the keys a write accepts, to find server-owned fields the client never sends - needs response bodies, and on a big HAR half of them are simply gone. The missing capability was never code; it was the capture",
+      "source": "self:hunt35-2026-08-29",
+      "ref": "own hunt - measured on a 1,548-entry HAR",
+      "validated": true,
+      "verify": false,
+      "added": "2026-08-29"
+    },
+    {
+      "id": "pb0704",
+      "class": "mass-assignment",
+      "stack": "any/rest-graphql",
+      "difficulty": "",
+      "technique": "RESPONSE-TO-REQUEST INVERSION - let the server tell you which fields to try. Instead of guessing at role/is_admin/balance, take the key set a GET (or query response) RETURNS, subtract the key set the client ever SENDS on the corresponding write, and the difference is the candidate list: attributes the server owns and exposes but the UI never submits. Then filter that delta for privilege-shaped names and test the smallest one against your OWN object",
+      "payload": "per resource or per GraphQL operation, collect leaf keys of the response `data` and leaf keys of the request `variables`/body, and diff them. No hardcoded wordlist - the application supplies its own candidates. Confirm any hit by RE-READING the object afterwards: acceptance is not persistence",
+      "tell": "complements [[ui-exposes-one-field-api-accepts-more]], which works the request side (touch one control, ask what else the body takes). This is the mirror: what does the server hand back that the client never sends? It is a mechanical set difference, not a hypothesis - so it costs zero requests and produces a ranked list to feed the lens. REQUIRES response bodies in the capture: see pb0703",
+      "source": "self:hunt35-2026-08-29",
+      "ref": "distilled from an external code review, tested on our own capture",
+      "validated": false,
+      "verify": true,
+      "added": "2026-08-29"
     }
   ]
 }
