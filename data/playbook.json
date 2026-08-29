@@ -9574,6 +9574,34 @@
       "validated": false,
       "verify": true,
       "added": "2026-08-26"
+    },
+    {
+      "id": "pb0699",
+      "class": "methodology",
+      "stack": "any/rate-limited-api",
+      "difficulty": "",
+      "technique": "PROBE THE RATE LIMIT WITH ONE REQUEST BEFORE DESIGNING A BATCH - on a registration or auth endpoint the limit is a COOLDOWN, not a rate. A ten-probe batch at 2s spacing got two requests through and then 429; a follow-up batch at 20s spacing - ten times slower - got 429 on all three, proving the penalty was a block earned earlier, not a per-second ceiling. The endpoint was then unusable and the fix under test could not be evaluated at all",
+      "payload": "send ONE request. Read it. Send a second after 10s and compare. Only then choose a batch size, and keep auth/registration batches to 3-4 requests with 30s+ spacing. If a 429 arrives, STOP COMPLETELY - every further request extends the window and produces no data",
+      "tell": "this is scaling before the control is established, in a new costume: I had the discipline for response semantics and none for request budget. On registration, signup and OTP endpoints the budget IS the experiment - burn it and the hypotheses stay untested no matter how good they were. Also note the 429 body was an HTML error page, not JSON: a batch that only parses JSON will silently mis-read the block as a malformed response",
+      "source": "self:hunt35-2026-08-29",
+      "ref": "own error - registration endpoint cooldown",
+      "validated": true,
+      "verify": false,
+      "added": "2026-08-29"
+    },
+    {
+      "id": "pb0700",
+      "class": "recon",
+      "stack": "any/graphql-apq",
+      "difficulty": "",
+      "technique": "THE PERSISTED-QUERY MANIFEST IS THE GRAPHQL ROUTE TABLE, AND IT SHIPS IN THE BUNDLE. A client identifying itself as `pwa-client-pqm` sent only sha256 hashes, never query text - which looks like a closed surface. The bundle carried the whole registry inline as [{\"id\":\"<sha256>\",\"name\":\"<OperationName>\"}] - 313 operations, 56 of them money, loyalty or entitlement related, including SetPaymentStatus, SetPaymentStatusFallback, AddCoupon, GetPointsBalance and UpgradeLoyaltyTermsVersion",
+      "payload": "grep the JS bundles for the sha256 of any operation you captured, then widen to the surrounding array: `\\{\"id\":\"[0-9a-f]{64}\",\"name\":\"[A-Za-z0-9_]+\"\\}`. That yields the complete operation list without a single request to the target, and without introspection - which many programmes list as non-qualifying anyway",
+      "tell": "APQ looks like it hides the API and instead hands you a cleaner route table than introspection would: names only, no noise, and the money operations are obvious from the names alone. Replaying a manifest hash needs the SAME client name AND version headers - the registry is keyed on both, and omitting the version returns PersistedQueryNotFound, which is easily misread as an allowlist rejection",
+      "source": "self:hunt35-2026-08-29",
+      "ref": "own hunt - retail GraphQL PWA",
+      "validated": true,
+      "verify": false,
+      "added": "2026-08-29"
     }
   ]
 }
