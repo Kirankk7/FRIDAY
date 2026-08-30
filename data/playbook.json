@@ -9756,6 +9756,20 @@
       "validated": true,
       "verify": "client sent FAILURE, server answered PAID - already proof the value is not read. SUCCESS then produced a byte-identical response: orderNumber null, state OPEN. Computop paygate handoff is a Blowfish blob keyed with a merchant secret, so the browser was never in the trust path",
       "added": "2026-08-31"
+    },
+    {
+      "id": "pb0712",
+      "class": "methodology",
+      "stack": "any/api",
+      "difficulty": "",
+      "technique": "AN EXTRACTOR THAT CANNOT FAIL LOUDLY MANUFACTURES ENFORCED VERDICTS. 'server returned the object unchanged' and 'I read the wrong path' print identically - both render as undefined or a stale-looking value. Before reading the value under test, ASSERT THE SHAPE: that the response root exists, that the collection is non-empty, that the control field holds its known value. Fail the run on a broken assertion instead of reporting a verdict",
+      "payload": "const root=o?.data&&Object.values(o.data)[0]; if(!root) throw 'shape: no data root'; if(!(ck?.addresses?.length)) throw 'shape: empty addresses'; then read the probe field. Print the whole collection and a known-good control field on EVERY row",
+      "tell": "a probe row prints undefined for the field under test, or every row of a batch is byte-identical including timestamps - suspect the extractor before you suspect the server",
+      "source": "mediamarkt-hunt35",
+      "ref": "",
+      "validated": true,
+      "verify": "four void batches in one session, all the same signature: response root was data.updateBasketAddress not data.basket; vatWithRates[0].vat.price not [0].vatAmount.price; addresses[0] while the write appended at index 1; a line-item id hardcoded across steps while ids rotate per mutation. Each printed as 'unchanged' and each nearly became an ENFORCED verdict",
+      "added": "2026-08-31"
     }
   ]
 }
