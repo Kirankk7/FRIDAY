@@ -9728,6 +9728,34 @@
       "validated": true,
       "verify": "UpdateBasketAddress appended the new address at index 1 and left the GUEST_ADDRESS at index 0. Printing addresses[0] showed city=ded across four probes and produced a wrong 'mutation is inert' call; printing all addresses showed ded|Koeln and proved the write",
       "added": "2026-08-31"
+    },
+    {
+      "id": "pb0710",
+      "class": "methodology",
+      "stack": "any/spa",
+      "difficulty": "",
+      "technique": "WHEN A MUTATION CARRIES NO OBJECT ID, THE ID IS IN THE REFERER. A flow-bound operation whose variables are only {status} still resolves a specific object - the server is reading the referring URL. Diff the request headers of the flow call against an ordinary call on the same endpoint: the one field that differs names the binding. Then replay it from ANY page with fetch's `referrer` option (same-origin values are permitted), instead of trying to hold a transient callback page open",
+      "payload": "fetch(url,{method:'POST',referrer:'https://host/flow/callback?id=<objId>',headers:{...},body:...})  // C0 = replay the flow's own value; if C0 resolves the object the override reached the server",
+      "tell": "resolver error 'X id is null or undefined' from every page except one; that page's URL carries the id as a query param; header diff shows referer as the only difference",
+      "source": "mediamarkt-hunt35",
+      "ref": "",
+      "validated": true,
+      "verify": "SetPaymentStatus vars were {paymentStatus} alone yet returned one specific basket. Referer on the live call was .../web-payment-failure-callback?id=<basketId> while an ordinary AddCoupon call refered to /checkout/payment. Setting fetch referrer to the callback URL resolved the basket from /checkout/payment. The callback page itself self-redirects in ~1s and cannot be held open",
+      "added": "2026-08-31"
+    },
+    {
+      "id": "pb0711",
+      "class": "business-logic",
+      "stack": "ecommerce/psp",
+      "difficulty": "",
+      "technique": "THE BROWSER REPORTING THE PAYMENT OUTCOME IS A SHAPE, NOT A BUG. SPA checkouts call setPaymentStatus(SUCCESS|FAILURE) from the PSP return page, which LOOKS like the client declaring it paid. The authoritative path is nearly always the PSP's server-to-server notify. Test it by sending BOTH outcomes with a control that proves the object resolved, and verdict on ORDER STATE (orderNumber, state) - never on the paymentStatus field, which reports instrument ALLOCATION not collection",
+      "payload": "send FAILURE then SUCCESS on the same object; read orderNumber and state. amountToPay:0 + paymentStatus:PAID with orderNumber:null means an instrument is attached, not that money moved",
+      "tell": "paymentStatus returns PAID while orderNumber stays null and state stays OPEN; storedPaymentMethods carries the full amount with maskedPan null and transactionCode null",
+      "source": "mediamarkt-hunt35",
+      "ref": "",
+      "validated": true,
+      "verify": "client sent FAILURE, server answered PAID - already proof the value is not read. SUCCESS then produced a byte-identical response: orderNumber null, state OPEN. Computop paygate handoff is a Blowfish blob keyed with a merchant secret, so the browser was never in the trust path",
+      "added": "2026-08-31"
     }
   ]
 }
