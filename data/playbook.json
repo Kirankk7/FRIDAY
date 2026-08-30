@@ -9700,6 +9700,34 @@
       "validated": false,
       "verify": true,
       "added": "2026-08-29"
+    },
+    {
+      "id": "pb0708",
+      "class": "methodology",
+      "stack": "any/api",
+      "difficulty": "",
+      "technique": "PICK THE POSITIVE CONTROL FROM THE CAPTURE, NOT FROM INTUITION. Before using field X to prove a mutation writes, grep the capture for a request that SET X and a response that ECHOED the new value. A field that looks obviously writable can be one the server never persists - then your control fails, you read 'inert', and you void a whole batch on a false premise",
+      "payload": "for op O and candidate control field X: find entry where request.variables contains X=v_new AND response contains X=v_new. Only a field with that round-trip evidence is a valid positive control for O",
+      "tell": "the control field comes back null or unchanged even on the vendor's own captured call - it was never writable, so it never tested anything",
+      "source": "mediamarkt-hunt35",
+      "ref": "",
+      "validated": true,
+      "verify": "chose physicalInvoiceRequested as positive control for UpdateBasketAddress; it returns null in the ORIGINAL HAR too, so it could never have shown a write. city DID round-trip in the HAR (sent german, returned german) and was the only valid control available",
+      "added": "2026-08-31"
+    },
+    {
+      "id": "pb0709",
+      "class": "methodology",
+      "stack": "any/graphql",
+      "difficulty": "",
+      "technique": "NEVER VERDICT OFF collection[0] - PRINT THE WHOLE COLLECTION. A write that APPENDS lands at a new index while index 0 keeps the old value. Reading element zero shows 'unchanged' and manufactures a false ENFORCED verdict for a mutation that is writing correctly",
+      "payload": "in every extractor, render the full array: addresses.map(a=>a.city+':'+a.id).join(' | ') - never addresses[0].city. Same for lineItems, groups, paymentMethods, memberships",
+      "tell": "array length grows between control and probe while your one-element print stays constant; response size climbs but your extracted value does not",
+      "source": "mediamarkt-hunt35",
+      "ref": "",
+      "validated": true,
+      "verify": "UpdateBasketAddress appended the new address at index 1 and left the GUEST_ADDRESS at index 0. Printing addresses[0] showed city=ded across four probes and produced a wrong 'mutation is inert' call; printing all addresses showed ded|Koeln and proved the write",
+      "added": "2026-08-31"
     }
   ]
 }
