@@ -9784,6 +9784,34 @@
       "validated": true,
       "verify": "UnsubscribeGuestUserChannels looked like {loyaltyCardNumber, birthday} - a card number printed on the card plus a guessable birthday guarding a write to any customer's comms preferences. Rounds 4-6 added channelSubscriptions, then name, then **token: String!**. Token-gated => ENFORCED. Six rounds, zero state change, no write ever landed, and no restore needed",
       "added": "2026-08-31"
+    },
+    {
+      "id": "pb0714",
+      "class": "recon",
+      "stack": "any/web",
+      "difficulty": "",
+      "technique": "RUN THE PASSIVE CORPORA LADDER BEFORE TOUCHING THE TARGET. Five free, off-target sources return endpoints, parameters and real variable SHAPES the live app no longer exposes, at zero request cost to the programme: (1) Wayback CDX for URLs AND for archived copies of the JS bundles themselves - old bundles carry endpoints since removed from the client but often still live server-side; (2) urlscan.io - historical requests plus DOM, a different corpus from Wayback; (3) Common Crawl - third corpus; (4) source maps - one request per bundle, returns original TypeScript with comments when present; (5) GitHub code search on TARGET identifiers (internal hostnames, API paths, operation names) - not hunter repos, the target's own leaked code",
+      "payload": "http://web.archive.org/cdx/search/cdx?url=<host>*&output=text&fl=original&collapse=urlkey&filter=original:.*\\/api\\/.*  |  curl -s <bundle>.js.map  |  urlscan.io/api/v1/search/?q=domain:<host>",
+      "tell": "the live client sends only opaque hashes or a thin endpoint set, yet the archive holds thousands of fully-parameterised URLs; a manifest gives operation NAMES while the archive gives their VARIABLE SHAPES - you need both",
+      "source": "mediamarkt-hunt35",
+      "ref": "",
+      "validated": true,
+      "verify": "Wayback CDX on www.mediamarkt.de returned 8,421 archived /api/ URLs, 8,189 of them /api/v1/graphql with full query strings => 107 distinct operations WITH REAL VARIABLE KEYS, plus 12 REST endpoints present in no capture and no bundle. The 439-chunk manifest could only give names. Source maps checked the same day: 404 on every MediaMarkt bundle (third-party vendor files did carry sourceMappingURL) - a cheap check that costs one request and sometimes returns the whole source",
+      "added": "2026-09-01"
+    },
+    {
+      "id": "pb0715",
+      "class": "methodology",
+      "stack": "any/bugbounty",
+      "difficulty": "",
+      "technique": "COUNT THE IN-SCOPE ASSETS AND WRITE DOWN WHICH ONES YOU SKIPPED. MOBILE APPS ARE ASSETS. A brief that lists iOS/Android apps alongside the web app is offering a second CLIENT onto the SAME API - and mobile builds routinely ship operations, feature flags and endpoints the web bundle does not. Skipping them silently means the coverage matrix describes one client while the scope covered several",
+      "payload": "tabulate the scope list by asset TYPE before Phase 0. For each type not tested, record 'UNTESTED - <reason>' in the coverage file. For mobile: pull the APK, unzip, strings/grep the classes+assets for API paths, operation names and hashes, then diff against the web client's set",
+      "tell": "your coverage file only ever names web endpoints while the programme's scope table lists a dozen app-store URLs",
+      "source": "mediamarkt-hunt35",
+      "ref": "",
+      "validated": true,
+      "verify": "MediaMarktSaturn scope = 31 assets: 11 web + **20 mobile app entries** (iOS + Android across 10 countries). The hunt tested the web client only and never opened a single app, yet the apps hit the same /api/v1/graphql. Two thirds of the listed assets were skipped and it was never written down as skipped until the retro",
+      "added": "2026-09-01"
     }
   ]
 }
