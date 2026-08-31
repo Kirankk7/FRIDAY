@@ -9770,6 +9770,20 @@
       "validated": true,
       "verify": "four void batches in one session, all the same signature: response root was data.updateBasketAddress not data.basket; vatWithRates[0].vat.price not [0].vatAmount.price; addresses[0] while the write appended at index 1; a line-item id hardcoded across steps while ids rotate per mutation. Each printed as 'unchanged' and each nearly became an ENFORCED verdict",
       "added": "2026-08-31"
+    },
+    {
+      "id": "pb0713",
+      "class": "methodology",
+      "stack": "any/graphql",
+      "difficulty": "",
+      "technique": "SCHEMA-WALK THE WHOLE AUTH MODEL BEFORE SENDING ONE REAL WRITE. Feed empty variables, then empty objects, then deliberately wrong enum/field names, and let the validator hand you the operation's complete required-argument set. The LAST required argument is usually the actual authorisation gate - identifying arguments are declared first and read as the auth factor until the walk finishes. Verdict only on the full shape, never on a partial one",
+      "payload": "{} -> names $var; {var:{}} -> names inner fields; {field:wrongCase} -> 'Did you mean' leaks the enum members; repeat until no new required field appears. Cost is 1 request per field because the server reports ONE missing required variable at a time",
+      "tell": "a mid-walk shape that looks like weak auth (id + a low-entropy PII field) and a final round that adds `token`/`signature` - the weak-looking factors were identity, not authorisation",
+      "source": "mediamarkt-hunt35",
+      "ref": "",
+      "validated": true,
+      "verify": "UnsubscribeGuestUserChannels looked like {loyaltyCardNumber, birthday} - a card number printed on the card plus a guessable birthday guarding a write to any customer's comms preferences. Rounds 4-6 added channelSubscriptions, then name, then **token: String!**. Token-gated => ENFORCED. Six rounds, zero state change, no write ever landed, and no restore needed",
+      "added": "2026-08-31"
     }
   ]
 }
