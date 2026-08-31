@@ -4251,7 +4251,7 @@ Report:"""
     }
 
     def oast_probe(self, url: str, param: str = "url", kind: str = "ssrf",
-                   wait: float = 3.0, listener=None) -> dict:
+                   wait: float = 3.0, listener=None, reach: str = "local") -> dict:
         """v1.3 A5 — OAST/OOB confirmation for BLIND classes. Mint a callback (correlation id), inject it
         into the class-appropriate payload, poll the listener: an out-of-band hit = the server reached out
         = CONFIRMED (reflection can't produce an OOB call). `kind`: ssrf (param=callback URL) · cmdi (shell
@@ -4265,9 +4265,28 @@ Report:"""
             return {"success": False, "message": f"OAST kind must be one of {list(self._OAST_KINDS)}.", "data": {}}
         template, human = self._OAST_KINDS[kind]
         own = listener is None
-        L = (listener or oast.LocalHTTPListener().start())
+        # `reach`: local (loopback, same-host targets) | tunnel (cloudflared, public) |
+        # collector (external Worker via JARVIS_OAST_BASE). A REMOTE target cannot call
+        # back to loopback — the adapters raise rather than pretend, see core/oast.py.
+        if listener is None:
+            try:
+                if reach == "tunnel":
+                    L = oast.TunnelHTTPListener().start()
+                elif reach == "collector":
+                    L = oast.RemoteCollectorListener().start()
+                elif reach == "local":
+                    L = oast.LocalHTTPListener().start()
+                else:
+                    return {"success": False,
+                            "message": "reach must be one of: local, tunnel, collector.", "data": {}}
+            except oast.OastUnavailable as e:
+                return {"success": False,
+                        "message": f"OAST listener unavailable ({reach}): {e}",
+                        "data": {"reach": reach, "confirmed": False}}
+        else:
+            L = listener
         try:
-            cid = "oast" + uuid.uuid4().hex[:12]
+            cid = oast.make_cid("http", kind, urlsplit(url).netloc or "t")
             cb = L.mint(cid)
             parts = urlsplit(url)
             qs = dict(parse_qsl(parts.query))
@@ -5147,7 +5166,8 @@ Report:"""
 
             elif action in ("oast_ssrf", "oast_probe"):
                 return self.oast_probe(parameters.get("url", target), parameters.get("param", "url"),
-                                       parameters.get("kind", "ssrf"))
+                                       parameters.get("kind", "ssrf"),
+                                       reach=parameters.get("reach", "local"))
 
             elif action == "xss_confirm":
                 return self.xss_confirm(parameters.get("url", target), parameters.get("param", ""),
