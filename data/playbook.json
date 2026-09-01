@@ -9812,6 +9812,20 @@
       "validated": true,
       "verify": "MediaMarktSaturn scope = 31 assets: 11 web + **20 mobile app entries** (iOS + Android across 10 countries). The hunt tested the web client only and never opened a single app, yet the apps hit the same /api/v1/graphql. Two thirds of the listed assets were skipped and it was never written down as skipped until the retro",
       "added": "2026-09-01"
+    },
+    {
+      "id": "pb0716",
+      "class": "business-logic",
+      "stack": "platform/marketplace",
+      "difficulty": "",
+      "technique": "ON A MULTI-TENANT PLATFORM, A LIMIT THE *TENANT* CONFIGURES MAY NOT BE A BOUNDARY THE *PLATFORM* DEFENDS. Races against seller/merchant-set caps (discount usage_limit, seat counts, quota) can be closed as by-design because the platform optimises the BUYER path and treats the tenant's limit as advisory. Before spending a report, ask who owns the invariant and who bears the loss: if the PLATFORM loses money it is a bug; if only the TENANT loses money the platform may call it their customer's configuration problem",
+      "payload": "pre-filing question: does breaking this cost the PLATFORM revenue, or only the tenant who set it? Prefer invariants the platform enforces for its OWN protection (payment amount, its own billing, its own entitlements) over caps a tenant configures",
+      "tell": "the triage reply explains the FEATURE working as intended rather than addressing the concurrency - e.g. 'a coupon will apply once it's been added, to avoid poor experience on the checkout', which answers application, not the redemption counter",
+      "source": "paddle-939-informative",
+      "ref": "YWH #14330-939",
+      "validated": true,
+      "verify": "Paddle #939 (6.5): discount usage_limit:1 raced to 5 concurrent $0.00 checkouts. Closed INFORMATIVE 2026-09-01, 15 days after filing, as by-design with buyer-UX priority. +2 credits returned and closed Informative specifically so ranking points were not lost. The MECHANISM was never disputed - only whose invariant it was. Contrast #941 (7.5, still under review): a BUYER rewriting a SELLER-created transaction's line items costs the platform's own integrity, not a tenant's config",
+      "added": "2026-09-01"
     }
   ]
 }
