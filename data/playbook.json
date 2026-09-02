@@ -9826,6 +9826,20 @@
       "validated": true,
       "verify": "Paddle #939 (6.5): discount usage_limit:1 raced to 5 concurrent $0.00 checkouts. Closed INFORMATIVE 2026-09-01, 15 days after filing, as by-design with buyer-UX priority. +2 credits returned and closed Informative specifically so ranking points were not lost. The MECHANISM was never disputed - only whose invariant it was. Contrast #941 (7.5, still under review): a BUYER rewriting a SELLER-created transaction's line items costs the platform's own integrity, not a tenant's config",
       "added": "2026-09-01"
+    },
+    {
+      "id": "pb0717",
+      "class": "methodology",
+      "stack": "any/bugbounty",
+      "difficulty": "",
+      "technique": "EVERY DUPLICATE WE HAVE TAKEN CAME FROM A MATURE, HEAVILY-HUNTED TARGET; THE ONLY REPORT THAT SURVIVED TRIAGE CAME FROM A NOVEL BUSINESS-LOGIC CLASS ON A PAYMENTS PLATFORM. On a well-known target the COMMON classes (SSRF, IDOR, open redirect, authz on the main app) are found continuously - the competition is not the vendor's engineers, it is every other hunter who looked last month. Evidence quality does NOT beat discovery timing: a perfectly-evidenced SSRF loses to a thin report filed four months earlier. Rank candidate targets by DISCOVERY RATE of the class you intend to hunt, not by scope generosity or reward ceiling",
+      "payload": "before committing: (1) is this class findable by a scanner or a 1-hour manual pass? if yes assume it is already filed; (2) prefer a NEW FEATURE inside an established programme over the established surface; (3) prefer invariants the platform defends for ITSELF (pb0716) over generic web classes",
+      "tell": "the triage reply names an original submitted months earlier, and its VRT is LOW - the class is so commonly found that even the FIRST reporter got little for it",
+      "source": "auth0-dup-2026-09-02",
+      "ref": "BC 9141a4c3",
+      "validated": true,
+      "verify": "Scoreboard 2026-09-02: 8 filed, 4 DUPLICATE - vidaXL (reflected XSS), LaunchDarkly SSRF, LaunchDarkly privesc, Auth0 SSRF. ALL FOUR on mature heavily-hunted targets. Auth0's original was filed 16 Apr 2026, four months before ours, at VRT External-Low. The single report still alive is Paddle #941 - a buyer rewriting a seller-created transaction's line items, a novel business-logic class on a payments platform, triage still In progress after 16 days",
+      "added": "2026-09-02"
     }
   ]
 }
