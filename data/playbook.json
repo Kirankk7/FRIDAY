@@ -9840,6 +9840,20 @@
       "validated": true,
       "verify": "Scoreboard 2026-09-02: 8 filed, 4 DUPLICATE - vidaXL (reflected XSS), LaunchDarkly SSRF, LaunchDarkly privesc, Auth0 SSRF. ALL FOUR on mature heavily-hunted targets. Auth0's original was filed 16 Apr 2026, four months before ours, at VRT External-Low. The single report still alive is Paddle #941 - a buyer rewriting a seller-created transaction's line items, a novel business-logic class on a payments platform, triage still In progress after 16 days",
       "added": "2026-09-02"
+    },
+    {
+      "id": "pb0718",
+      "class": "methodology",
+      "stack": "any/bugbounty",
+      "difficulty": "",
+      "technique": "APPEAL A DUPLICATE ON REMEDIATION DISTINCTNESS, NEVER ON REPORT QUALITY. Bugcrowd's published duplicate policy is the lever: 'touch the code, pay the bug' - 'similar != same: if a finding requires a SEPARATE CHANGE it is a unique issue' - 'many != systemic'. So the only question that moves a dupe is: DOES FIXING THE ORIGINAL REMOVE THE NEED TO FIX MINE? If your report carried TWO independent bypasses of the same control with two different patches, the dupe may cover only one. ASK whether the original covers the second vector - do not assert that it does not, because you cannot see it. Give the triager an explicit exit ('if it covers both, I understand'), which keeps it a question rather than a complaint",
+      "payload": "name each mechanism, state its remediation in one line, then show that patch A does not remediate B and vice versa. No severity argument, no reward mention, no restating impact",
+      "tell": "your own report contained multiple distinct bypasses of one control, and the duplicate's title is generic ('SSRF via <feature>') - generic titles rarely enumerate every vector",
+      "source": "auth0-dup-2026-09-02",
+      "ref": "BC 9141a4c3 / bugcrowd.com duplicate-principles 2023-06-29",
+      "validated": false,
+      "verify": "Auth0 Event Streams SSRF duped 2026-09-02 against a 16 Apr 2026 submission at VRT External-Low. Our report held TWO bypasses with DIFFERENT fixes: (a) DNS-hostname - literal IP 400s, resolving hostname 201s => fix is resolve-then-validate; (b) redirect-following - validated destination 307s and delivery follows => fix is disable/re-validate redirects. Neither patch removes the need for the other. Appeal drafted on that basis; OUTCOME NOT YET KNOWN - validated stays false until it is",
+      "added": "2026-09-02"
     }
   ]
 }
