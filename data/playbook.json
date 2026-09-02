@@ -9854,6 +9854,20 @@
       "validated": false,
       "verify": "Auth0 Event Streams SSRF duped 2026-09-02 against a 16 Apr 2026 submission at VRT External-Low. Our report held TWO bypasses with DIFFERENT fixes: (a) DNS-hostname - literal IP 400s, resolving hostname 201s => fix is resolve-then-validate; (b) redirect-following - validated destination 307s and delivery follows => fix is disable/re-validate redirects. Neither patch removes the need for the other. Appeal drafted on that basis; OUTCOME NOT YET KNOWN - validated stays false until it is",
       "added": "2026-09-02"
+    },
+    {
+      "id": "pb0719",
+      "class": "recon",
+      "stack": "any/bugbounty",
+      "difficulty": "",
+      "technique": "ON A MOSTLY-PRIVATE PLATFORM, THE PUBLIC PROGRAMMES ARE THE MOST CROWDED, NOT THE LEAST. Every unverified researcher on the platform can touch ONLY the public programmes, so those absorb the entire unverified population while the private ones are gated to a fraction of it. A platform being 'niche' or 'uncrowded' says nothing about its public listings - compute crowding PER PROGRAMME (submissions / months live / assets in scope), never per platform. The gating requirement (KYC, invite, reputation) is itself the filter that makes a programme worth hunting",
+      "payload": "submissions-per-asset-per-month = total_submissions / months_live / in_scope_assets. Compare across candidates before committing. Do the platform's verification step FIRST - it is the cheapest crowding reduction available",
+      "tell": "a platform advertises 50+ hidden programmes behind verification while showing 1-2 public ones; the public ones carry submission counts far above comparable private programmes",
+      "source": "comolho-zerodha-screen-2026-09-02",
+      "ref": "",
+      "validated": true,
+      "verify": "Com Olho: 20,442 researchers, 456 programmes, most PRIVATE behind KYC. Zerodha is one of only TWO public programmes: 1,008 submissions in 18 months across 9 assets = ~112 per asset, ~56/month. MediaMarktSaturn for contrast: 557 reports total across 31 assets. The 'niche Indian platform' framing was right about the platform and wrong about its public flagship - which is precisely where every unverified researcher lands",
+      "added": "2026-09-02"
     }
   ]
 }
