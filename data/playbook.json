@@ -9889,6 +9889,30 @@
       "stack": "graphql",
       "difficulty": "",
       "technique": "ON A SINGLE-ENDPOINT GRAPHQL APP THE ROUTE TABLE IS THE ROOT-FIELD LIST, AND THE CAPTURE HOLDS ALMOST NONE OF IT. A full click-through produced 90 POSTs to one /graphql path carrying 7 mutations; mining the JS bundles for mutation root fields returned 185 - the capture was under 4% of the write surface. Two mechanics matter. (1) The bundles may not be in the HAR at all: hundreds of JS entries came back with `text=0` because the browser served them from cache, so the sizes are recorded and the source is not - fetch the deduped path list directly before concluding the bundles are thin. (2) The documents are minified JS string literals, so `\\n` is two characters and every naive `mutation\\s+(\\w+)` regex returns zero; normalise the escapes first, and match ROOT FIELDS rather than operation names because the operations are usually anonymous. What a sweep like this surfaces is not extra fields but whole features the UI never offers - an invite/delegation lifecycle, bulk deletes, upload scalars - i.e. exactly the privilege surface no amount of clicking can reach."
+    },
+    {
+      "id": "pb0723",
+      "class": "authz",
+      "stack": "graphql",
+      "difficulty": "",
+      "source": "hunt37-tax-saas",
+      "technique": "TWO SELECTORS IN A SCHEMA IS NOT TWO SELECTORS AT RUNTIME. A resolver taking both an opaque id and a positional index for the same object is the classic split-brain shape - authorize on one, look up on the other - and it was the highest-confidence hypothesis from every cold model given the request, corroborated by the app's own route carrying BOTH values. It was wrong. Holding the id and lying with the index returned the id's object every time; an out-of-range index was ignored; the index could be omitted entirely; omitting the id was refused outright. The second argument was dead weight the resolver never reads. FALSIFY IT IN ONE ACCOUNT BEFORE BUILDING A SECOND: create two objects you own, give each a single distinguishing string, then hold one selector and lie with the other. Four requests decide whether the whole lane exists, and a URL shape is the client's story about the server, not the server's own."
+    },
+    {
+      "id": "pb0724",
+      "class": "recon",
+      "stack": "any/methodology",
+      "difficulty": "",
+      "source": "hunt37-tax-saas",
+      "technique": "TWO CAPTURES OF ONE FLOW ARE ONE TIMELINE, OR THEY ARE NOT EVIDENCE. A two-party flow (requester + approver) was captured as two HARs from two browser profiles. DevTools wrote `startedDateTime` as `...Z` in one and `...+04:00` in the other. Read as wall clock, a two-minute request-then-approve sequence inverted into the approver acting FOUR HOURS BEFORE the request - which made a perfectly working control look like a contaminated experiment, and nearly produced a report claiming a bypass that never happened. Normalise every timestamp to UTC before ordering anything across captures, and state the offsets in the writeup. Corollary for designing the run: the interesting window is BETWEEN the two parties' actions, so the requester must poll inside it - a capture that only observes state after approval can never test whether approval was required."
+    },
+    {
+      "id": "pb0725",
+      "class": "recon",
+      "stack": "graphql",
+      "difficulty": "",
+      "source": "hunt37-tax-saas",
+      "technique": "WHEN A BUNDLE SHIPS AN INTROSPECTION DUMP, THE WHOLE SCHEMA IS A FILE READ. One chunk of a SPA carried a complete `__schema` payload - 2470 fields, 1281 OBJECT, 325 INPUT_OBJECT, 657 ENUM - so every mutation, argument type, enum value and input shape was recoverable OFFLINE with zero requests, on a programme where introspection is explicitly non-qualifying as a finding. Two things it bought that no amount of clicking does. (1) Rank the write surface by the authorization gate: of 219 mutation root fields, 212 took the tenant-scoping id and 7 did not - and the seven are the entire remaining attack surface once the gate is proven. (2) The INJECTION INVENTORY becomes a file read: 84 input objects, 365 String-typed fields, including many no UI control ever exposes. Find it by grepping the corpus for `\"isDeprecated\"` next to `\"kind\":\"OBJECT\"`; do not try to json.loads the blob (it is a doubly-escaped JS literal) - bound the scan to each type's brace block and regex inside it."
     }
   ]
 }
