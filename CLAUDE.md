@@ -14,6 +14,15 @@ The one-line test from §8, which governs every "done / closed / enforced / fort
 
 If I cannot state it, the enumeration is unfinished — say what is untested instead of banking.
 
+## ⚠️ One session spans many hunts
+
+Kiran does NOT open a new session per hunt — one session runs for days across several targets. So
+this file loading at SESSION start does not cover a hunt that begins mid-session.
+
+**Per-hunt trigger: the `hunt-start` skill (`/hunt`).** It reloads `docs/HUNT_PROTOCOL.md` and the
+target file, then reports phase + denominators + lane verdicts before any work. Invoke it myself
+whenever the session pivots to a new target or resumes one — do not wait to be asked.
+
 ## Hunt order (from HUNT_PROTOCOL §2–§3)
 
 ```
