@@ -100,3 +100,4 @@ labs/
 hunt_lessons/HUNT_LOG_PRIVATE.md
 data/hunt_snapshots.json
 data/target_decisions.json
+scratch_chunks.json

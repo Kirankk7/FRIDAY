@@ -79,7 +79,7 @@ class LocalHTTPListener:
 # v1.3 A5 adapter (2026-09-01) — INTERNET-REACHABLE listeners.
 #
 # Why: LocalHTTPListener binds 127.0.0.1, so it can never catch a callback from a
-# remote target. That gap cost two reports (Swapcard INFORMATIVE, Aiven NOT
+# remote target. That gap cost two reports (one closed INFORMATIVE, one NOT
 # APPLICABLE — impact described, not demonstrated) and forced a hand-rolled
 # Cloudflare Worker on Auth0. These adapters implement the SAME mint()/poll()
 # shape; nothing else in the codebase changes.

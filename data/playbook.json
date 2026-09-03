@@ -9512,7 +9512,7 @@
       "difficulty": "",
       "technique": "A FILTER THAT VALIDATES THE STRING BUT NEVER RESOLVES IT IS CHECKING SPELLING, NOT DESTINATION. A carefully written public SSRF validator - parsing structurally, rejecting userinfo, catching legacy IPv4 spellings, testing is_global - performs NO DNS resolution at all. It only inspects LITERAL addresses, so any hostname that resolves to 127.0.0.1 or 169.254.169.254 passes every single check it makes",
       "payload": "give the validator the SAME address twice: once as a literal (expect a reject) and once as a hostname that resolves to it (nip.io, localtest.me, or your own A record). A reject-then-accept pair proves the filter stops at the parse. Then confirm DELIVERY actually dials it - a never-resolvable control separates a real connection attempt from a blocklist",
-      "tell": "this is exactly the Auth0 finding, and seeing the same gap in an implementation written by someone who clearly knew the class says it is structural, not sloppiness: resolving costs a DNS round trip on every call and invites TOCTOU, so authors skip it. Check it FIRST on any URL-accepting field",
+      "tell": "this is exactly the target C finding, and seeing the same gap in an implementation written by someone who clearly knew the class says it is structural, not sloppiness: resolving costs a DNS round trip on every call and invites TOCTOU, so authors skip it. Check it FIRST on any URL-accepting field",
       "source": "self:2026-08-26",
       "ref": "cross-checked against our own filed SSRF finding",
       "validated": true,
@@ -9709,7 +9709,7 @@
       "technique": "PICK THE POSITIVE CONTROL FROM THE CAPTURE, NOT FROM INTUITION. Before using field X to prove a mutation writes, grep the capture for a request that SET X and a response that ECHOED the new value. A field that looks obviously writable can be one the server never persists - then your control fails, you read 'inert', and you void a whole batch on a false premise",
       "payload": "for op O and candidate control field X: find entry where request.variables contains X=v_new AND response contains X=v_new. Only a field with that round-trip evidence is a valid positive control for O",
       "tell": "the control field comes back null or unchanged even on the vendor's own captured call - it was never writable, so it never tested anything",
-      "source": "mediamarkt-hunt35",
+      "source": "hunt35-eu-retail",
       "ref": "",
       "validated": true,
       "verify": "chose physicalInvoiceRequested as positive control for UpdateBasketAddress; it returns null in the ORIGINAL HAR too, so it could never have shown a write. city DID round-trip in the HAR (sent german, returned german) and was the only valid control available",
@@ -9723,7 +9723,7 @@
       "technique": "NEVER VERDICT OFF collection[0] - PRINT THE WHOLE COLLECTION. A write that APPENDS lands at a new index while index 0 keeps the old value. Reading element zero shows 'unchanged' and manufactures a false ENFORCED verdict for a mutation that is writing correctly",
       "payload": "in every extractor, render the full array: addresses.map(a=>a.city+':'+a.id).join(' | ') - never addresses[0].city. Same for lineItems, groups, paymentMethods, memberships",
       "tell": "array length grows between control and probe while your one-element print stays constant; response size climbs but your extracted value does not",
-      "source": "mediamarkt-hunt35",
+      "source": "hunt35-eu-retail",
       "ref": "",
       "validated": true,
       "verify": "UpdateBasketAddress appended the new address at index 1 and left the GUEST_ADDRESS at index 0. Printing addresses[0] showed city=ded across four probes and produced a wrong 'mutation is inert' call; printing all addresses showed ded|Koeln and proved the write",
@@ -9737,7 +9737,7 @@
       "technique": "WHEN A MUTATION CARRIES NO OBJECT ID, THE ID IS IN THE REFERER. A flow-bound operation whose variables are only {status} still resolves a specific object - the server is reading the referring URL. Diff the request headers of the flow call against an ordinary call on the same endpoint: the one field that differs names the binding. Then replay it from ANY page with fetch's `referrer` option (same-origin values are permitted), instead of trying to hold a transient callback page open",
       "payload": "fetch(url,{method:'POST',referrer:'https://host/flow/callback?id=<objId>',headers:{...},body:...})  // C0 = replay the flow's own value; if C0 resolves the object the override reached the server",
       "tell": "resolver error 'X id is null or undefined' from every page except one; that page's URL carries the id as a query param; header diff shows referer as the only difference",
-      "source": "mediamarkt-hunt35",
+      "source": "hunt35-eu-retail",
       "ref": "",
       "validated": true,
       "verify": "SetPaymentStatus vars were {paymentStatus} alone yet returned one specific basket. Referer on the live call was .../web-payment-failure-callback?id=<basketId> while an ordinary AddCoupon call refered to /checkout/payment. Setting fetch referrer to the callback URL resolved the basket from /checkout/payment. The callback page itself self-redirects in ~1s and cannot be held open",
@@ -9751,7 +9751,7 @@
       "technique": "THE BROWSER REPORTING THE PAYMENT OUTCOME IS A SHAPE, NOT A BUG. SPA checkouts call setPaymentStatus(SUCCESS|FAILURE) from the PSP return page, which LOOKS like the client declaring it paid. The authoritative path is nearly always the PSP's server-to-server notify. Test it by sending BOTH outcomes with a control that proves the object resolved, and verdict on ORDER STATE (orderNumber, state) - never on the paymentStatus field, which reports instrument ALLOCATION not collection",
       "payload": "send FAILURE then SUCCESS on the same object; read orderNumber and state. amountToPay:0 + paymentStatus:PAID with orderNumber:null means an instrument is attached, not that money moved",
       "tell": "paymentStatus returns PAID while orderNumber stays null and state stays OPEN; storedPaymentMethods carries the full amount with maskedPan null and transactionCode null",
-      "source": "mediamarkt-hunt35",
+      "source": "hunt35-eu-retail",
       "ref": "",
       "validated": true,
       "verify": "client sent FAILURE, server answered PAID - already proof the value is not read. SUCCESS then produced a byte-identical response: orderNumber null, state OPEN. Computop paygate handoff is a Blowfish blob keyed with a merchant secret, so the browser was never in the trust path",
@@ -9765,7 +9765,7 @@
       "technique": "AN EXTRACTOR THAT CANNOT FAIL LOUDLY MANUFACTURES ENFORCED VERDICTS. 'server returned the object unchanged' and 'I read the wrong path' print identically - both render as undefined or a stale-looking value. Before reading the value under test, ASSERT THE SHAPE: that the response root exists, that the collection is non-empty, that the control field holds its known value. Fail the run on a broken assertion instead of reporting a verdict",
       "payload": "const root=o?.data&&Object.values(o.data)[0]; if(!root) throw 'shape: no data root'; if(!(ck?.addresses?.length)) throw 'shape: empty addresses'; then read the probe field. Print the whole collection and a known-good control field on EVERY row",
       "tell": "a probe row prints undefined for the field under test, or every row of a batch is byte-identical including timestamps - suspect the extractor before you suspect the server",
-      "source": "mediamarkt-hunt35",
+      "source": "hunt35-eu-retail",
       "ref": "",
       "validated": true,
       "verify": "four void batches in one session, all the same signature: response root was data.updateBasketAddress not data.basket; vatWithRates[0].vat.price not [0].vatAmount.price; addresses[0] while the write appended at index 1; a line-item id hardcoded across steps while ids rotate per mutation. Each printed as 'unchanged' and each nearly became an ENFORCED verdict",
@@ -9779,7 +9779,7 @@
       "technique": "SCHEMA-WALK THE WHOLE AUTH MODEL BEFORE SENDING ONE REAL WRITE. Feed empty variables, then empty objects, then deliberately wrong enum/field names, and let the validator hand you the operation's complete required-argument set. The LAST required argument is usually the actual authorisation gate - identifying arguments are declared first and read as the auth factor until the walk finishes. Verdict only on the full shape, never on a partial one",
       "payload": "{} -> names $var; {var:{}} -> names inner fields; {field:wrongCase} -> 'Did you mean' leaks the enum members; repeat until no new required field appears. Cost is 1 request per field because the server reports ONE missing required variable at a time",
       "tell": "a mid-walk shape that looks like weak auth (id + a low-entropy PII field) and a final round that adds `token`/`signature` - the weak-looking factors were identity, not authorisation",
-      "source": "mediamarkt-hunt35",
+      "source": "hunt35-eu-retail",
       "ref": "",
       "validated": true,
       "verify": "UnsubscribeGuestUserChannels looked like {loyaltyCardNumber, birthday} - a card number printed on the card plus a guessable birthday guarding a write to any customer's comms preferences. Rounds 4-6 added channelSubscriptions, then name, then **token: String!**. Token-gated => ENFORCED. Six rounds, zero state change, no write ever landed, and no restore needed",
@@ -9793,10 +9793,10 @@
       "technique": "RUN THE PASSIVE CORPORA LADDER BEFORE TOUCHING THE TARGET. Five free, off-target sources return endpoints, parameters and real variable SHAPES the live app no longer exposes, at zero request cost to the programme: (1) Wayback CDX for URLs AND for archived copies of the JS bundles themselves - old bundles carry endpoints since removed from the client but often still live server-side; (2) urlscan.io - historical requests plus DOM, a different corpus from Wayback; (3) Common Crawl - third corpus; (4) source maps - one request per bundle, returns original TypeScript with comments when present; (5) GitHub code search on TARGET identifiers (internal hostnames, API paths, operation names) - not hunter repos, the target's own leaked code",
       "payload": "http://web.archive.org/cdx/search/cdx?url=<host>*&output=text&fl=original&collapse=urlkey&filter=original:.*\\/api\\/.*  |  curl -s <bundle>.js.map  |  urlscan.io/api/v1/search/?q=domain:<host>",
       "tell": "the live client sends only opaque hashes or a thin endpoint set, yet the archive holds thousands of fully-parameterised URLs; a manifest gives operation NAMES while the archive gives their VARIABLE SHAPES - you need both",
-      "source": "mediamarkt-hunt35",
+      "source": "hunt35-eu-retail",
       "ref": "",
       "validated": true,
-      "verify": "Wayback CDX on www.mediamarkt.de returned 8,421 archived /api/ URLs, 8,189 of them /api/v1/graphql with full query strings => 107 distinct operations WITH REAL VARIABLE KEYS, plus 12 REST endpoints present in no capture and no bundle. The 439-chunk manifest could only give names. Source maps checked the same day: 404 on every MediaMarkt bundle (third-party vendor files did carry sourceMappingURL) - a cheap check that costs one request and sometimes returns the whole source",
+      "verify": "Wayback CDX on the target's primary domain returned 8,421 archived /api/ URLs, 8,189 of them /api/v1/graphql with full query strings => 107 distinct operations WITH REAL VARIABLE KEYS, plus 12 REST endpoints present in no capture and no bundle. The 439-chunk manifest could only give names. Source maps checked the same day: 404 on every The target bundle (third-party vendor files did carry sourceMappingURL) - a cheap check that costs one request and sometimes returns the whole source",
       "added": "2026-09-01"
     },
     {
@@ -9807,10 +9807,10 @@
       "technique": "COUNT THE IN-SCOPE ASSETS AND WRITE DOWN WHICH ONES YOU SKIPPED. MOBILE APPS ARE ASSETS. A brief that lists iOS/Android apps alongside the web app is offering a second CLIENT onto the SAME API - and mobile builds routinely ship operations, feature flags and endpoints the web bundle does not. Skipping them silently means the coverage matrix describes one client while the scope covered several",
       "payload": "tabulate the scope list by asset TYPE before Phase 0. For each type not tested, record 'UNTESTED - <reason>' in the coverage file. For mobile: pull the APK, unzip, strings/grep the classes+assets for API paths, operation names and hashes, then diff against the web client's set",
       "tell": "your coverage file only ever names web endpoints while the programme's scope table lists a dozen app-store URLs",
-      "source": "mediamarkt-hunt35",
+      "source": "hunt35-eu-retail",
       "ref": "",
       "validated": true,
-      "verify": "MediaMarktSaturn scope = 31 assets: 11 web + **20 mobile app entries** (iOS + Android across 10 countries). The hunt tested the web client only and never opened a single app, yet the apps hit the same /api/v1/graphql. Two thirds of the listed assets were skipped and it was never written down as skipped until the retro",
+      "verify": "the programme scope = 31 assets: 11 web + **20 mobile app entries** (iOS + Android across 10 countries). The hunt tested the web client only and never opened a single app, yet the apps hit the same /api/v1/graphql. Two thirds of the listed assets were skipped and it was never written down as skipped until the retro",
       "added": "2026-09-01"
     },
     {
@@ -9824,7 +9824,7 @@
       "source": "paddle-939-informative",
       "ref": "YWH #14330-939",
       "validated": true,
-      "verify": "Paddle #939 (6.5): discount usage_limit:1 raced to 5 concurrent $0.00 checkouts. Closed INFORMATIVE 2026-09-01, 15 days after filing, as by-design with buyer-UX priority. +2 credits returned and closed Informative specifically so ranking points were not lost. The MECHANISM was never disputed - only whose invariant it was. Contrast #941 (7.5, still under review): a BUYER rewriting a SELLER-created transaction's line items costs the platform's own integrity, not a tenant's config",
+      "verify": "target D #939 (6.5): discount usage_limit:1 raced to 5 concurrent $0.00 checkouts. Closed INFORMATIVE 2026-09-01, 15 days after filing, as by-design with buyer-UX priority. +2 credits returned and closed Informative specifically so ranking points were not lost. The MECHANISM was never disputed - only whose invariant it was. Contrast #941 (7.5, still under review): a BUYER rewriting a SELLER-created transaction's line items costs the platform's own integrity, not a tenant's config",
       "added": "2026-09-01"
     },
     {
@@ -9838,7 +9838,7 @@
       "source": "auth0-dup-2026-09-02",
       "ref": "BC 9141a4c3",
       "validated": true,
-      "verify": "Scoreboard 2026-09-02: 8 filed, 4 DUPLICATE - vidaXL (reflected XSS), LaunchDarkly SSRF, LaunchDarkly privesc, Auth0 SSRF. ALL FOUR on mature heavily-hunted targets. Auth0's original was filed 16 Apr 2026, four months before ours, at VRT External-Low. The single report still alive is Paddle #941 - a buyer rewriting a seller-created transaction's line items, a novel business-logic class on a payments platform, triage still In progress after 16 days",
+      "verify": "Scoreboard 2026-09-02: 8 filed, 4 DUPLICATE - target A (reflected XSS), target B SSRF, target B privesc, target C SSRF. ALL FOUR on mature heavily-hunted targets. target C's original was filed 16 Apr 2026, four months before ours, at VRT External-Low. The single report still alive is target D #941 - a buyer rewriting a seller-created transaction's line items, a novel business-logic class on a payments platform, triage still In progress after 16 days",
       "added": "2026-09-02"
     },
     {
@@ -9852,7 +9852,7 @@
       "source": "auth0-dup-2026-09-02",
       "ref": "BC 9141a4c3 / bugcrowd.com duplicate-principles 2023-06-29",
       "validated": false,
-      "verify": "Auth0 Event Streams SSRF duped 2026-09-02 against a 16 Apr 2026 submission at VRT External-Low. Our report held TWO bypasses with DIFFERENT fixes: (a) DNS-hostname - literal IP 400s, resolving hostname 201s => fix is resolve-then-validate; (b) redirect-following - validated destination 307s and delivery follows => fix is disable/re-validate redirects. Neither patch removes the need for the other. Appeal drafted on that basis; OUTCOME NOT YET KNOWN - validated stays false until it is",
+      "verify": "target C Event Streams SSRF duped 2026-09-02 against a 16 Apr 2026 submission at VRT External-Low. Our report held TWO bypasses with DIFFERENT fixes: (a) DNS-hostname - literal IP 400s, resolving hostname 201s => fix is resolve-then-validate; (b) redirect-following - validated destination 307s and delivery follows => fix is disable/re-validate redirects. Neither patch removes the need for the other. Appeal drafted on that basis; OUTCOME NOT YET KNOWN - validated stays false until it is",
       "added": "2026-09-02"
     },
     {
@@ -9863,10 +9863,10 @@
       "technique": "ON A MOSTLY-PRIVATE PLATFORM, THE PUBLIC PROGRAMMES ARE THE MOST CROWDED, NOT THE LEAST. Every unverified researcher on the platform can touch ONLY the public programmes, so those absorb the entire unverified population while the private ones are gated to a fraction of it. A platform being 'niche' or 'uncrowded' says nothing about its public listings - compute crowding PER PROGRAMME (submissions / months live / assets in scope), never per platform. The gating requirement (KYC, invite, reputation) is itself the filter that makes a programme worth hunting",
       "payload": "submissions-per-asset-per-month = total_submissions / months_live / in_scope_assets. Compare across candidates before committing. Do the platform's verification step FIRST - it is the cheapest crowding reduction available",
       "tell": "a platform advertises 50+ hidden programmes behind verification while showing 1-2 public ones; the public ones carry submission counts far above comparable private programmes",
-      "source": "comolho-zerodha-screen-2026-09-02",
+      "source": "hunt36-platform-screen-2026-09-02",
       "ref": "",
       "validated": true,
-      "verify": "Com Olho: 20,442 researchers, 456 programmes, most PRIVATE behind KYC. Zerodha is one of only TWO public programmes: 1,008 submissions in 18 months across 9 assets = ~112 per asset, ~56/month. MediaMarktSaturn for contrast: 557 reports total across 31 assets. The 'niche Indian platform' framing was right about the platform and wrong about its public flagship - which is precisely where every unverified researcher lands",
+      "verify": "the platform: 20,442 researchers, 456 programmes, most PRIVATE behind KYC. the larger public programme is one of only TWO public programmes: 1,008 submissions in 18 months across 9 assets = ~112 per asset, ~56/month. the programme for contrast: 557 reports total across 31 assets. The 'niche Indian platform' framing was right about the platform and wrong about its public flagship - which is precisely where every unverified researcher lands",
       "added": "2026-09-02"
     },
     {
