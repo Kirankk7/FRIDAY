@@ -15,11 +15,11 @@ Every time, the partial number *looked* whole, so nothing prompted a re-check.
 
 | hunt | I said | reality | who caught it |
 |---|---|---|---|
-| Box | "all classes enforced" | hadn't mined the JS bundles | Kiran |
-| #35 MediaMarkt | "fortress, done" | 20 of 31 in-scope assets were mobile apps, never opened | Kiran |
-| #37 | "185 mutations" | the runtime chunk map held 105 chunks my walk never loaded | Kiran |
-| #37 | "365 input fields" | **1041** — I had counted only `String` | Kiran |
-| #37 | "the input inventory" | **1037 arguments** never counted at all | Kiran |
+| a file-storage SaaS | "all classes enforced" | hadn't mined the JS bundles | Kiran |
+| an EU retailer | "fortress, done" | 20 of 31 in-scope assets were mobile apps, never opened | Kiran |
+| a tax SaaS | "185 mutations" | the runtime chunk map held 105 chunks my walk never loaded | Kiran |
+| a tax SaaS | "365 input fields" | **1041** — I had counted only `String` | Kiran |
+| a tax SaaS | "the input inventory" | **1037 arguments** never counted at all | Kiran |
 
 **The rule that fixes it:** never state a coverage number without the total beside it.
 `tested 365` is a claim. `tested 365 / 1041 known` is a fact. If I cannot produce the denominator,
