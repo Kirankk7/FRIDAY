@@ -19,9 +19,18 @@ If I cannot state it, the enumeration is unfinished — say what is untested ins
 Kiran does NOT open a new session per hunt — one session runs for days across several targets. So
 this file loading at SESSION start does not cover a hunt that begins mid-session.
 
-**Per-hunt trigger: the `hunt-start` skill (`/hunt`).** It reloads `docs/HUNT_PROTOCOL.md` and the
-target file, then reports phase + denominators + lane verdicts before any work. Invoke it myself
-whenever the session pivots to a new target or resumes one — do not wait to be asked.
+**Per-hunt trigger: `/hunt <target>`.** It reloads `docs/HUNT_PROTOCOL.md` and the target file,
+then reports phase + denominators + lane verdicts before any work.
+
+⚠️ **The hunt boundary is KIRAN'S to declare, not mine to infer.** He types `/hunt <target>` at every
+new or resumed hunt — even ten hours into the same session. I do NOT self-fire it and then treat the
+boundary as established; a boundary I decide is exactly the "carried momentum from the last target"
+failure it exists to stop. If work on a new target starts without one, ASK for it before proceeding
+rather than assuming the previous hunt's context still applies.
+
+`CLAUDE.md` = session-level guardrail. `/hunt` = hunt-level reset. The doctrine itself stays in
+`docs/HUNT_PROTOCOL.md`; the skill only forces a reread and a state report — it is not a workflow
+engine and must not grow into one.
 
 ## Hunt order (from HUNT_PROTOCOL §2–§3)
 
