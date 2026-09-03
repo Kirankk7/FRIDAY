@@ -9868,6 +9868,27 @@
       "validated": true,
       "verify": "Com Olho: 20,442 researchers, 456 programmes, most PRIVATE behind KYC. Zerodha is one of only TWO public programmes: 1,008 submissions in 18 months across 9 assets = ~112 per asset, ~56/month. MediaMarktSaturn for contrast: 557 reports total across 31 assets. The 'niche Indian platform' framing was right about the platform and wrong about its public flagship - which is precisely where every unverified researcher lands",
       "added": "2026-09-02"
+    },
+    {
+      "id": "pb0720",
+      "class": "recon",
+      "stack": "any/methodology",
+      "difficulty": "",
+      "technique": "A COLD MODEL'S REFUSAL AUDITS YOUR HARNESS, NOT YOUR HUNT. Running the invariant lens against a live authorised target, one of three cold sessions refused outright. Two of its three objections were artefacts of the cold protocol itself - it was denied the authorisation context by design, then told not to ask for any, which is exactly the shape of an unverifiable claim. The third objection was a REAL defect on our side: the extractor redacted credentials (cookies, auth headers, PAN) but left BUSINESS identifiers in place - employer name, TAN, entity guid, Sentry trace and release - and shipped them to two third-party LLMs. Treat a refusal as a free review of the prompt, not as a verdict on the engagement: fix what is genuinely wrong (strip the target host and every business identifier, drop the 'do not ask for context' clause, state the programme facts), and the same model produces the strongest run of the three. 'Redact secrets' must be read as 'redact anything that identifies a party', or the rule only covers half the leak."
+    },
+    {
+      "id": "pb0721",
+      "class": "authz",
+      "stack": "any/methodology",
+      "difficulty": "",
+      "technique": "MAKE THE LENS DECLARE WHOSE BOUNDARY BREAKS, OR IT FILLS UP WITH SELF-HARM. Asked for ranked hypotheses on one write request, two cold models returned 18 - and 9 of them were the same shape: the client sends both the itemised parts AND the total, so the total is forgeable. True, testable, and worth nothing: on a self-service form the only party harmed by falsifying your own declared figures is you - and where those figures are a declaration to an authority, ACTING on it is an offence rather than a finding. Adding one required output line - `boundary: <whose data or privileges are crossed, or 'none, self-only'>` - plus a ranking rule that demotes self-only, kills that entire cluster before a human reads it. Keep the self-only items as CHEAP DIAGNOSTICS, never as findings: a server that will not recompute a total it was handed probably will not rebind an object id either, so run them first to predict where the real authz lanes land."
+    },
+    {
+      "id": "pb0722",
+      "class": "recon",
+      "stack": "graphql",
+      "difficulty": "",
+      "technique": "ON A SINGLE-ENDPOINT GRAPHQL APP THE ROUTE TABLE IS THE ROOT-FIELD LIST, AND THE CAPTURE HOLDS ALMOST NONE OF IT. A full click-through produced 90 POSTs to one /graphql path carrying 7 mutations; mining the JS bundles for mutation root fields returned 185 - the capture was under 4% of the write surface. Two mechanics matter. (1) The bundles may not be in the HAR at all: hundreds of JS entries came back with `text=0` because the browser served them from cache, so the sizes are recorded and the source is not - fetch the deduped path list directly before concluding the bundles are thin. (2) The documents are minified JS string literals, so `\\n` is two characters and every naive `mutation\\s+(\\w+)` regex returns zero; normalise the escapes first, and match ROOT FIELDS rather than operation names because the operations are usually anonymous. What a sweep like this surfaces is not extra fields but whole features the UI never offers - an invite/delegation lifecycle, bulk deletes, upload scalars - i.e. exactly the privilege surface no amount of clicking can reach."
     }
   ]
 }
