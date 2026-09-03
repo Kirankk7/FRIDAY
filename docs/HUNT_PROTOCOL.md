@@ -62,7 +62,15 @@ A refusal from a cold model is a **result** — usually an audit of my prompt, n
 
 ## §3 — FULL SURFACE (the step I skip)
 
-Enumerate the **machine-readable** surface before touching anything. Offline where possible.
+Enumerate the **machine-readable** surface **before lane selection** — not before the first
+authorised capture. The order is deliberate:
+
+```
+authorised capture  →  cold lens (sealed)  →  surface enumeration  →  lane selection
+```
+
+The capture is evidence; enumeration tells you what else exists. Do not let "full surface first"
+become a reason to delay the first real behavioural observation. Offline where possible.
 
 - [ ] **Route/operation table.** SPA bundles: fetch the **runtime chunk map**, not just what the HAR
       loaded — the HAR is a sample, the manifest is the ceiling. Server-rendered: docs, `llms.txt`,
@@ -104,6 +112,29 @@ STORED-INTACT / TRANSFORMED / REJECTED — then payloads only on the survivors. 
 
 **Two captures of one flow are ONE timeline.** Normalise every timestamp to UTC before ordering
 across captures. Design the run so the interesting window is actually observed. (`pb0724`)
+
+### Flow coverage — the second denominator
+
+- [ ] For any multi-step workflow, record **observed transitions N / M known**, and preserve UTC
+      ordering across every capture in the flow.
+
+**A covered request is not a covered flow.** A request exposes *fields*; a flow exposes *state,
+ordering, binding, replay and transition assumptions*.
+
+Earned the hard way in hunt #37. The join→approve flow was captured on both sides and every field
+analysed — but the requester made no state read in the **82 seconds** between its own join and the
+admin's approval:
+
+```
+19:55:41  B  POST workspace/join   -> 200
+          ·  ·  ·  82s UNOBSERVED  ·  ·  ·      <- the only window that could answer the question
+19:57:03  A  PUT  .../accept
+19:57:31  B  workspaces            -> ws=1
+```
+
+The capture proved access existed *after* approval and could never show whether it existed *before*.
+Two full HARs, complete request coverage, and the actual invariant untested. Name the transitions
+first, then design the run to observe the one that matters.
 
 ---
 
@@ -154,5 +185,13 @@ Before I say *done*, *closed*, *fortress*, or *enforced*:
 
 > **Can I state the denominator?**
 
-If not, I am banking a partial pass as a whole one — the exact failure this file exists to stop.
-Say what is untested instead. An honest gap is worth more than a false close.
+A denominator is required for both **breadth** (N/M surfaces) and **depth** (N/M transitions);
+neither can be inferred from the number of requests sent.
+
+If I cannot state it, I am banking a partial pass as a whole one — the exact failure this file
+exists to stop. Say what is untested instead. An honest gap is worth more than a false close.
+
+---
+
+**FROZEN 2026-09-04.** Every rule here traces to a failure that actually happened. Do not grow this
+file with checks that don't. The next hunt is the test of the protocol, not another revision of it.
