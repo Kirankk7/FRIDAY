@@ -217,6 +217,9 @@ Coverage is not complete until **every class and micro-class** carries one of th
       (public repo), pre-push hook hits enumerated individually.
 - [ ] Memory + `docs/` updated; `bash /d/hunt-doctrine/sync.sh` + commit + push, unprompted.
 - [ ] HARs and hunt artefacts deleted from the scratchpad.
+- [ ] **`docs/EVAL_SET.md` audit** — walk every failure signature, mark occurred / not, and record
+      whether I caught it or Kiran did. `INSTRUMENT QUALITY = self-caught / total occurred`.
+      Add a NEW case only for a failure that actually happened; never invent one.
 - [ ] **Post-hunt retro, unprompted and honest**: what moved the needle, what I got wrong, what
       Kiran caught, and a grade on PROCESS not luck.
 
