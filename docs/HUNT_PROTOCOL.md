@@ -91,6 +91,33 @@ become a reason to delay the first real behavioural observation. Offline where p
 
 ---
 
+## §3.5 — THE MATRIX IS A FILE, AND IT IS BUILT EARLY
+
+**Traced to hunt #37 (ClearTax).** ~500 requests of deep authz work, 83/219 mutations verdicted,
+two reports filed — and THREE OF TEN CLASSES HAD ZERO PROBES. I was ready to close. It surfaced only
+because Kiran asked twice: *"are you sure all classes and micro classes are done?"* The rule to run
+all 10 classes already existed; what did not exist was **an artefact that makes a gap visible**.
+
+- [ ] **The matrix is a written table in the target's coverage file, not a claim in chat.**
+      One row per class, one row per micro-class. Nothing else counts as having one.
+- [ ] **Create it at the FIRST capture, with every row marked `NOT TESTED`.** A matrix built at
+      close is a report; a matrix built early is an instrument. On #37, building it early would have
+      shown SQLi / XSS / cmd-SSTI-XXE-path sitting at zero for the entire hunt.
+- [ ] **Every row carries a DENOMINATOR, not an adjective.** `4 of 251 textual fields, 1 of 84 input
+      objects` — not "tested". Depth on one class is not coverage of it.
+- [ ] **Every non-tested row carries a REASON in one of four shapes:**
+      `N/A — <why the surface does not exist>` · `UNTESTABLE — <what state/tier is unreachable>` ·
+      `UNREADABLE — <which control failed>` · `NOT TESTED BY CHOICE — <which rule forbids it>`.
+      A blank cell is a skip wearing a disguise.
+- [ ] **Update the row the moment a verdict lands**, and **rebuild the whole matrix at close** as one
+      auditable block so it can be read without scrolling the working notes.
+- [ ] **Never say closed / fortress / enforced while ANY row reads `NOT TESTED`.**
+
+The matrix does not decide truth — a garbage test still fills a row. It decides COMPLETENESS, which
+is the failure this protocol exists to stop. [[coverage-sweep-rule]]
+
+---
+
 ## §4 — TESTING DISCIPLINE
 
 **Every probe needs a positive control in the same batch.**
@@ -167,7 +194,8 @@ Coverage is not complete until **every class and micro-class** carries one of th
 
 ## §7 — CLOSING
 
-- [ ] Coverage matrix complete — every class verdicted with a reason.
+- [ ] **Coverage matrix REBUILT as one block** (§3.5) — every class and micro-class
+      verdicted, every row with its denominator, every gap with its reason.
 - [ ] Denominators stated: `tested N / M known`, per category.
 - [ ] Untestables listed explicitly, never folded into "enforced".
 - [ ] Playbook entries added for what actually changes future action; target names scrubbed
