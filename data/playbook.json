@@ -9917,8 +9917,8 @@
   {
    "id": "pb0726",
    "class": "access-control",
-   "title": "AUTHORIZATION BOUNDARY DISCONTINUITY: once a shared authz interceptor is PROVEN, stop testing it and enumerate every adjacent service, selector family and workflow transition that does NOT traverse it",
-   "tell": "the app has a real interceptor (e.g. a uniform CUSTOM_UN_AUTHORIZED that fires BEFORE business validation) and a sibling service on another path/host implements its own lookup",
+   "title": "AUTHORIZATION BOUNDARY DISCONTINUITY — executable form: PROVE THE GATE -> ENUMERATE BYPASS SURFACES -> COMPARE AUTHORIZATION SEMANTICS",
+   "tell": "a uniform authz error (e.g. CUSTOM_UN_AUTHORIZED) fires BEFORE business validation on one service, and a sibling service/host/path implements its own object lookup",
    "why": "hunt #37: the main GraphQL service enforced entityId across 83/219 mutations with no exceptions, and the ONE filed cross-tenant write sat on /graphql/docsvc/submit/ which trusted a client-supplied `scope` selector outside that interceptor. Marginal value of testing mutation #84 was near zero; the value was in leaving the proven domain. Ask 'where does the same OBJECT cross a SERVICE boundary, and does the authorization invariant survive the crossing?' not 'what other IDOR technique do I know?'"
   },
   {
@@ -9934,6 +9934,20 @@
    "title": "TYPE THE INJECTION DENOMINATOR — 'N string fields' is not the population when the schema also exposes money/date/enum/upload scalars",
    "tell": "a GraphQL/typed API where custom scalars outnumber String fields",
    "why": "hunt #37: 251 textual fields vs 373 money fields (Rupee 289 · Decimal 49 · MoneyEx 30 · Percent 5) behind HAND-WRITTEN parsers on a TAX product, plus 40 date wrappers, 154 enums, 4 Uploads. Reporting '8/251 textual probed' silently hides that the money parsers are at 0/373 — and those are the ones where a parser that disagrees with the UI becomes a business-logic bug rather than generic fuzzing."
+  },
+  {
+   "id": "pb0729",
+   "class": "business-logic",
+   "title": "TYPE-AWARE HYPOTHESES FOR MONEY/DATE SCALARS — a custom parser on a financial product is a BUSINESS-LOGIC lane, not a fuzzing lane",
+   "tell": "hand-written scalars (Rupee · MoneyEx · Decimal · Percent · PreciseRupee · DateTimeWrapper) outnumber String fields",
+   "why": "asking 'can Decimal parse weird input?' yields nothing. The question that pays is 'does the app make a SECURITY or MONEY decision on a value whose parser disagrees with the UI's representation?' Hypotheses per money field: sign · precision loss · rounding direction · scientific notation · thousands separators · unicode digits · overflow · leading + · serialization round-trip disagreement between client display and server computation. Hunt #37 left 373 such fields at ZERO probes while reporting 8/251 textual — the typed denominator (pb0728) exposes the gap, this entry says what to DO with it."
+  },
+  {
+   "id": "pb0730",
+   "class": "recon",
+   "title": "LANE SELECTION MODEL — SELECTOR x GATE x INVARIANT x DISCONTINUITY. Subordinate to coverage, never a replacement for it",
+   "tell": "any multi-service app with more than one identifier naming the same object",
+   "why": "map the four: SELECTORS (every id that names an object) · GATES (every mechanism that authorizes one) · INVARIANTS (A cannot read/modify B; client cannot choose tenant; server-computed value cannot be client-supplied; state transition must be valid) · DISCONTINUITIES (same resource + same action + different selector/service/workflow => different authorization behaviour). Test the discontinuities first. ⚠️ THIS DECIDES WHERE TO START, NOT WHEN TO STOP. Coverage decides when to stop. They answer different questions and neither replaces the other — dropping coverage in favour of 'hunt discontinuities' regresses straight to the 6-hunt BOLA tunnel-vision that [[coverage-sweep-rule]] exists to stop."
   }
  ]
 }
