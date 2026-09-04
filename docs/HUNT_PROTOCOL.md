@@ -115,7 +115,18 @@ all 10 classes already existed; what did not exist was **an artefact that makes 
       A blank cell is a skip wearing a disguise.
 - [ ] **Update the row the moment a verdict lands**, and **rebuild the whole matrix at close** as one
       auditable block so it can be read without scrolling the working notes.
+- [ ] **Two closing numbers, never one:** `classes ACCOUNTED FOR n/10` (every class has a
+      disposition + reason) AND `classes FULLY CLOSED n/10` (nothing material left). "Fully
+      verdicted 10/10" overstates closure when six of those rows carry an open denominator.
 - [ ] **Never say closed / fortress / enforced while ANY row reads `NOT TESTED`.**
+- [ ] **Blocker taxonomy on every gap** — one of `TIER · ROLE · ROE · DESTRUCTIVE · MISSING_STATE ·
+      BROKEN_ENDPOINT · OUT_OF_SCOPE`. Counts across hunts become target-selection intelligence:
+      5 TIER blockers on #37 said "regulated B2B, the good surface is behind a purchase we cannot
+      make" — a thing worth knowing BEFORE the hunt, not at close.
+- [ ] **When a shared authz gate is PROVEN, stop testing it.** Marginal value of the 84th gated
+      mutation is ~0. Pivot to what does NOT traverse that gate: adjacent services, other selector
+      families, workflow transitions. On #37 the single filed cross-tenant write lived exactly
+      there. [[pb0726]] authorization boundary discontinuity.
 
 The matrix does not decide truth — a garbage test still fills a row. It decides COMPLETENESS, which
 is the failure this protocol exists to stop. [[coverage-sweep-rule]]
