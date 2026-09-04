@@ -9969,6 +9969,48 @@
    "title": "SELECTOR TYPE CONFUSION: a field that expects a URL/string also accepts a NUMBER, and the number is resolved in a DIFFERENT namespace (internal uid) than the string would be",
    "tell": "federated/ActivityPub/webhook inputs where an author/owner field is documented as a URI; JSON lets you send 1 instead of \"https://...\"",
    "why": "NodeBB 4.13.2 (exploitarium): `Note.attributedTo` set to the JSON number `1` was accepted as an internal LOCAL uid, letting a remote signed actor create a private chat message FROM uid 1 (typically the first admin). Same unbound author value reaches the public post path. ⭐ Extends [[pb0727]] selector families: it is not enough to ask WHICH selectors name an object — ask what happens when a selector is sent as a different TYPE, because the type can switch which namespace resolves it."
+  },
+  {
+   "id": "pb0734",
+   "class": "web-llm-attacks",
+   "title": "LLM ASSISTANT EXFIL VIA THE UNTRUSTED-INPUT MARKING GAP: a tool marks the conversation 'contains private data' but NOT 'contains untrusted input', so the egress guard that requires BOTH lets a browser-originated fetch carry private tokens out",
+   "tell": "an in-app assistant with tools that read user state (open tabs, history, account objects) plus one tool that FETCHES a URL; guard logic phrased as 'block external fetch when private AND untrusted'",
+   "why": "Firefox Smart Window (exploitarium #11): `get_open_tabs`/`search_browsing_history` return private URL tokens and mark the conversation private, but NOT untrusted — so an attacker-controlled PAGE TITLE or HISTORY TITLE steers the assistant into calling `get_page_content` on an attacker URL, Firefox EXPANDS the private URL tokens inside that attacker URL, and the private-only state permits the fetch. Leaks search terms, document ids, reset links, one-time values. ⭐ THIS IS THE CHAIN WE COULD NOT COMPLETE ON CLEARTAX: we proved `page_dom` reaches the model and found no reachable sink, and stopped. The missing question was not 'can I inject?' but **'which of the model's tools can make an outbound request, and what state-marking gates it?'** Ask that FIRST on any assistant lane."
+  },
+  {
+   "id": "pb0735",
+   "class": "access-control",
+   "title": "CASE-SENSITIVITY DENYLIST BYPASS: validation compares an exact string, the consumer resolves case-insensitively",
+   "tell": "a denylist of dangerous names (env vars, headers, params, filenames) compared with ==/exact match, consumed by Windows, HTTP headers, DNS, SQL identifiers, or any case-folding layer",
+   "why": "Flowise 3.1.2 (exploitarium #13): Custom MCP stdio validation blocks `NODE_OPTIONS` by exact comparison; Windows env vars are case-INSENSITIVE, so `node_options` passes validation and is still honoured by the spawned Node process ⇒ preload attacker JS ⇒ RCE. Generalises well beyond env vars: any allow/denylist whose comparison is stricter than its consumer's resolution."
+  },
+  {
+   "id": "pb0736",
+   "class": "access-control",
+   "title": "CACHE-KEY COLLISION ON AN OBJECT ARGUMENT: the key is derived from a wrapper/object rather than its contents, so the FIRST response is served to every later caller",
+   "tell": "framework memoisation helpers (`unstable_cache`, memoize, lru wrappers) called with a request/context/session object as an argument",
+   "why": "Next.js 16.3 canary (exploitarium #25): `unstable_cache()` given a request wrapper object caches the first result; later requests with DIFFERENT cookies, query values or form fields receive it. That is cross-user data exposure through a caching primitive, not an authz check — and no authz probe would ever find it. Test shape: two identities, same route, compare responses for identity bleed."
+  },
+  {
+   "id": "pb0737",
+   "class": "access-control",
+   "title": "CREDENTIAL SCOPE SWAP: the same key is accepted under a DIFFERENT declared service scope and the deny policy attached to the original scope stops applying",
+   "tell": "AWS-style SigV4 credential scopes, audience/`aud` claims, service-prefixed tokens — anywhere the CLIENT declares which service the credential is for",
+   "why": "Floci 1.5.27 (exploitarium #12): an IAM user with an explicit deny on `apigateway:POST` got 403 with an `apigateway` credential scope, then SUCCEEDED with the same key when the scope string was changed to `iam` — enforcement keyed off the client-declared scope. ⭐ Same family as our filed #16985: a client-supplied string decides which authorization applies."
+  },
+  {
+   "id": "pb0738",
+   "class": "business-logic",
+   "title": "STATE-TRANSITION LEAVES A STALE CONNECTION UNMARKED: a check depends on a marker set during an earlier event, and a connection that existed BEFORE the transition never got it",
+   "tell": "lock/unlock, enable/disable, revoke/reissue flows where long-lived connections or sessions survive the transition",
+   "why": "OpenSSH 10.4p1 ssh-agent (exploitarium #30): a forwarded agent connection held open while the agent was LOCKED never records a session id (the bind extension was rejected while locked) and never gets the failed-bind marker `socket_is_remote()` relies on. After a separate local unlock, that stale forwarded socket is treated as LOCAL and reaches the provider-add path. ⭐ This is the workflow-state lane in its sharpest form: hold a connection ACROSS a state change and re-ask what it is allowed to do."
+  },
+  {
+   "id": "pb0739",
+   "class": "business-logic",
+   "title": "TRUSTED METADATA BOUNDARY != ACTUAL BYTES: applications use declared size/type/name from a container as the authorization or quota boundary while the parser returns more",
+   "tell": "archive/upload/streaming paths where `entry_size`, Content-Length, declared MIME or declared filename feeds validation, quota, indexing or IPC framing",
+   "why": "libarchive (exploitarium #19): a ZIP64 member declares size 109 while the stock reader successfully returns 4,294,967,405 bytes; debuginfod then indexes and SERVES data beyond the advertised boundary. On our hunts the analogue is any upload where a declared value is trusted before the bytes are read — worth pairing with the ClearTax finding that docsvc accepts ANY content type at ingest."
   }
  ]
 }
