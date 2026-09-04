@@ -9948,6 +9948,27 @@
    "title": "LANE SELECTION MODEL — SELECTOR x GATE x INVARIANT x DISCONTINUITY. Subordinate to coverage, never a replacement for it",
    "tell": "any multi-service app with more than one identifier naming the same object",
    "why": "map the four: SELECTORS (every id that names an object) · GATES (every mechanism that authorizes one) · INVARIANTS (A cannot read/modify B; client cannot choose tenant; server-computed value cannot be client-supplied; state transition must be valid) · DISCONTINUITIES (same resource + same action + different selector/service/workflow => different authorization behaviour). Test the discontinuities first. ⚠️ THIS DECIDES WHERE TO START, NOT WHEN TO STOP. Coverage decides when to stop. They answer different questions and neither replaces the other — dropping coverage in favour of 'hunt discontinuities' regresses straight to the 6-hunt BOLA tunnel-vision that [[coverage-sweep-rule]] exists to stop."
+  },
+  {
+   "id": "pb0731",
+   "class": "access-control",
+   "title": "PRE-ROUTE AUTHORIZATION: when the authz check runs BEFORE the framework resolves the HTTP verb, a read-scoped credential matches the read route and is cached, then the write controller runs as that principal",
+   "tell": "middleware/overload/rate-limit layer authenticates before routing; scoped API keys or per-route permissions; read and write actions SHARE a path shape (GET /t/:id.json vs PUT /t/:id.json)",
+   "why": "Discourse (exploitarium): a `topics:read` granular key + attacker-controlled `X-Request-Start: t=0` made the request look queued, so the overload middleware authenticated pre-route, the scope matcher resolved the path WITHOUT the verb, matched the read route, and cached the user in the Rack env — the later PUT then ran as that cached API user and edited the topic. ⭐ A new sub-shape of [[pb0726]] boundary discontinuity: the check and the action happen in DIFFERENT LAYERS, not different services. Ask: does anything authenticate before routing, and does the scope matcher see the verb?"
+  },
+  {
+   "id": "pb0732",
+   "class": "access-control",
+   "title": "CROSS-SERVICE TOKEN CONFUSION: a token minted for purpose A is accepted by endpoint B and resolves to a DIFFERENT principal than the one who presented it",
+   "tell": "federation / OAuth-ish exchange / refresh-token endpoints where one side of a share or integration can read a value the other side minted",
+   "why": "Nextcloud (exploitarium): creating a normal federated share makes the SENDER mint a permanent token; the RECIPIENT instance exposes it as `refresh_token` via the pending remote-share API; exchanging it at the sender token endpoint returns an OCM bearer that the sender's WebDAV accepts AS THE SENDER — reading files far outside the shared item. ⭐ Same family as our filed #16985: the object crossed a service boundary and the authorization invariant did not survive the crossing. Enumerate every token a flow mints, who can READ it, and which OTHER endpoint will accept it."
+  },
+  {
+   "id": "pb0733",
+   "class": "access-control",
+   "title": "SELECTOR TYPE CONFUSION: a field that expects a URL/string also accepts a NUMBER, and the number is resolved in a DIFFERENT namespace (internal uid) than the string would be",
+   "tell": "federated/ActivityPub/webhook inputs where an author/owner field is documented as a URI; JSON lets you send 1 instead of \"https://...\"",
+   "why": "NodeBB 4.13.2 (exploitarium): `Note.attributedTo` set to the JSON number `1` was accepted as an internal LOCAL uid, letting a remote signed actor create a private chat message FROM uid 1 (typically the first admin). Same unbound author value reaches the public post path. ⭐ Extends [[pb0727]] selector families: it is not enough to ask WHICH selectors name an object — ask what happens when a selector is sent as a different TYPE, because the type can switch which namespace resolves it."
   }
  ]
 }
