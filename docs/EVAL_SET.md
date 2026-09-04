@@ -243,18 +243,65 @@ does not grow — that is the good outcome, not a missed one.
 
 ---
 
-## audit template — run at hunt close
+## close-out record — forensic, NOT scored
 
+🚫 **No percentage. No `27/31`. No grade out of the file.** A number invites optimising against the
+checklist, which is how a recognition aid quietly becomes a benchmark. Record each case that FIRED,
+in prose, and nothing about the ones that did not.
+
+**Per case that fired:**
 ```
-signature   occurred?   caught by ME or by Kiran?
-I-01 .. I-14
-R-01 .. R-07
-C-01 .. C-06
-S-01 .. S-04
-
-new failure this hunt that no case covers?  -> ADD IT, and only then
-INSTRUMENT QUALITY grade = self-caught / total occurred
+Case:                <id + name>
+Fired:               YES
+Detected by:         JARVIS | deterministic control | human during hunt | post-hunt audit | ESCAPED
+Impact:              what the wrong reading cost — a lane, a round, a false verdict
+Recurrence:          first time | Nth time
+Protocol change:     <the smallest fix> | none needed
+New subsystem:       NO by default
 ```
 
-**Hunt #37 baseline: 14+ signatures occurred; the two largest (C-01 zero-probe classes, R-07
-filename classification) were caught by Kiran, not by me.** That is the number to beat.
+⭐ **`Detected by` is the load-bearing field, and `ESCAPED` is the most valuable value in it.**
+The same failure caught by a control twice is a different situation from one caught by JARVIS the
+second time, and both differ from one nobody caught until the audit. That distinction is the only
+honest evidence for whether a proposed subsystem is needed.
+
+**The decision rule this feeds — and the ONLY route to new architecture:**
+```
+failure fires
+    -> already in EVAL_SET?
+         no  -> add the case. stop. build nothing.
+         yes -> recurrence
+                  -> can a PROTOCOL or CONTROL change prevent it?
+                       yes -> change the protocol. build nothing.
+                       no  -> only now consider a subsystem
+```
+Every new JARVIS subsystem must correspond to an OBSERVED failure the existing system cannot handle.
+Not a predicted one. [[phase-shift-hunt-not-build]]
+
+---
+
+## hunt #37 baseline — the record to beat
+Not a score; a list of what fired and who caught it.
+```
+I-01 sweep FALSIFIED 0 / UNREADABLE 109   detected by: JARVIS (noticed the pairing)   impact: none, caught pre-verdict
+I-02 row count as oracle                  detected by: JARVIS (content pull)          impact: 1 round
+I-03 truncated chatbot response           detected by: JARVIS                         impact: 4 probes re-run
+I-04 DOM probe on the wrong entity        detected by: deterministic control          impact: 3 rounds
+I-05 OAST tail not running                detected by: JARVIS (self-test added)       impact: 1 false negative avoided
+I-06 payload eaten by basename            detected by: JARVIS (stored-value print)    impact: 1 round, cmd lane re-run
+I-07 schema parser 374 vs 219             detected by: HUMAN (Kiran recalled 219)     impact: would have been quoted
+I-08 blind oracle, false for everything   detected by: deterministic control          impact: none
+I-09 wrong host, 403 HTML error page      detected by: JARVIS (read the body)         impact: 1 batch
+I-11 positional-argument slip             detected by: deterministic control          impact: 1 run, false ENFORCED
+I-12 /launchpad 504 with no params        detected by: JARVIS (benign control)        impact: none
+I-14 nullability mis-declared x3          detected by: deterministic control          impact: 3 rounds
+R-02 chatbot lane called ENFORCED         detected by: HUMAN                          impact: lane reopened, 3->9 sub-lanes
+R-05 impact overclaimed pre-filing        detected by: JARVIS                         impact: none, narrowed before filing
+R-07 39 PoCs classified by filename       detected by: HUMAN                          impact: missed pb0734, the LLM exfil chain
+C-01 three classes at ZERO probes         detected by: HUMAN                          impact: hunt nearly closed incomplete
+C-02 class 8 covered w/o runtime config   detected by: post-hunt audit (matrix build) impact: none, fixed same day
+S-02 archiveEntity on the control leg     detected by: ESCAPED                        impact: operator's marker entity archived, unrecoverable
+```
+**17 fired. JARVIS 7 · control 4 · human 4 · audit 1 · ESCAPED 1.**
+The escape (S-02) is the one that did real damage. The four human catches are the gap to close.
+
