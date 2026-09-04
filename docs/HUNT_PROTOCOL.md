@@ -98,8 +98,12 @@ two reports filed — and THREE OF TEN CLASSES HAD ZERO PROBES. I was ready to c
 because Kiran asked twice: *"are you sure all classes and micro classes are done?"* The rule to run
 all 10 classes already existed; what did not exist was **an artefact that makes a gap visible**.
 
-- [ ] **The matrix is a written table in the target's coverage file, not a claim in chat.**
-      One row per class, one row per micro-class. Nothing else counts as having one.
+- [ ] **The matrix is its OWN FILE: `workspace/coverage/<target>_matrix.md`.** One per hunt,
+      named for the target, separate from the working notes. A matrix buried inside 1800 lines
+      of probe output is not accountability — nobody can audit it, including me. One row per
+      class, one row per micro-class. A claim in chat is not a matrix.
+- [ ] **Header block on every matrix file:** target · platform · opened · closed · filed count
+      · pointer to the working-notes file. So it reads standalone months later.
 - [ ] **Create it at the FIRST capture, with every row marked `NOT TESTED`.** A matrix built at
       close is a report; a matrix built early is an instrument. On #37, building it early would have
       shown SQLi / XSS / cmd-SSTI-XXE-path sitting at zero for the entire hunt.
