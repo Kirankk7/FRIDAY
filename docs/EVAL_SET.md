@@ -12,8 +12,9 @@ judgement.
 
 ✅ **Two legitimate uses:**
 1. **During a hunt** — when an output matches a GIVEN shape, apply the GOOD reading before verdicting.
-2. **At hunt close** — walk every case and answer: *did this signature occur, and did I catch it or
-   did Kiran?* That ratio is the [[post-hunt-retro]] `INSTRUMENT QUALITY` grade.
+2. **At hunt close** — walk every case and, for each one that FIRED, write the forensic record
+   below. **No ratio, no percentage** — the useful output is *which* failures recurred and *who*
+   caught them, which is what tells you whether a protocol change or a subsystem is warranted.
 
 **Growth rule: add a case ONLY when a real failure occurs. Never invent one.** A synthetic case
 teaches my current opinion, including the wrong parts. If hunt #38 produces no new failure this file
