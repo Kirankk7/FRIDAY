@@ -66,10 +66,13 @@ _SERIALIZED = (
 )
 
 _PARAM_HINTS = (
-    ("template", re.compile(r"templ|layout|format|render|subject|body_html|expr|formula|"
-                            r"pattern|handlebars|jinja|liquid|freemarker", re.I)),
-    ("command",  re.compile(r"\bcmd\b|command|exec|shell|script|binary|args?\b|options?\b|"
-                            r"convert|ffmpeg|imagemagick", re.I)),
+    ("template", re.compile(r"templ|layout|render|body_html|expr|formula|"
+                            r"handlebars|jinja|liquid|freemarker|subject", re.I)),
+    # `options`, `args`, and bare `exec`/`script` matched ordinary routes (/setup/api/v1/options)
+    # and buried the real sinks. sweep.py learned the same generic-word trap for path params:
+    # "bare name/page matched operationName/appName/per_page ... under ~100 FPs".
+    ("command",  re.compile(r"\bcmd\b|command|/exec\b|shell|binary|"
+                            r"convert|ffmpeg|imagemagick|thumbnailer", re.I)),
     ("document", re.compile(r"\bpdf\b|docx?|xlsx?|csv|invoice|report|statement|export|"
                             r"printing|print_", re.I)),
     ("media",    re.compile(r"image|thumb|avatar|logo|photo|resize|crop|video|audio", re.I)),
@@ -81,6 +84,12 @@ _PARAM_HINTS = (
     ("script",   re.compile(r"\beval\b|\bscript\b|sandbox|lambda|function_body|user_code", re.I)),
 )
 
+# Paths that can never be an interpreter sink: telemetry proxies, static asset bundles, and plain
+# media files served by a CDN. A GET of /videos/x.mp4 is a download, not a media pipeline.
+_NOISE = re.compile(
+    r"heap-proxy|/static-assets/|/application-assets/|/_next/|\.(?:js|css|map|woff2?|ico|png|jpe?g|"
+    r"gif|svg|webp|mp4|webm|mp3|wasm)$", re.I)
+
 _UPLOAD_EXT = {
     ".pdf": "document", ".doc": "document", ".docx": "document", ".xls": "document",
     ".xlsx": "document", ".csv": "document", ".rtf": "document", ".odt": "document",
@@ -89,6 +98,21 @@ _UPLOAD_EXT = {
     ".zip": "archive", ".tar": "archive", ".gz": "archive", ".7z": "archive", ".rar": "archive",
     ".xml": "document", ".yaml": "deserialization", ".yml": "deserialization",
 }
+
+
+_ID_SEG = re.compile(r"/(?:\d+|[0-9A-HJKMNP-TV-Z]{20,}|[0-9a-f]{8}-[0-9a-f-]{20,})(?=/|$)", re.I)
+
+
+def _norm_where(where):
+    """Collapse a `METHOD https://host/path?query` label to METHOD + id-normalised path, so the same
+    ROUTE hit N times counts once."""
+    parts = str(where).split(" ", 1)
+    meth, url = (parts[0], parts[1]) if len(parts) == 2 else ("", str(where))
+    path = url.split("?", 1)[0]
+    for pre in ("https://", "http://"):
+        if path.startswith(pre):
+            path = "/" + path[len(pre):].split("/", 1)[-1] if "/" in path[len(pre):] else "/"
+    return meth + " " + _ID_SEG.sub("/{id}", path)
 
 
 class SinkInventory:
@@ -118,8 +142,11 @@ class SinkInventory:
         row = self._k[kind]
         if searched:
             row["searched"] = True
-        key = (where, evidence)
-        if key not in [(s["where"], s["evidence"]) for s in row["sinks"]]:
+        # One ROUTE is one sink, however many times the capture hit it. Keying on the raw URL made
+        # 35 replays of /setup/api/v1/options read as 35 command sinks -- a count that inflates
+        # silently is the pb0712 failure, and the denominator is the whole point of this module.
+        key = (_norm_where(where), evidence)
+        if key not in [(_norm_where(s["where"]), s["evidence"]) for s in row["sinks"]]:
             row["sinks"].append({"where": where, "evidence": evidence, "probed": False})
         return self
 
@@ -213,7 +240,12 @@ def from_capture(recs):
         # The PATH carries as much sink signal as the parameters do — /pdf/generate, /jobs/run,
         # /import, /convert. Scanning only param names missed every one of them, which is how a
         # capture full of interpreters can still report "no sink identified".
-        path = str(r.get("url", r.get("path", "")))
+        # PATH ONLY -- matching the query string made a telemetry beacon's random `s=` value look
+        # like a command sink. sweep.py already excludes third-party/self-hosted telemetry; the same
+        # exclusions belong here or the denominator is noise.
+        path = str(r.get("url", r.get("path", ""))).split("?", 1)[0]
+        if _NOISE.search(path):
+            continue
         params = r.get("params") or {}
         names = list(params) if isinstance(params, dict) else list(params)
         for kind, rx in _PARAM_HINTS:
