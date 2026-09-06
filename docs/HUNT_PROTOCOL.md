@@ -216,7 +216,18 @@ Coverage is not complete until **every class and micro-class** carries one of th
 - [ ] Playbook entries added for what actually changes future action; target names scrubbed
       (public repo), pre-push hook hits enumerated individually.
 - [ ] Memory + `docs/` updated; `bash /d/hunt-doctrine/sync.sh` + commit + push, unprompted.
-- [ ] HARs and hunt artefacts deleted from the scratchpad.
+- [ ] **Artefact retention split (2026-09-06).** Two piles, not one:
+      - **DELETE NOW** — HARs, cookies, tokens, request/response bodies, credentials, anything
+        carrying *our* session. These are why the rule exists.
+      - **KEEP 30 DAYS** — `workspace/bundles/<target>/`, **`.js`/`.map` bodies ONLY**. Bytes the
+        target serves to any anonymous visitor; no session material, nothing that identifies us.
+      *Why the carve-out:* on 2026-09-06 the secret corpus went 16 → 150 patterns and could not be
+      run against hunt #37, because the bundles had been deleted at close. **A retention policy that
+      erases the evidence also erases the ability to re-test an old hunt with a new instrument** —
+      and every instrument we build is built *after* the hunt that motivated it. Keeping the public
+      half costs nothing and buys the retro-run.
+      Prune with `python scripts/prune_bundles.py` (dry-run) then `--delete`. Never hand-delete the
+      keep-pile early, and never let anything but `.js`/`.map` into it.
 - [ ] **`docs/EVAL_SET.md` audit** — walk every failure signature, mark occurred / not, and record
       whether I caught it or Kiran did. `INSTRUMENT QUALITY = self-caught / total occurred`.
       Add a NEW case only for a failure that actually happened; never invent one.

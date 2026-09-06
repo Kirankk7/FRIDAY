@@ -4824,7 +4824,53 @@ def _endpoint_constructs():
 
 run_test("Route Inventory: service/gate/discontinuity + cross-service guard", _route_inventory_gates)
 run_test("Secrets: 150-pattern corpus + FP filter pos/neg controls", _secrets_corpus)
+def _prune_bundles():
+    # HUNT_PROTOCOL §7 retention split: .js/.map kept 30 days, everything else dies at close.
+    # The check that matters is the intruder scan — a HAR in the keep-pile defeats the whole rule.
+    import shutil
+    import sys as _sys
+    import tempfile
+    import time as _time
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "scripts"))
+    import prune_bundles as pbn
+
+    root = tempfile.mkdtemp(prefix="prunetest")
+    try:
+        for t, f in (("live", "app.js"), ("old", "vendor.js")):
+            os.makedirs(os.path.join(root, t), exist_ok=True)
+            with open(os.path.join(root, t, f), "w") as fh:
+                fh.write("var a=1")
+        old = _time.time() - 40 * 86400
+        os.utime(os.path.join(root, "old", "vendor.js"), (old, old))
+
+        expired, live, intruders = pbn.scan(root, 30)
+        if [r["target"] for r in live] != ["live"]:
+            return f"live dir not retained: {[r['target'] for r in live]}"
+        if [r["target"] for r in expired] != ["old"]:
+            return f"expired dir not flagged: {[r['target'] for r in expired]}"
+        if intruders:
+            return f"clean pile reported intruders: {intruders}"
+
+        # A HAR must be caught and must NOT be counted as retained bundle content.
+        with open(os.path.join(root, "old", "capture.har"), "w") as fh:
+            fh.write("{}")
+        expired2, _live2, intruders2 = pbn.scan(root, 30)
+        if len(intruders2) != 1 or not intruders2[0].endswith("capture.har"):
+            return f"HAR in keep-pile not flagged: {intruders2}"
+        if [r["files"] for r in expired2] != [1]:
+            return f"non-bundle file counted as retained content: {[r['files'] for r in expired2]}"
+
+        # Dry run must never delete.
+        pbn.main(["--root", root, "--days", "30"])
+        if not os.path.isdir(os.path.join(root, "old")):
+            return "dry run deleted an expired dir"
+        return True
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
 run_test("Secrets: JS endpoint construct coverage (template literals, :params)", _endpoint_constructs)
+run_test("Hygiene: bundle keep-pile prune + intruder detection", _prune_bundles)
 
 
 _HUNT_HAR = {"log": {"entries": [
