@@ -1,6 +1,6 @@
 # EVAL_SET — failure signatures, drawn only from failures that ACTUALLY happened
 
-**v1, 2026-09-05. 31 cases, all from hunt #37 (ClearTax) unless noted.**
+**v1.1, 2026-09-06. 34 cases (31 + I-07b + I-15 + I-16), all from hunt #37 unless noted.**
 
 ## what this is, and what it is NOT
 A **recognition checklist and a post-hunt audit**. Not a benchmark.
@@ -128,6 +128,27 @@ does not grow — that is the good outcome, not a missed one.
   wrappers. Fix the generator or inline the literal, then re-run.
 - **WHY** three separate occurrences in one hunt.
 
+### I-15 · the control differed from the probe in MORE THAN ONE variable
+- **GIVEN** a control that fails while the probes are untried
+- **BAD** reading the failure as a signal about the target
+- **GOOD** §4 says the control runs the SAME code path. Diff the two request bodies field by field
+  before blaming the server; if they differ anywhere but the thing under test, the control is not a
+  control.
+- **WHY** 2026-09-06, chatbot outbound-tool probe. Control sent `page_dom:''`, probes sent a
+  populated DOM — two differences, not one. The 500 was mine. One wasted batch, and for a moment it
+  looked like the endpoint had broken since the hunt closed.
+
+### I-16 · a banked request shape records field NAMES without TYPES
+- **GIVEN** a request replayed from notes returns `500` / a deserialization error
+- **BAD** concluding the endpoint changed or broke
+- **GOOD** read the raw error — `Cannot deserialize value of type X from Y` names the exact field
+  and the type it wanted. Then fix the NOTE, not just the batch. Bank shapes with types:
+  `notifications: String` not `notifications`.
+- **WHY** 2026-09-06. The resume note said `dom_json:{notifications, page_dom}`. `notifications` is
+  a `java.lang.String`; I sent `[]`. Four of seven diagnostic shapes 500'd on it. Sibling of I-14 —
+  same defect (a shape recorded without its type), different source (a hand-written note, not a
+  generator).
+
 ---
 
 > **The family these share.** I-01 · I-07 · I-07b and the C04 benchmark slip below are one shape:
@@ -138,6 +159,8 @@ does not grow — that is the good outcome, not a missed one.
 > confident wrong readings, and two of them read as GOOD NEWS. Design rule that follows: every
 > component whose output can be *empty, clean, or complete* must carry a way to fail loudly —
 > a self-check, a positive control, or a known-present probe.
+>
+> **Recurrence, 2026-09-06 (I-03 family):** the batch printed `JSON.stringify(c.last).slice(0,200) || c.raw`. `JSON.stringify(null)` is the STRING `"null"` — truthy — so the fallback never fired and the 500 body was invisible for a whole round trip. A logging expression that can silently swallow the error is the same defect as a probe that cannot fail loudly. Print the raw body ALWAYS, never behind `||`.
 
 ## 2 · REASONING — the observation was fine, the inference was not
 

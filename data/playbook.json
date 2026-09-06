@@ -10081,6 +10081,13 @@
    "title": "THE CAPPING CVSS METRIC NAMES THE EXPERIMENT, NEVER THE GOAL - and FILE BEFORE you pivot, because first-reporter is a speed game",
    "tell": "a finding whose score is bounded by one metric you set low for a stated evidentiary reason",
    "why": "'VI:Low because I could not establish that the write affects the victim's returned resource' is a capability question wearing a scoring label - it is a machine-readable pointer at the unproven boundary, and the cheapest experiment to run first. But making the SCORE the objective turns the engine into 'how do I make this P4 a P2', which is how the safe-PoC ladder gets broken: 'I already have a bug here so going further is fine' is exactly how L2 gets passed. Discovering a reachable boundary is the objective; severity follows. Second half: the pivot runs AFTER the report is submitted. A confirmed XSS once closed as a DUPLICATE because another hunter filed first, so a chain hunt must never delay a confirmed finding - file, then pivot, then amend the report or file the chain separately. Record REFUTED and EXHAUSTED as results; 'no inventory was built to query' is NOT_QUERYABLE and unmeasured, never 'no paths exist' (pb0745)."
+  },
+  {
+   "id": "pb0750",
+   "class": "llm",
+   "title": "AN LLM THAT NAMES YOUR LINK BUT CANNOT OPEN IT: injection channel OPEN, egress ABSENT - and the assistant will still CONFIDENTLY DESCRIBE the document it never fetched",
+   "tell": "a support/docs chatbot that receives page context (page_dom, sourceUrl, notifications) alongside the user's question",
+   "why": "2026-09-06 close-out. Five URL shapes planted in page_dom (anchor, bare URL, markdown link, 'open the reference', iframe+img) against a docs assistant, with a control carrying the SAME DOM minus the URL and an OAST listener self-tested live 20 minutes earlier (3 hits logged with source ASN). Result: 0 callbacks. The control proved page_dom reaches the model verbatim - it quoted our injected <h1> and <p> back. One reply NAMED the planted link and said it did not have its contents, then offered a support ticket. So the injection channel is open and the egress is missing: no URL-fetching tool. ⚠️ The trap: TWO other replies confidently DESCRIBED our planted 'source document' - 'covers the main sections of the dashboard', 'typically informs you about discrepancies' - entirely from the docs corpus. Our listener's whole body was 22 bytes of 'ok /marker'. Verdict on the CALLBACK and on whether the reply contains YOUR bytes, never on whether the model claims to have read it. A fluent description of a document is not evidence the document was fetched."
   }
  ]
 }
