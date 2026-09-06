@@ -103,8 +103,14 @@ def recall(query: str = "", stack: str = "", vuln_class: str = "", top_k: int = 
     for e in doc["techniques"]:
         if vuln_class and e.get("class") != vuln_class:
             continue
+        # Score the WHOLE entry. Entries distilled after hunt #37 carry title/tell/why instead of
+        # technique/payload, so a haystack built from technique+payload alone scored 19 of them
+        # (pb0726..pb0744 — the newest and most validated material) on nothing but their class, and
+        # read only a fraction of the other 725. A retriever silently blind to a schema the corpus
+        # grew is indistinguishable from a corpus that has nothing to say.
         hay = Counter(_tok(e.get("class", "")) + _tok(e.get("stack", "")) +
-                      _tok(e.get("technique", "")) + _tok(e.get("payload", "")))
+                      _tok(e.get("technique", "")) + _tok(e.get("payload", "")) +
+                      _tok(e.get("title", "")) + _tok(e.get("tell", "")) + _tok(e.get("why", "")))
         score = sum(min(terms[t], hay[t]) for t in terms) if terms else 0
         if not terms and not vuln_class:
             continue
