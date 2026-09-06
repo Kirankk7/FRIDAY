@@ -10025,6 +10025,27 @@
    "title": "A SUPPRESSOR NEEDS ITS OWN CONTROL: run any false-positive filter once with the filter OFF, or its silence is indistinguishable from blindness",
    "tell": "any scanner, denylist or noise filter that reports zero - secret scanners, WAF-detection, dedupe layers, 'known-example' suppression",
    "why": "The ported FP filter (core/secrets.py, from GhostJS Entropy.java) is name-aware: 32 hex chars is junk for most vendors and the REAL format for Twilio/Datadog/Algolia, so a filter without the exemption list deletes ten vendors' worth of true positives and still reports a clean scan. `--no-filter` exists to make the difference visible: filter ON silent + filter OFF loud = the filter worked; both silent = the instrument never saw the file. Same shape as a positive control on a probe, applied to the thing that decides what you never see."
+  },
+  {
+   "id": "pb0742",
+   "class": "secrets",
+   "title": "PROVE A LEAKED CREDENTIAL'S PRIVILEGE WITHOUT TOUCHING THIRD-PARTY DATA: escalate on your OWN object, then a selector belonging to NOBODY - never on a stranger's record",
+   "tell": "a hardcoded key found in a bundle where the tempting next step is 'query a user profile' or 'write a test record' to show impact",
+   "why": "The public writeup this came from (2026-09-06) read a real user's full PII and then CREATED/OVERWROTE a profile with fake data, calling the corrupted analytics part of the result. That is destroying production data: out of scope under 'no service degradation', out of scope under third-party data, and irreversible - our own authz_sweep v1 archived a marker entity with no unarchive path (EVAL_SET S-02). Ladder instead: (1) is the key privileged or public-by-design - a client-side key is not itself a bug; (2) prove auth+write against YOUR OWN object; (3) three selectors - yours / a foreign one / one belonging to nobody (pb0727) - separates 'honoured a foreign id' from 'ignored the argument'; (4) an error-code differential is readable without a successful write (see core/authz_sweep.py); (5) if a third-party read is truly unavoidable, ONE record, masked at source, no pagination. Report #16993 triaged P2 / CVSS 7.10 / PII:Yes off exactly that discipline. Also: 'hardcoded API passcode, no auth, full read+write' is the signature of a PUBLIC anon key with missing row-level security - the finding is the RLS policy, not the key."
+  },
+  {
+   "id": "pb0743",
+   "class": "secrets",
+   "title": "SEVERITY COMES FROM STRUCTURE, NOT FROM THE PATTERN: an access key ID alone is low, the key WITH its secret in the same object is high - so read the enclosing object, not the matched string",
+   "tell": "any credential half that is useless alone - AWS AKIA without the secret access key, a Twilio SID without the auth token, an OAuth client id without the client secret, a Supabase URL without the service-role key",
+   "why": "jsluice (BishopFox, screened 2026-09-06) parses to an AST, so on an AWS hit it walks parent(pair) -> grandparent(object) and looks for a sibling key containing 'secret': found = HIGH and the pair is extracted, absent = LOW. Its Firebase matcher fires only when apiKey+authDomain+projectId+storageBucket are ALL co-present. A regex corpus (ours, and the 150 ported from GhostJS) assigns severity per PATTERN and cannot see this - it rates every AKIA identically whether or not the secret sits on the next line. Reporting consequence: never file the key half alone as critical, and never dismiss it as low without reading the object around it."
+  },
+  {
+   "id": "pb0744",
+   "class": "methodology",
+   "title": "RULE COUNT IS NOT DETECTOR COUNT, AND A CORPUS IS OPTIMISED FOR THE JOB ITS AUTHOR HAD: measure overlap and provenance before adopting any 'largest database of X'",
+   "tell": "any wordlist, regex DB, nuclei-template pack or payload corpus advertised by its SIZE - '1600 patterns', '10k payloads', 'largest open-source'",
+   "why": "secrets-patterns-db (screened 2026-09-06) ships 1610 regexes: 11 for AWS, 13 for GitHub, 7 for Stripe, and one AWS key fires 5 rules at once - its CI dedupes by regex STRING and by NAME, never by what a rule DETECTS, so 1610 rules is 1239 stems and far fewer real detectors. Provenance matters more than size: it is a union of TruffleHog + Gitleaks + nuclei, all built to scan YOUR OWN git repos, so its long tail is abbysale/abuseipdb/accuweather/adafruitio - useless in a target's production bundle - while it MISSES GOCSPX- (Google OAuth client secret), github_pat_, ntn_, sk-ant, dop_v1. High-confidence stem overlap with our curated 150 was only 42; we had 69 vendors it lacked. The measurement that decides adoption is OVERLAP + WHAT-EACH-MISSES on the corpus you actually scan, never the headline count. Corollary: check the confidence labels - `jdbc:mysql(=| =|:| :)` is rated 'high' there, and 71 rules named 'Generic - NNNN' carry a broken char class [\\-|_|A-Z0-9] with literal | and \\ inside."
   }
  ]
 }

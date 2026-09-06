@@ -57,7 +57,13 @@ _SECRET_PATTERNS = [
     ("Hard-coded JWT",           re.compile(r"eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}")),
 ]
 
-_ENDPOINT_RE = re.compile(r"""["'](/[a-zA-Z0-9_][a-zA-Z0-9_./?=&%-]{2,120})["']""")
+# Backticks are a DELIMITER and `:{}$` are PATH characters, both added 2026-09-06 after a construct
+# benchmark measured what the old class could not see: ES6 template literals (`/api/v2/entity/
+# ${id}/filing`) and colon-templated routes (/filing/:ay/:eindex/:eid — ClearTax's split-brain-authz
+# route, which we found by hand because this regex could not). jsluice and GhostJS are BOTH blind to
+# template literals; this is the one JS-extraction case where we now beat them.
+# FP check before landing: 37 real files / 223 KB -> +9 endpoints, 0 junk, 0 lost.
+_ENDPOINT_RE = re.compile(r"""["'`](/[a-zA-Z0-9_][a-zA-Z0-9_./?=&%:{}$-]{2,120})["'`]""")
 
 # Sensitive files the caller GETs on the base host; (path, [content signatures that confirm exposure]).
 SENSITIVE_PATHS = [

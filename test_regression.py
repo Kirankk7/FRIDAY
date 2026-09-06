@@ -4788,8 +4788,43 @@ def _secrets_corpus():
 
 run_test("Route Inventory: dedupe+merge+id-bearing+HAR (core)", _route_inventory_core)
 run_test("Route Inventory: fan-in crawl+spec (ultron)", _route_inventory_ultron)
+def _endpoint_constructs():
+    # Construct coverage for find_endpoints, locked so a regex tweak cannot silently narrow it.
+    # Measured 2026-09-06 against jsluice's matchers: ours 9 FULL / 3 PARTIAL / 0 MISS.
+    from core import secrets as S
+    js = (
+        'const a = "/api/v1/documents";\n'
+        'fetch("/api/v2/entity/list");\n'
+        'fetch("/api/document/" + documentId + "?workspace=" + workspaceId);\n'
+        'fetch(`/api/v2/entity/${entityId}/filing`);\n'
+        'const b = `/api/v3/workspace/settings`;\n'
+        'x.open("POST", "/api/payments/initiate");\n'
+        '$.post("/api/tickets/raise", {subject: "s"});\n'
+        'axios.get("/api/internal/admin/config");\n'
+        'const routes = {filing: "/filing/:ay/:eindex/:eid"};\n'
+        'const c = "/api/search?q=test&limit=50";\n'
+    )
+    got = set(S.find_endpoints(js))
+    must = {
+        "/api/v1/documents", "/api/v2/entity/list", "/api/payments/initiate",
+        "/api/tickets/raise", "/api/internal/admin/config", "/api/search?q=test&limit=50",
+        # the two forms the old character class could not see at all
+        "/api/v2/entity/${entityId}/filing",   # ES6 template literal
+        "/api/v3/workspace/settings",          # template literal, no substitution
+        "/filing/:ay/:eindex/:eid",            # colon-templated route
+    }
+    missing = must - got
+    if missing:
+        return f"construct coverage regressed, missing: {sorted(missing)}"
+    # A wider class must not start swallowing absolute URLs.
+    if any(e.startswith("//") or "://" in e for e in got):
+        return f"absolute URLs leaked into endpoints: {[e for e in got if '://' in e]}"
+    return True
+
+
 run_test("Route Inventory: service/gate/discontinuity + cross-service guard", _route_inventory_gates)
 run_test("Secrets: 150-pattern corpus + FP filter pos/neg controls", _secrets_corpus)
+run_test("Secrets: JS endpoint construct coverage (template literals, :params)", _endpoint_constructs)
 
 
 _HUNT_HAR = {"log": {"entries": [
