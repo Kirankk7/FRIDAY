@@ -47,9 +47,24 @@ live secrets into chat · nothing is submitted to a statutory/government system.
 
 ---
 
-## §2 — LENS RUN (before any lane talk)
+## §2 — LENS RUN (ON DEMAND since 2026-09-07, no longer mandatory)
 
-- [ ] First authorised capture → `python -m core.lens_run new <request> <label>`
+⚠️ **DOWNGRADED FROM STANDING TO ON-DEMAND — measured negative, not abandonment.**
+8 runs staged across 38 hunts · 3 graded · **0 A** · 1 C · 2 B · 5 never graded. Zero novel findings
+originated from it. On both graded B runs the most useful probe came from US, not the lens — that is
+recorded in each hunt's own notes so the grade could not be inflated later. Cost was ~1 hour of
+Kiran's time per hunt. **The question it was built to answer — can hypothesis generation be
+externalised to a cold model? — has an 8-run answer, and it is no.**
+
+**KEEP:** `core/lens_run.py`, the sealed-grading machinery, the historical runs, and above all the
+**four-question lens applied to ONE fat request body** — that half has a real track record
+(both Paddle bugs came from depth on a single request). The questions were never the problem; the
+ritual around them was.
+
+**RUN IT WHEN:** the request shape is genuinely unfamiliar, or we want a timestamped record that a
+hypothesis preceded the discussion. Not every hunt.
+
+- [ ] (on demand) First authorised capture → `python -m core.lens_run new <request> <label>`
 - [ ] **Scrub before it leaves the machine**: cookies, auth headers, AND business identifiers —
       host, object ids, employer/company names, tax ids, addresses, trace/release ids. (`pb0720`)
 - [ ] Cold sessions get the prompt **alone**. I contribute nothing until sealed.
