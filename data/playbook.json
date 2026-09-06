@@ -10046,6 +10046,13 @@
    "title": "RULE COUNT IS NOT DETECTOR COUNT, AND A CORPUS IS OPTIMISED FOR THE JOB ITS AUTHOR HAD: measure overlap and provenance before adopting any 'largest database of X'",
    "tell": "any wordlist, regex DB, nuclei-template pack or payload corpus advertised by its SIZE - '1600 patterns', '10k payloads', 'largest open-source'",
    "why": "secrets-patterns-db (screened 2026-09-06) ships 1610 regexes: 11 for AWS, 13 for GitHub, 7 for Stripe, and one AWS key fires 5 rules at once - its CI dedupes by regex STRING and by NAME, never by what a rule DETECTS, so 1610 rules is 1239 stems and far fewer real detectors. Provenance matters more than size: it is a union of TruffleHog + Gitleaks + nuclei, all built to scan YOUR OWN git repos, so its long tail is abbysale/abuseipdb/accuweather/adafruitio - useless in a target's production bundle - while it MISSES GOCSPX- (Google OAuth client secret), github_pat_, ntn_, sk-ant, dop_v1. High-confidence stem overlap with our curated 150 was only 42; we had 69 vendors it lacked. The measurement that decides adoption is OVERLAP + WHAT-EACH-MISSES on the corpus you actually scan, never the headline count. Corollary: check the confidence labels - `jdbc:mysql(=| =|:| :)` is rated 'high' there, and 71 rules named 'Generic - NNNN' carry a broken char class [\\-|_|A-Z0-9] with literal | and \\ inside."
+  },
+  {
+   "id": "pb0745",
+   "class": "methodology",
+   "title": "PROBE YOUR READER WITH SOMETHING YOU KNOW IS THERE: a component whose output can be empty, clean or complete must be able to fail loudly, or its silence is a claim about itself and not about the data",
+   "tell": "any retriever, extractor, scanner, filter or scoring harness that returns thin/clean/zero WITHOUT erroring - and especially one whose input format has changed since it was written",
+   "why": "Three instances in one day, 2026-09-06, none of which crashed. (1) _ENDPOINT_RE could not represent backticks or ':' so /filing/:ay/:eindex/:eid - the ClearTax route carrying the whole split-brain-authz lane - was invisible; the SURFACE looked smaller than it was. (2) A construct benchmark used substring matching, so C04 scored HIT off a collision with C02; CAPABILITY looked better than it was. (3) playbook.recall() indexed technique+payload while new entries carry title/tell/why, so 19 of the newest entries scored on class alone; KNOWLEDGE looked absent. Two of the three read as good news. The cheap general defence is a KNOWN-PRESENT PROBE: query the reader with something you are certain is in the data, and if that does not come back the silence was about the reader. Sibling of pb0712 (an extractor whose output is a COUNT needs an invariant) generalised from counts to every empty/clean/complete result."
   }
  ]
 }

@@ -73,6 +73,17 @@ does not grow — that is the good outcome, not a missed one.
   Confirm `self-check: clean` before quoting.
 - **WHY** the true value was 219; arguments were being promoted to sibling fields, silently.
 
+### I-07b · a component silently blind to a schema its corpus grew
+- **GIVEN** a retriever, extractor or harness returns a thin/empty/clean result and does not error
+- **BAD** reading the silence as a fact about the DATA
+- **GOOD** ask what the component can REPRESENT before asking what it found. Query it with text you
+  KNOW is present; if that does not come back, the silence was about the reader, not the corpus.
+- **WHY** `playbook.recall()` built its haystack from `class+stack+technique+payload`. Entries
+  distilled after hunt #37 carry `title`/`tell`/`why` instead, so 19 of them (pb0726..pb0744 — the
+  newest and most validated material) scored on nothing but their class and never surfaced, and the
+  other 725 were matched on a fraction of their text. Querying pb0726's own subject returned five
+  unrelated entries. No error, ever.
+
 ### I-08 · every input returns the same value
 - **GIVEN** a mutation returns `false` for the legitimate role AND every privileged role
 - **BAD** "role allowlist ENFORCED"
@@ -118,6 +129,15 @@ does not grow — that is the good outcome, not a missed one.
 - **WHY** three separate occurrences in one hunt.
 
 ---
+
+> **The family these share.** I-01 · I-07 · I-07b and the C04 benchmark slip below are one shape:
+> **the system's representation of reality diverged from reality without raising an error.** Three
+> instances landed on 2026-09-06 alone — an extractor that could not represent `:param` routes (the
+> surface looked smaller), a scoring harness using substring matching (capability looked better), a
+> retriever blind to a new schema (knowledge looked absent). None crashed; all three produced
+> confident wrong readings, and two of them read as GOOD NEWS. Design rule that follows: every
+> component whose output can be *empty, clean, or complete* must carry a way to fail loudly —
+> a self-check, a positive control, or a known-present probe.
 
 ## 2 · REASONING — the observation was fine, the inference was not
 
