@@ -210,6 +210,13 @@ _PLACEHOLDER_MARKERS = (
 )
 
 _SLASH_PATH = re.compile(r"^/[A-Za-z0-9._~-]+(?:/[A-Za-z0-9._~-]+)+$")
+
+# `[type=password]`, `[data-foo="bar"]`, `[aria-hidden]` -- markup selectors, never credentials.
+_CSS_SELECTOR = re.compile(r"^\[[A-Za-z_:][\w:.-]*(?:[~|^$*]?=[^\]]*)?\]$")
+
+# An absolute URL into a public docs/help site is not an "internal" anything.
+_PUBLIC_DOC_URL = re.compile(r"^https?://[^/]*(?:developers?|docs?|help|support|learn|api-docs)\."
+                             r"[^/]+/|^https?://[^/]+/(?:documentation|docs|help)/", re.I)
 _ANGLE_TOKEN = re.compile(r".*<[a-zA-Z_]+>.*")
 
 _COMMON_WORDS = {
@@ -274,6 +281,16 @@ def is_likely_false_positive(value, name="", strict=False) -> bool:
     if _ANGLE_TOKEN.match(v):
         return True
     if any(m in lower for m in _PLACEHOLDER_MARKERS):
+        return True
+
+    # A CSS attribute selector is never a credential. `[type=password]` scored HIGH on the
+    # "Hardcoded Password" pattern while sitting in a list beside [type=checkbox] and [type=radio]
+    # -- found in a real bundle sweep 2026-09-07, not invented.
+    if _CSS_SELECTOR.match(v):
+        return True
+    # A link into someone's public documentation is not an internal endpoint. The corpus's
+    # "Internal API Endpoint" pattern matched a developers.facebook.com/documentation/... URL.
+    if _PUBLIC_DOC_URL.search(v):
         return True
 
     if len(v) > 10 and len(set(v)) <= 3:
