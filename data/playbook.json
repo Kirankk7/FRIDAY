@@ -10067,6 +10067,20 @@
    "title": "SAFE-POC LADDER: climb only as far as the boundary needs and stop - L1 behaviour change, L2 OAST callback, L3 `id`/`whoami` only if the brief names them. Never a shell",
    "tell": "any reachable interpreter where the temptation is to prove severity by escalating",
    "why": "An OAST interaction from the target IS execution evidence for a blind sink - the response body never has to change. L1 (arithmetic evaluated, entity resolved, a parser error that MOVES with the input) is already reportable as their missing control even when L2 never fires; state exactly what was and was not achieved rather than escalating to make the report look better. A shell, a file write, persistence or lateral movement add nothing a triager needs and violate 'no service degradation' plus 'never touch a third party's data'. Self-test the OAST listener BEFORE the probe (EVAL_SET I-05: the first no-hit was a timing artifact), and ship a control input that must NOT reach the interpreter - without it a silent sink is indistinguishable from a filtered one."
+  },
+  {
+   "id": "pb0748",
+   "class": "methodology",
+   "title": "A CONFIRMED FINDING IS A NEW STARTING CONDITION, NOT AN ENDPOINT: file it, then re-query the surface inventories with the CAPABILITY it granted as the entry point",
+   "tell": "any report filed at a low severity whose own text names an unproven leg - 'I could not establish X', 'I found no enumeration method for Y'",
+   "why": "One report shipped naming TWO unproven legs: VI:Low ('could not establish the write surfaces in the victim's filing') and AT:Present ('found no way to obtain a victim object id') -> CVSS 2.30. The first leg WAS chased (three read paths from the victim account, all negative, recorded). The second never was - and it was filed the same day as a second report proving third-party identity records could be pulled from the same target by any free account. Two findings, one hunt, one afternoon, and nobody asked whether one supplied the other's missing precondition. The capability was not absent; it was ad-hoc and unprompted. Two mechanisms, kept separate: JOIN (does another finding's `provides` satisfy this one's `requires`) is cheap and exact and would have caught that miss; PIVOT (re-query route_inventory / sink_inventory WITH the capability as the entry point) is the bigger half, because you cannot join against a finding you have not made yet. write -> who consumes those bytes; identifier -> what else takes this selector; stored -> is it rendered to a more privileged principal; read -> does the disclosed data contain another selector."
+  },
+  {
+   "id": "pb0749",
+   "class": "methodology",
+   "title": "THE CAPPING CVSS METRIC NAMES THE EXPERIMENT, NEVER THE GOAL - and FILE BEFORE you pivot, because first-reporter is a speed game",
+   "tell": "a finding whose score is bounded by one metric you set low for a stated evidentiary reason",
+   "why": "'VI:Low because I could not establish that the write affects the victim's returned resource' is a capability question wearing a scoring label - it is a machine-readable pointer at the unproven boundary, and the cheapest experiment to run first. But making the SCORE the objective turns the engine into 'how do I make this P4 a P2', which is how the safe-PoC ladder gets broken: 'I already have a bug here so going further is fine' is exactly how L2 gets passed. Discovering a reachable boundary is the objective; severity follows. Second half: the pivot runs AFTER the report is submitted. A confirmed XSS once closed as a DUPLICATE because another hunter filed first, so a chain hunt must never delay a confirmed finding - file, then pivot, then amend the report or file the chain separately. Record REFUTED and EXHAUSTED as results; 'no inventory was built to query' is NOT_QUERYABLE and unmeasured, never 'no paths exist' (pb0745)."
   }
  ]
 }

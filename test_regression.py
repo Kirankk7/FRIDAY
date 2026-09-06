@@ -4914,7 +4914,68 @@ def _sink_inventory():
 
 
 run_test("Hygiene: bundle keep-pile prune + intruder detection", _prune_bundles)
+def _capability_pivot():
+    # HUNT_PROTOCOL §6.5. Two mechanisms: JOIN between known findings, PIVOT into the inventories.
+    from core import pivot as pv
+    from core import route_inventory as ri
+    from core import sink_inventory as si
+
+    write = pv.Finding("F-a", "cross-tenant write into a foreign document store", capability="write",
+                       requires=["victim entityId"], provides=["bytes in a foreign document store"],
+                       crosses="tenant", capping_metric="VI:Low - write may not surface to the victim")
+    ident = pv.Finding("F-b", "endpoint discloses entityId for arbitrary tenants", capability="read",
+                       requires=["authenticated account"], provides=["victim entityId"])
+    unrelated = pv.Finding("F-c", "third-party names and emails returned", capability="read",
+                           requires=["authenticated account"], provides=["names, emails"])
+
+    # JOIN: F-b supplies exactly what F-a is missing; F-c supplies nothing F-a needs.
+    ch = pv.chain_candidates([write, ident])
+    if not any(c["supplier"] == "F-b" and c["consumer"] == "F-a" for c in ch):
+        return f"join missed the supplied precondition: {ch}"
+    if pv.chain_candidates([write, unrelated]):
+        return "join invented a chain from an unrelated finding"
+
+    # The capping metric must be surfaced FIRST — it names the experiment.
+    qs = write.questions()
+    if "CAPPING METRIC" not in qs[0]:
+        return f"capping metric not surfaced first: {qs[0][:60]}"
+
+    # An unnamed capability must prompt, never return an empty list that reads as "nothing to ask".
+    blank = pv.Finding("F-d", "zzz", capability=None)
+    if not blank.questions() or "NOT NAMED" not in blank.questions()[0]:
+        return f"unnamed capability did not prompt: {blank.questions()}"
+
+    # PIVOT with no inventory is NOT_QUERYABLE — unmeasured, never "no paths".
+    r = pv.pivot(write)
+    if r["status"] != "NOT_QUERYABLE":
+        return f"missing inventory read as a result: {r['status']}"
+
+    # PIVOT with a sink inventory returns consuming surfaces.
+    sink = si.from_capture([{"method": "POST", "url": "/api/report/generate", "req_headers": {},
+                             "params": {"template": "x"}}])
+    r2 = pv.pivot(write, sink_inventory=sink)
+    if not any(s["kind"] == "template" for s in r2["surfaces"]):
+        return f"pivot did not reach the template sink: {r2['surfaces']}"
+
+    # PIVOT on an identifier re-queries ROUTES for that selector.
+    inv = ri.RouteInventory()
+    inv.add("https://t.com/api/entity/{entityId}/filing", method="POST", source="js")
+    r3 = pv.pivot(ident, route_inventory=inv)
+    if not any("entityId" in s["why"] for s in r3["surfaces"]):
+        return f"identifier pivot missed the route taking that selector: {r3['surfaces']}"
+
+    if pv.report(write, r2, chains=ch, state="REFUTED")[0].startswith("### POST") is False:
+        return "report block malformed"
+    try:
+        pv.report(write, r2, state="NONSENSE")
+        return "report accepted an invalid state"
+    except ValueError:
+        pass
+    return True
+
+
 run_test("Sink inventory: not-searched vs N/A, path signals, control gate", _sink_inventory)
+run_test("Capability pivot: join, inventory re-query, NOT_QUERYABLE", _capability_pivot)
 
 
 _HUNT_HAR = {"log": {"entries": [

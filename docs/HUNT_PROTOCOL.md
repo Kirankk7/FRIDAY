@@ -254,6 +254,51 @@ Coverage is not complete until **every class and micro-class** carries one of th
 
 ---
 
+## §6.5 — POST-FINDING CAPABILITY PIVOT
+
+**Added 2026-09-06, Kiran:** *"if we found a p4, we are not checking if the p4 can be chained to
+something like xss, rce to make them p2 or p1."*
+
+The pipeline used to stop at the report: `discover → prove → score → FILE → move on`. A confirmed
+finding is not the end of reasoning — it is a **new starting condition**. `core/pivot.py`.
+
+```
+CONFIRM  →  FILE IT  →  15-min pivot  →  amend the report / file the chain / record REFUTED
+```
+
+- [ ] **FILE FIRST.** The pivot never delays a confirmed report. First-reporter is a speed game —
+      a real XSS once closed as a duplicate because someone else filed first. The pivot is upside,
+      never a condition for reporting.
+- [ ] **Name the capability in one line.** Not the bug — what the attacker can now *do*.
+      `write` · `read` · `identifier` · `stored` · `token` · `exec`. An unnamed capability cannot
+      be pivoted.
+- [ ] **JOIN first (cheap):** does any other finding from this hunt `provide` what this one
+      `requires`? *This is the exact miss:* one report shipped with `AT:Present — no way to obtain
+      a victim object id`, filed the same day as another proving we could pull third-party
+      identity records from that target. Nobody asked. A clean "no" is a **result** — record it.
+- [ ] **PIVOT (the bigger half):** re-query `sink_inventory` / `route_inventory` **with the
+      capability as the entry point**. You cannot join against a finding you have not made yet.
+      `write` → who consumes those bytes · `identifier` → what else takes this selector ·
+      `stored` → is it rendered to a more privileged principal · `read` → does the data contain
+      another selector.
+- [ ] **The capping CVSS metric NAMES THE EXPERIMENT, never the goal.** `VI:Low because I could not
+      establish X` is a machine-readable pointer at the unproven boundary. Test that first.
+      Raising a score is not an objective; reaching a boundary is, and the score follows.
+- [ ] 🚨 **The safe-PoC ladder (§4) still applies.** The pivot is the highest-risk moment in a hunt:
+      *"I already have a bug here, so going further is fine"* is exactly how L2 gets passed.
+      L1 behaviour change → L2 OAST → **STOP**.
+- [ ] **15 minutes, highest-confidence path first.** Then stop. This is not the
+      "never stop hunting, maybe there's another chain" subsystem.
+- [ ] **Record the state:** `CONFIRMED` · `REFUTED` · `BLOCKED` · `EXHAUSTED` · `NOT_QUERYABLE`.
+      REFUTED and EXHAUSTED are results. `NOT_QUERYABLE` means the inventory this capability needed
+      was never built — **unmeasured, not empty** (`pb0745`).
+
+⚠️ If a hunt produces zero useful pivots, the first question is whether the protocol generated good
+**candidates** — not whether the pivot was worth having. A pivot that asked the right question and
+earned a clean REFUTED did its job.
+
+---
+
 ## §7 — CLOSING
 
 - [ ] **Coverage matrix REBUILT as one block** (§3.5) — every class and micro-class
