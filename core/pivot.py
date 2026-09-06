@@ -258,7 +258,7 @@ def report(finding, pivot_result, chains=(), outcome="", state="CANDIDATE"):
     for s in surfaces[:12]:
         L.append("  - `%s` %s — %s" % (s["kind"], s["where"], s["why"]))
     if pivot_result.get("note"):
-        L += ["", "⚠️ %s" % pivot_result["note"]]
+        L += ["", "!! %s" % pivot_result["note"]]
     if chains:
         L += ["", "**Chain candidates (join):**"]
         L += ["  - %s provides %r → satisfies %s's requirement %r"
