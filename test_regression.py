@@ -4870,7 +4870,51 @@ def _prune_bundles():
 
 
 run_test("Secrets: JS endpoint construct coverage (template literals, :params)", _endpoint_constructs)
+def _sink_inventory():
+    # The RCE class's recon layer. The property that matters: a kind never looked for can NEVER
+    # print as N/A — that conflation is what let 3 explicitly-permitted surfaces go unprobed.
+    from core import sink_inventory as si
+
+    fresh = si.SinkInventory()
+    rows = fresh.matrix_rows()
+    if any("N/A" in r for r in rows):
+        return "a fresh inventory claimed N/A for a kind it never searched"
+    if sum("NOT SEARCHED" in r for r in rows) != len(si.KINDS):
+        return f"fresh inventory did not mark all {len(si.KINDS)} kinds NOT SEARCHED"
+    if fresh.denominator() != (0, 0, 0, len(si.KINDS)):
+        return f"fresh denominator wrong: {fresh.denominator()}"
+
+    recs = [
+        {"method": "POST", "url": "/api/upload", "params": {"filename": "invoice.pdf"},
+         "req_headers": {"content-type": "multipart/form-data; boundary=x"}},
+        {"method": "POST", "url": "/api/report", "params": {"template": "{{n}}"},
+         "req_headers": {"content-type": "application/json"}},
+        {"method": "POST", "url": "/api/jobs/run", "params": {"job_id": "7"}, "req_headers": {}},
+        {"method": "GET", "url": "/api/users", "params": {"page": "1"}, "req_headers": {}},
+    ]
+    inv = si.from_capture(recs)
+    hv = set(inv.high_value())
+    for want in ("document", "template", "job"):
+        if want not in hv:
+            return f"{want} sink not detected: {sorted(hv)}"
+    if "command" in hv:
+        return "command sink invented from a capture that has none"
+    # /api/jobs/run is a PATH signal — scanning only param names missed every path-borne sink.
+    if not any("path suggests" in s["evidence"] for k in inv.kinds() for s in k["sinks"]):
+        return "path-borne sinks not detected (param-only scan)"
+    if inv.unsearched():
+        return f"from_capture left kinds unsearched: {inv.unsearched()}"
+
+    # A probe whose control FAILED must be UNREADABLE, never a verdict in either direction.
+    inv.probed("template", "POST /api/report", control_passed=False, verdict="ENFORCED")
+    tpl = [k for k in inv.kinds() if k["kind"] == "template"][0]
+    if tpl["verdict"] != "UNREADABLE":
+        return f"failed control did not force UNREADABLE: {tpl['verdict']}"
+    return True
+
+
 run_test("Hygiene: bundle keep-pile prune + intruder detection", _prune_bundles)
+run_test("Sink inventory: not-searched vs N/A, path signals, control gate", _sink_inventory)
 
 
 _HUNT_HAR = {"log": {"entries": [
@@ -4950,7 +4994,10 @@ def _sweep_core():
     if not r.get("success"):                                  return f"sweep failed: {r.get('message')}"
     d = r["data"]
     cls = d["classes"]
-    if len(cls) != 10:                                        return f"expected 10 classes, got {len(cls)}"
+    # 11 since 2026-09-06: RCE split out of the old "10. cmd/SSTI/XXE/path" into its own row,
+    # XXE/traversal/LFI kept as 11. Bump this deliberately or not at all.
+    if len(cls) != 11:                                        return f"expected 11 classes, got {len(cls)}"
+    if not any(c.startswith("10. RCE") for c in cls):         return f"RCE is not its own class: {cls}"
     # the contract: EVERY class is tested-or-N/A, and an N/A always carries its reason
     for name, v in cls.items():
         if v["status"] not in ("TESTABLE", "N/A"):            return f"{name}: bad status {v['status']}"
@@ -4970,11 +5017,15 @@ def _sweep_core():
     if not d["third_party_excluded"]:                         return "self-hosted telemetry not excluded"
     if cls["3. SQLi / NoSQLi"]["status"] != "TESTABLE":       return "search param missed"
     if cls["9. Auth / session"]["status"] != "TESTABLE":      return "login endpoint missed"
-    if cls["10. cmd/SSTI/XXE/path"]["status"] != "TESTABLE":  return "upload/path surface missed"
+    # The parser/filesystem boundary kept the old detector; RCE now has its own row above it.
+    if cls["11. XXE / path traversal / LFI"]["status"] != "TESTABLE":
+        return "upload/path surface missed"
+    if cls["10. RCE / server-side execution"]["status"] != "TESTABLE":
+        return "a multipart upload is a document sink — RCE class should be TESTABLE"
     if d["micro"]["File upload"]["status"] != "TESTABLE":     return "multipart upload missed"
     # precision: generic words must not read as path sinks (bare `name`/`page` matched
     # operationName/appName/per_page/is_hosted_page and buried the real upload sinks under ~100 FPs)
-    path_params = {t.get("param", "") for t in cls["10. cmd/SSTI/XXE/path"]["targets"]}
+    path_params = {t.get("param", "") for t in cls["11. XXE / path traversal / LFI"]["targets"]}
     for junk in ("appName", "per_page", "is_hosted_page"):
         if junk in path_params:                               return f"generic word '{junk}' read as path sink"
     if "traits.firstName" in path_params:                     return "Segment ingest not excluded"
@@ -5303,7 +5354,7 @@ def _target_gate():
             pass
         tg._LOG = saved
 run_test("Target gate: softness score + verdict + reachability gate + logged override", _target_gate)
-run_test("Coverage Sweep: capture -> 10-class tested-or-N/A matrix", _sweep_core)
+run_test("Coverage Sweep: capture -> 11-class tested-or-N/A matrix (RCE own row)", _sweep_core)
 run_test("Coverage Sweep: Burp+HAR parity, deterministic", _sweep_formats)
 run_test("Coverage Sweep: hunt-10 FP fixes (telemetry/CSS/host-label)", _sweep_hunt10_fixes)
 run_test("Coverage Sweep: hunt-11 FP fix (Cloudflare /cdn-cgi/ beacons)", _sweep_hunt11_fixes)

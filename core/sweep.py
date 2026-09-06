@@ -422,7 +422,42 @@ def _c9_auth(recs, ctx):
         _na("no auth/session endpoint in this capture")
 
 
-def _c10_inject(recs, ctx):
+def _c10_rce(recs, ctx):
+    """RCE / server-side code execution — its own class since 2026-09-06.
+
+    It used to share a row with XXE and path traversal, which have different security semantics: an
+    XML parser resolving an entity is not code execution, and a filesystem selector is not an
+    interpreter. Sharing one row let the highest-impact class be closed by a verdict earned
+    elsewhere. The sub-lanes below are execution boundaries; enumerate them with
+    `core.sink_inventory`, then verdict each one separately.
+    """
+    from . import sink_inventory as si
+    inv = si.from_capture([{"method": r.get("method", "?"), "url": _label(r),
+                            "req_headers": r.get("req_headers", {}),
+                            "req_body": r.get("req_body", ""), "params": _params(r)}
+                           for r in recs])
+    t = [{"where": s["where"], "param": "%s sink — %s" % (k["kind"], s["evidence"])}
+         for k in inv.kinds() for s in k["sinks"]]
+    found, _probed, searched, total = inv.denominator()
+    if t:
+        return _hit(t, "Enumerate each sink, then probe with the SAFE-POC LADDER (HUNT_PROTOCOL §4): "
+                       "OAST callback first, `id`/`whoami` only if the brief names them, then STOP. "
+                       "Never a shell, a write, or persistence. Kinds present: %s."
+                       % ", ".join(inv.high_value()),
+                    "%d execution sink(s) across %d kind(s)" % (found, len(inv.high_value())))
+    # A searched-and-empty result is a real answer; that distinction is the point of the class.
+    return _na("no execution sink in this capture (%d/%d interpreter kinds searched). "
+               "A capture is a SAMPLE — re-run against the bundle/route sweep before closing."
+               % (searched, total))
+
+
+def _c11_parser(recs, ctx):
+    """XXE / path traversal / file inclusion — parser and filesystem boundaries.
+
+    Split out of the old class 10. These are vulnerabilities in their own right and can PARTICIPATE
+    in an RCE chain without being RCE; recording that chain as an impact keeps both denominators
+    honest.
+    """
     # a path-ish key with a boolean/numeric value is a flag, not a traversal sink (`is_hosted_page=0`)
     t = [{"where": _label(r), "param": k} for r in recs for k, v in _params(r).items()
          if _FILE_KEY.search(k.split(".")[-1])
@@ -433,8 +468,9 @@ def _c10_inject(recs, ctx):
     t += [{"where": _label(r), "param": "XML body (XXE)"} for r in recs
           if "xml" in r["req_headers"].get("content-type", "")]
     return _hit(t, "Traversal (../, encoded, double-encoded) on path-ish params and the upload filename; "
-                   "XXE on any XML body. A path/directory error that MOVES with your input = steering.",
-                "file/path/template parameter or file+XML body present") if t else \
+                   "XXE on any XML body. A path/directory error that MOVES with your input = steering. "
+                   "If it reaches an interpreter, record the RCE chain in class 10 too.",
+                "file/path parameter or file+XML body present") if t else \
         _na("no file/path parameter, upload, or XML body in this capture")
 
 
@@ -497,8 +533,13 @@ _CLASSES = [
     ("1. BOLA / IDOR", _c1_bola), ("2. BFLA / priv-esc", _c2_bfla), ("3. SQLi / NoSQLi", _c3_sqli),
     ("4. XSS (refl+stored)", _c4_xss), ("5. SSRF / XSPA", _c5_ssrf), ("6. Mass assignment", _c6_massassign),
     ("7. Business logic", _c7_bizlogic), ("8. Secrets / disclosure", _c8_disclosure),
-    ("9. Auth / session", _c9_auth), ("10. cmd/SSTI/XXE/path", _c10_inject),
+    ("9. Auth / session", _c9_auth), ("10. RCE / server-side execution", _c10_rce),
+    ("11. XXE / path traversal / LFI", _c11_parser),
 ]
+# ⚠️ 11 classes since 2026-09-06, not 10. RCE was split out of the old `10. cmd/SSTI/XXE/path`
+# because a parser boundary and a filesystem selector are not code execution, and sharing one row
+# let the highest-impact class inherit a verdict earned elsewhere. Matrices written before that date
+# state `N/10` against the OLD taxonomy — do not silently re-read them as `N/11`.
 _MICRO = [
     ("JWT", _m_jwt), ("CORS", _m_cors), ("CSRF", _m_csrf), ("GraphQL abuse", _m_graphql),
     ("Open redirect", _m_openredirect), ("File upload", _m_upload),

@@ -72,9 +72,31 @@ authorised capture  →  cold lens (sealed)  →  surface enumeration  →  lane
 The capture is evidence; enumeration tells you what else exists. Do not let "full surface first"
 become a reason to delay the first real behavioural observation. Offline where possible.
 
+Four inventories, not one. Routes say what exists; the other three say what can be *reached*,
+*crossed*, and *interpreted*.
+
 - [ ] **Route/operation table.** SPA bundles: fetch the **runtime chunk map**, not just what the HAR
       loaded — the HAR is a sample, the manifest is the ceiling. Server-rendered: docs, `llms.txt`,
       `robots.txt`, sitemaps.
+- [ ] **Selector + gate inventory.** `core.route_inventory` — which object-identifying arguments a
+      route carries, and which authorization check it is PROVEN to traverse. `gate=None` means NOT
+      DETERMINED, never "ungated"; `discontinuity(proven_gate)` then lists what does not cross it.
+- [ ] **🆕 Interpreter / sink inventory.** `python -c "from core import sink_inventory"` →
+      `from_capture(recs)`, then feed it the bundle and route sweeps too.
+
+      > **INPUT → TRANSFORMATION → INTERPRETER → EXECUTION BOUNDARY → OBSERVABLE**
+
+      Ten kinds: command · template · deserialization · document · media · archive · build · job ·
+      plugin · script. Every kind starts **NOT SEARCHED** and `found 0` only counts once the kind
+      was genuinely looked for. **This is the recon layer under class 10 and it is why that class
+      exists separately** — without a sink list, "no sink identified" is a search, not a verdict,
+      and the highest-impact class gets closed on a feeling. On one hunt the brief granted `id`
+      and `whoami` in writing and all three surfaces went unprobed; that is the failure this
+      inventory exists to prevent.
+
+      Its `high_value()` output is also a **target-selection signal**: a target with document,
+      archive, media or job sinks has an execution surface worth prioritising. A pure CRUD API has
+      none, and class 10 is then honestly N/A *with the denominator stated*.
 - [ ] **Schema, if GraphQL.** `python -m core.schema_surface <bundle> --gate <tenantArg> --out <dir>`
       — covers all FIVE input surfaces: arguments · input fields of **every** type · enums ·
       custom scalars · query root. Confirm `self-check: clean` before quoting any number.
@@ -154,6 +176,31 @@ STORED-INTACT / TRANSFORMED / REJECTED — then payloads only on the survivors. 
 
 **Two captures of one flow are ONE timeline.** Normalise every timestamp to UTC before ordering
 across captures. Design the run so the interesting window is actually observed. (`pb0724`)
+
+### SAFE-POC LADDER — class 10, and anything that executes
+
+Minimum sufficient proof. Climb only as far as the evidence requires, and **stop the moment the
+boundary is demonstrated**. Severity is theirs to assign; a shell adds nothing to the report and
+everything to the risk.
+
+```
+L0  identify the sink            sink_inventory — no payload yet
+L1  reach it, benignly           does attacker input change the interpreter's BEHAVIOUR?
+                                 timing shift, parser error that MOVES with input, arithmetic
+                                 evaluated ({{7*7}} -> 49), entity resolved
+L2  OAST callback                a DNS/HTTP hit from the target IS execution evidence for a
+                                 blind sink. Self-test the listener FIRST (EVAL_SET I-05).
+L3  identity only, if named      `id` / `whoami` — ONLY when the brief names them in writing.
+                                 Quote the brief line in the report.
+STOP                             no shell, no write, no read of a real file, no persistence,
+                                 no lateral movement, no third-party data, no service impact.
+```
+
+- [ ] Control in the same batch: an input that must NOT reach the interpreter. Both legs, always.
+- [ ] Blind sinks: verdict on the **callback**, never on the response body.
+- [ ] `L1` steering is a finding worth reporting even when `L2` never fires — say exactly what was
+      and was not achieved, and frame it as their missing control.
+- [ ] Never escalate to prove severity. **Untestable ≠ safe, and unproven ≠ unreported.**
 
 ### Flow coverage — the second denominator
 

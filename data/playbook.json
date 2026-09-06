@@ -10053,6 +10053,20 @@
    "title": "PROBE YOUR READER WITH SOMETHING YOU KNOW IS THERE: a component whose output can be empty, clean or complete must be able to fail loudly, or its silence is a claim about itself and not about the data",
    "tell": "any retriever, extractor, scanner, filter or scoring harness that returns thin/clean/zero WITHOUT erroring - and especially one whose input format has changed since it was written",
    "why": "Three instances in one day, 2026-09-06, none of which crashed. (1) _ENDPOINT_RE could not represent backticks or ':' so /filing/:ay/:eindex/:eid - the ClearTax route carrying the whole split-brain-authz lane - was invisible; the SURFACE looked smaller than it was. (2) A construct benchmark used substring matching, so C04 scored HIT off a collision with C02; CAPABILITY looked better than it was. (3) playbook.recall() indexed technique+payload while new entries carry title/tell/why, so 19 of the newest entries scored on class alone; KNOWLEDGE looked absent. Two of the three read as good news. The cheap general defence is a KNOWN-PRESENT PROBE: query the reader with something you are certain is in the data, and if that does not come back the silence was about the reader. Sibling of pb0712 (an extractor whose output is a COUNT needs an invariant) generalised from counts to every empty/clean/complete result."
+  },
+  {
+   "id": "pb0746",
+   "class": "rce",
+   "title": "ENUMERATE INTERPRETERS BEFORE PAYLOADS: 'no sink identified' is a SEARCH, not a verdict - list the execution boundaries first, then the class can be closed honestly",
+   "tell": "any target where the RCE row reads UNTESTED or N/A without a number beside it; any capture containing an upload, a template/format field, an XML or YAML body, a convert/render/export path, or a job/workflow trigger",
+   "why": "Kiran, 2026-09-06: 'why are we not trying any RCE.' The audit: the class EXISTED and on ClearTax was tested properly (cmd-inj/SSTI/XXE/traversal, OAST controls, all four verdicted). But on another hunt it read 'UNTESTED, 3 surfaces, brief allows id/whoami only' - the programme granted proof-of-execution IN WRITING and we sent nothing; on a third it read 'no sink identified', which our own file already flagged as a search rather than a verdict. Routes, selectors, gates and input fields were all enumerated; SINKS never were, so the highest-impact class was the one most often decided on feeling. core/sink_inventory.py lists ten interpreter kinds (command, template, deserialization, document, media, archive, build, job, plugin, script), starts every one at NOT SEARCHED, and refuses to print N/A for a kind nobody looked for. Its high_value() output doubles as a TARGET-SELECTION signal: document/archive/media/job sinks mean an execution surface worth prioritising, a pure CRUD API means class 10 is honestly N/A with the denominator stated. Corollary from the playbook being inverted (thick xss/sqli/ssrf, 0 bugs): the fix for a weak class is better SURFACE DISCOVERY, never more payloads."
+  },
+  {
+   "id": "pb0747",
+   "class": "rce",
+   "title": "SAFE-POC LADDER: climb only as far as the boundary needs and stop - L1 behaviour change, L2 OAST callback, L3 `id`/`whoami` only if the brief names them. Never a shell",
+   "tell": "any reachable interpreter where the temptation is to prove severity by escalating",
+   "why": "An OAST interaction from the target IS execution evidence for a blind sink - the response body never has to change. L1 (arithmetic evaluated, entity resolved, a parser error that MOVES with the input) is already reportable as their missing control even when L2 never fires; state exactly what was and was not achieved rather than escalating to make the report look better. A shell, a file write, persistence or lateral movement add nothing a triager needs and violate 'no service degradation' plus 'never touch a third party's data'. Self-test the OAST listener BEFORE the probe (EVAL_SET I-05: the first no-hit was a timing artifact), and ship a control input that must NOT reach the interpreter - without it a silent sink is indistinguishable from a filtered one."
   }
  ]
 }
