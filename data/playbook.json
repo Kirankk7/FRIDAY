@@ -10011,6 +10011,20 @@
    "title": "TRUSTED METADATA BOUNDARY != ACTUAL BYTES: applications use declared size/type/name from a container as the authorization or quota boundary while the parser returns more",
    "tell": "archive/upload/streaming paths where `entry_size`, Content-Length, declared MIME or declared filename feeds validation, quota, indexing or IPC framing",
    "why": "libarchive (exploitarium #19): a ZIP64 member declares size 109 while the stock reader successfully returns 4,294,967,405 bytes; debuginfod then indexes and SERVES data beyond the advertised boundary. On our hunts the analogue is any upload where a declared value is trusted before the bytes are read — worth pairing with the ClearTax finding that docsvc accepts ANY content type at ingest."
+  },
+  {
+   "id": "pb0740",
+   "class": "authz",
+   "title": "A PATH PREFIX IS A STRING MATCH, AND A NESTED SERVICE SHARES ITS PARENT'S PREFIX: a gate proven on /graphql silently absorbs /graphql/docsvc/, marking the one route that ignores it as covered",
+   "tell": "one host fronting several backends under a shared prefix - /graphql vs /graphql/docsvc/, /api/v1 vs /api/v1/internal, /admin vs /admin/legacy; the child answers with a different error vocabulary or a different auth header",
+   "why": "ClearTax hunt #37: cross-entity authz was proven on the tenant interceptor behind /graphql (83 mutations, 0 FALSIFIED). /graphql/docsvc/submit/ shares that prefix, was never behind that gate, and took its destination from a client-supplied `scope` field - report #16985. When the coverage store was rebuilt on 2026-09-06 the prefix rule reproduced the same mistake in one line, so core/route_inventory.mark_gate now REFUSES to span services unless the caller says the gate was proven on each. Enumerate what does NOT traverse a proven gate (pb0726); a prefix is not the enumeration."
+  },
+  {
+   "id": "pb0741",
+   "class": "methodology",
+   "title": "A SUPPRESSOR NEEDS ITS OWN CONTROL: run any false-positive filter once with the filter OFF, or its silence is indistinguishable from blindness",
+   "tell": "any scanner, denylist or noise filter that reports zero - secret scanners, WAF-detection, dedupe layers, 'known-example' suppression",
+   "why": "The ported FP filter (core/secrets.py, from GhostJS Entropy.java) is name-aware: 32 hex chars is junk for most vendors and the REAL format for Twilio/Datadog/Algolia, so a filter without the exemption list deletes ten vendors' worth of true positives and still reports a clean scan. `--no-filter` exists to make the difference visible: filter ON silent + filter OFF loud = the filter worked; both silent = the instrument never saw the file. Same shape as a positive control on a probe, applied to the thing that decides what you never see."
   }
  ]
 }

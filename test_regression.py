@@ -4723,8 +4723,73 @@ def _route_inventory_ultron():
     if not any("management/users/all" in u for u in d["urls"]):  return "spec route absent from inventory"
     return True
 
+def _route_inventory_gates():
+    # service / gate / selector layer: discontinuity (pb0726) + the cross-service guard.
+    from core import route_inventory as ri
+    inv = ri.RouteInventory()
+    inv.add("https://t.com/graphql", method="POST", source="cap")
+    inv.add("https://t.com/graphql/docsvc/submit/", method="POST", params=["scope"], source="js")
+    inv.add("https://t.com/api/entity/{entityId}/filing", source="js")
+    inv.set_service("docsvc", host="t.com", path_prefix="/graphql/docsvc")
+
+    if inv.routes()[2]["selectors"] != {"entityId"}:
+        return f"templated selector not inferred: {inv.routes()[2]['selectors']}"
+
+    # A prefix match is a string match: /graphql also matches /graphql/docsvc/, and tagging both
+    # with one proof is the mistake that hid report #16985. It must raise, not silently tag.
+    try:
+        inv.mark_gate("tenant", host="t.com", path_prefix="/graphql")
+        return "cross-service mark_gate did NOT raise — docsvc was silently tagged"
+    except ValueError:
+        pass
+    if inv.mark_gate("tenant", service="t.com", path_prefix="/graphql") != 1:
+        return "scoped mark_gate tagged the wrong number of routes"
+
+    d = inv.discontinuity("tenant")
+    if d["denominator"] != 3:                 return f"denominator wrong: {d['denominator']}"
+    if len(d["traverses"]) != 1:              return f"traverses wrong: {len(d['traverses'])}"
+    # docsvc was never proven ⇒ it must sit in gate_unknown, never be absorbed as covered.
+    if {r["service"] for r in d["gate_unknown"]} != {"docsvc", "t.com"}:
+        return f"unproven routes not surfaced as unknown: {[r['service'] for r in d['gate_unknown']]}"
+    if not any("NOT TESTED" in l for l in inv.matrix_rows(proven_gate="tenant")):
+        return "matrix rows hide the undetermined gate"
+    return True
+
+
+def _secrets_corpus():
+    # 150-pattern scanner + FP filter, against the positive/negative control pair.
+    from core import secrets as S
+    rows, meta = S.corpus()
+    if len(rows) != meta["compiled"] or meta["failed"]:
+        return f"corpus self-check: {len(rows)} rows, meta={meta['compiled']}, failed={meta['failed']}"
+
+    pos = ('const AWS_ACCESS_KEY = "AKIA1234567890ABCDEF";\n'
+           'const stripeKey = "sk_' 'live_abcdEFGH1234567890ijklMNOP";\n'
+           'const slack = "xoxb' '-1234567890-0987654321-Ab1Cd2Ef3Gh4Ij5Kl6Mn7Op8";\n')
+    names = {f["name"] for f in S.scan_secrets(pos, url="app.js")}
+    for want in ("AWS Access Key", "Stripe Live Secret Key", "Slack Token"):
+        if want not in names:
+            return f"positive control missed {want}: {sorted(names)}"
+
+    # Documented samples and public-by-design keys must be suppressed — and turning the filter off
+    # has to show them, or the silence proves nothing about the filter.
+    neg = ('aws: "AKIAIOSFODNN7EXAMPLE",\n'
+           'awsSecret: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",\n'
+           'stripePublishable: "pk_live_51AbCdEfGhIjKlMnOpQrStUv",\n')
+    if S.scan_secrets(neg, url="placeholders.js"):
+        return f"FP filter let doc samples through: {[f['name'] for f in S.scan_secrets(neg)]}"
+    if not S.scan_secrets(neg, url="placeholders.js", fp_filter=False):
+        return "filter-off shows nothing — silence was blindness, not suppression"
+
+    if "AKIA" not in S.mask("AKIA1234567890ABCDEF") or "ABCDEF" in S.mask("AKIA1234567890ABCDEF"):
+        return f"mask leaks or mangles: {S.mask('AKIA1234567890ABCDEF')}"
+    return True
+
+
 run_test("Route Inventory: dedupe+merge+id-bearing+HAR (core)", _route_inventory_core)
 run_test("Route Inventory: fan-in crawl+spec (ultron)", _route_inventory_ultron)
+run_test("Route Inventory: service/gate/discontinuity + cross-service guard", _route_inventory_gates)
+run_test("Secrets: 150-pattern corpus + FP filter pos/neg controls", _secrets_corpus)
 
 
 _HUNT_HAR = {"log": {"entries": [

@@ -18,6 +18,9 @@ data/*
 # credential data. Scrub before every commit (see docs/HANDOFF.md).
 !data/playbook.json
 !data/chat_ideals.jsonl
+# …and the secret-pattern corpus: a curated, MIT-derived detection asset (vendor formats only,
+# no target or credential data). Silently ignoring it would leave core/secrets.py unloadable.
+!data/secret_patterns.json
 # …but the HackingTool fleet index is a shipped asset, not runtime state:
 !agents/ultron/hackingtool/data/
 !agents/ultron/hackingtool/data/tools.json
