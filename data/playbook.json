@@ -10154,6 +10154,72 @@
    "verify": "a CORS throw is suggestive, not proof. Before filing an open redirect, confirm the hop in a real browser navigation and read the final address bar. And state the auth state you tested in: the classic open redirect lives on the LOGGED-OUT login page, so an authenticated-only pass is not a closed class.",
    "source": "self",
    "validated": true
+  },
+  {
+   "id": "pb0757",
+   "class": "method",
+   "title": "A CLIENT-SIDE-ONLY DECISION IS STILL SERVER-TESTABLE when the decision function is exported as a Server Action - call the gate directly instead of driving the UI",
+   "tell": "a redirect/allowlist/eligibility check that only fires AFTER login, so it looks untestable without credentials",
+   "why": "2026-09-07, a French telco. The login page did `if (t && await isDomainMatch(t)) { e = await getRedirectUrl(t, href); router.push(e) }` - the navigation is client-side after auth, so the open-redirect lane was recorded UNTESTABLE unauth. But both gates are Next.js App Router Server Actions, POST-invokable with a `Next-Action: <id>` header against ANY route of the app, with no session and no CSRF token. Calling isDomainMatch directly turned a blocked lane into 16 legs with 2 controls in one batch. The action ids and their FUNCTION NAMES sit in the public bundle via createServerReference(id, callServer, void 0, findSourceMapURL, \"name\").",
+   "payload": "grep bundles for createServerReference to get id+name; then: curl -X POST -H 'Next-Action: <id>' -H 'Content-Type: text/plain;charset=UTF-8' --data-raw '[\"<arg>\"]' https://host/<any-route-of-that-app>  -> RSC flight rows, '1:true' / '1:false' / '1:\"...\"'",
+   "verify": "invoke a NO-ARG action first as the instrument control (routeList returned real nav data, 200 text/x-component). Without that, a false from the gate is indistinguishable from a broken invocation.",
+   "source": "hunt #39",
+   "validated": true
+  },
+  {
+   "id": "pb0758",
+   "class": "recon",
+   "title": "THE BUILD MANIFEST IS A SAMPLE - the webpack runtime chunk map plus _app is the ceiling; route tables live in the chunks no manifest lists",
+   "tell": "you enumerated a Next.js app from _buildManifest.js and wrote a tidy N/N chunk denominator",
+   "why": "2026-09-07, a French telco. _buildManifest lists per-ROUTE chunks only: it omits _app / main / framework AND every lazily-imported chunk. Across two pages-router apps that was 76 lazy + 13 base = 89 of 208 files, 43% of the corpus, invisible to the manifest. Both route tables that mattered lived exactly there: the subscription app's internal TEST API (11 endpoints incl. reset-accounts) was in _app, and the marketing app's 97-entry endpoint constant table was in _app. App Router ships no _buildManifest at all and its webpack runtime may declare a single lazy chunk, so its route count can be genuinely unknowable offline - say N/? rather than inventing a total.",
+   "payload": "fetch static/chunks/webpack-*.js ; parse r.u = e=>\"static/chunks/\"+((PRE)[e]||e)+\".\"+(HASH)[e]+\".js\" ; download every id in HASH; then fetch pages/_app-*.js, main-*.js, framework-*.js from the page HTML (NOT from the manifest)",
+   "verify": "reconcile downloaded-vs-expected after every batch and print MISSING lines; a wrong count must be loud (pb0712)",
+   "source": "hunt #39",
+   "validated": true
+  },
+  {
+   "id": "pb0759",
+   "class": "recon",
+   "title": "ONE PASSIVE-CORPUS PULL IS A SAMPLE - two Wayback pulls of the same host were DISJOINT SLICES, and only one contained the /api tree",
+   "tell": "you pulled CDX once, got a big number, and treated it as the archive",
+   "why": "2026-09-07, a French telco. Pull 1 (limit=40000) returned exactly 40000 - the limit, so truncated. Pull 2 (paginated over all 154 pages, same filters) returned 39804. They were not subsets: pull 1 held 20869 URLs pull 2 lacked and pull 2 held 20673 pull 1 lacked. UNION = 60673. Pull 1 contained every /api path; pull 2 contained ZERO. Either one alone yields a confident wrong denominator and, worse, a missing endpoint family. ALSO: matchType=domain silently includes SUBDOMAINS - 2314 of the 60673 were on subdomains that were explicitly OUT OF SCOPE, and they carried all the junk (/warez-*, /smiley-*) that would have wasted hours.",
+   "payload": "pull CDX twice (limit form AND page=0..N form), union them, then FILTER BY EXACT HOSTNAME before counting anything",
+   "verify": "state pull1-only and pull2-only counts; if either is non-zero, neither pull was complete. Cross-check convergence with urlscan + Common Crawl before calling enumeration done.",
+   "source": "hunt #39",
+   "validated": true
+  },
+  {
+   "id": "pb0760",
+   "class": "recon",
+   "title": "SWEEP PUBLIC ARCHIVES FOR JWT-SHAPED PATH SEGMENTS - password-reset tokens in the URL PATH get crawled and preserved",
+   "tell": "the app puts a one-time token in the path, e.g. /account/<reset-path>/<JWT>, instead of a POST body or a fragment",
+   "why": "2026-09-07, a French telco. Common Crawl and urlscan held /account/<reset-path>/<JWT> URLs for real subscribers; the JWTs carried {login, origin:reset|first-connection, otp, exp, iat} with a 48h TTL. Both were long expired (1398 and 500 days), so there was no live exposure - but the class is real and costs nothing to check, and nobody has to be attacked to find it. Handle with care: these are third-party credentials and PII. Verify validity LOCALLY (decode exp) and never transmit the token. Check the programme's leak-eligibility table first: when the leak SOURCE is a third-party archive the org does not control, most programmes rate it NOT ELIGIBLE even though the impact would be in scope.",
+   "payload": "grep the union corpus for path segments matching eyJ[A-Za-z0-9_-]{10,}\\. and for token=/reset/confirm/activate params",
+   "verify": "decode exp offline and state EXPIRED/LIVE with the day count; never send the token to the target",
+   "source": "hunt #39",
+   "validated": true
+  },
+  {
+   "id": "pb0761",
+   "class": "logic",
+   "title": "A FEATURE FLAG SET FALSE ON THE CLIENT DOES NOT UNDEPLOY THE SERVER ROUTE - build-time flags hide buttons, not handlers",
+   "tell": "env-config.js or similar shows FEATURE_ENABLE_X:\"false\" and the matching routes still exist in the build manifest",
+   "why": "2026-09-07, a French telco. PUBLIC_FEATURE_ENABLE_ONE_CLICK_TESTER was \"false\", yet /one-click-tester, /one-click-tester/reset-account and /ws-mock were all still built and served, and their 11-endpoint internal API was fully described in _app. On this target the server-side kill-switch DID hold (9 of 10 probed endpoints 404), which is only knowable because the CONTROL - a random name under the same prefix - returned the SPA shell 200 while real endpoint names returned a deliberate 404. Two different responses = the server resolves those names and refuses them. Without that control the 404s are ambiguous.",
+   "payload": "for each endpoint in the disabled feature's route table: POST {} and compare against a random sibling name under the same prefix",
+   "verify": "NEVER invoke a destructive member of such a family (reset/delete/purge) to test reachability - no method trick is provably safe, since Next.js API handlers commonly accept every verb. Mark it UNTESTABLE-DESTRUCTIVE and say so.",
+   "source": "hunt #39",
+   "validated": true
+  },
+  {
+   "id": "pb0762",
+   "class": "method",
+   "title": "A DOWNLOAD LOOP CAN REPORT 200 AND WRITE NOTHING - reconcile every fetched set, because transport failures mimic being blocked",
+   "tell": "a batch of chunk downloads 'succeeded' but a later grep for a known string finds nothing",
+   "why": "2026-09-07, a French telco, three times in one session. (1) Filenames containing [...slug] wrote 0 bytes while curl printed 200 - twice. (2) Python's text-mode write turned \\n into \\r\\n, so every URL in the list carried a trailing CR and 38 fetches returned curl code 000 - which looks EXACTLY like an IP block or rate-limit, the one thing that would have ended the hunt on RoE grounds. A single control request to a known-good URL proved connectivity was fine in 3 seconds. (3) The count 39 vs 38 hid a lost entry until an explicit MISSING check ran.",
+   "payload": "after every batch: for each expected item, test -s <file> || echo MISSING; print downloaded/expected/failed as three numbers",
+   "verify": "when a whole batch fails identically, FIRST send one control request to a known-good URL before concluding you are blocked - identical failure across all legs is an instrument signature, not a target behaviour (pb0618)",
+   "source": "hunt #39",
+   "validated": true
   }
  ]
 }
