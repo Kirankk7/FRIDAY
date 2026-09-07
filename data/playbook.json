@@ -10121,6 +10121,17 @@
    "verify": "before interpreting any leg, confirm the tool you actually care about appears in the trace. A skill marked live does not mean its tools route - a data source may be unprovisioned. 0/9 appearances is the tell that the lane is gated, not enforced.",
    "source": "self",
    "validated": true
+  },
+  {
+   "id": "pb0754",
+   "class": "authz",
+   "title": "A PERMISSION NAME IS NOT AN ENDPOINT GATE - SPA route tables map permissions to PAGES, so a 200 on a similarly-named API path is not privilege escalation",
+   "tell": "you are about to call something a BFLA finding because a low-privilege principal got 200 on /ajax/<thing> while its ACL lacks <thing>_read - and the only thing linking the two is that they share a word",
+   "why": "2026-09-07, Klaviyo. role3 lacked 204 permissions; 18 GETs gated by 'denied' permissions returned 16x403. The two 200s (/ajax/account/settings, /ajax/account/is-scim-sso-enabled) looked like a read primitive. The bundle showed account_settings_read gates the ROUTE /account/deleted and sso_setup_page_read gates /sso/setup - neither guards the endpoint. The endpoint constant was a bare client.get() with no gate, returning timezone/currency/prefix, the chrome every page needs to render dates and money. Ungated by design. Filing it would have been I-17 again: a report resting on a premise I inferred rather than validated.",
+   "payload": "before filing, name the endpoint's REAL gate from evidence: grep the SPA bundle for the path constant and for the permission string separately, and see whether they co-occur in a route table (resources:[...]) or a fetch wrapper. If the permission only ever appears next to a `path:` entry, it gates a page, and your API 200 proves nothing.",
+   "verify": "an ACL diff sizes the PRINCIPAL, never the surface. 204 denied permissions is not a map of 204 endpoints. Any row claiming N/M enforcement must cite the gate per endpoint - from the route table, or from an observed owner-200 vs role3-403 delta on that exact path - not from name resemblance.",
+   "source": "self",
+   "validated": true
   }
  ]
 }
