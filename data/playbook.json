@@ -10143,6 +10143,17 @@
    "verify": "state up front which observable the control changes and where that change was previously witnessed. If you cannot cite it, you are guessing at the axis, and a control on the wrong axis manufactures the harness's default verdict rather than measuring anything.",
    "source": "self",
    "validated": true
+  },
+  {
+   "id": "pb0756",
+   "class": "method",
+   "title": "BROWSER fetch CANNOT READ A REDIRECT TARGET - redirect:'manual' returns an opaque response with no Location, so use CORS failure as the off-origin detector",
+   "tell": "probing open redirect from a page console and reading r.headers.get('location') - it is null on every leg, including ones that obviously redirect",
+   "why": "2026-09-07, Klaviyo `next=` on /login and /login-device-validation. redirect:'manual' gave status 0 / type opaqueredirect / no Location for all 16 legs INCLUDING the same-origin control, which looks identical to 'the endpoint ignores next'. Switching to redirect:'follow' made it readable: r.url shows the final landing URL for same-origin chains, and any chain that leaves the origin dies with a TypeError because the third-party host sends no ACAO. All off-origin payloads collapsed to /dashboard, so ENFORCED - but only because the oracle could finally distinguish the cases.",
+   "payload": "redirect:'follow' + credentials:'same-origin', then classify on r.url: on-origin URL = allowlisted, thrown TypeError = the chain left the origin. Add TWO controls - a valid same-origin path AND a rejected/bogus path - so a throw cannot be blamed on the path not existing.",
+   "verify": "a CORS throw is suggestive, not proof. Before filing an open redirect, confirm the hop in a real browser navigation and read the final address bar. And state the auth state you tested in: the classic open redirect lives on the LOGGED-OUT login page, so an authenticated-only pass is not a closed class.",
+   "source": "self",
+   "validated": true
   }
  ]
 }
