@@ -10099,6 +10099,17 @@
    "verify": "run the oracle against a control endpoint AND the suspect endpoint. If the control disagrees with your assumed identity, the finding is dead. Ask of every control: what reading does this rule out? If 'my own starting assumption' is not on that list, it disambiguates nothing.",
    "source": "self",
    "validated": true
+  },
+  {
+   "id": "pb0752",
+   "class": "ssrf",
+   "title": "WHEN ONE FAILURE STATE COVERS BOTH 'BLOCKED' AND 'BROKEN', ADD A LEG THAT IS DEFINITELY BROKEN AND DEFINITELY ALLOWED - latency separates policy from plumbing",
+   "tell": "a fetcher records the same terminal state (ERROR / FAILED / null) for a destination you believe was refused by policy and for one that simply could not be reached",
+   "why": "2026-09-07. A knowledge-base crawler followed a 302 to a public host and indexed it, then returned ERROR for the same redirector aimed at link-local. ERROR was consistent with a post-redirect guard AND with a filtered address, and the record carried no error detail. Adding a PUBLIC-but-unreachable destination (a closed port on a real host) split them: the closed port hung 45s end to end and 5s from the redirect, while link-local reached ERROR in 1.9s INCLUDING the redirect hop - faster than the successful fetch. No connection was attempted, so the refusal happened on inspection. Without that leg the verdict would have been a guess dressed as a control.",
+   "payload": "three legs, not two: (1) public + reachable -> success baseline; (2) public + UNREACHABLE (closed port, e.g. host:81) -> what a genuine network failure costs in TIME; (3) the internal target under test. Read created_at/updated_at or any server timestamps as a stopwatch. Fast-fail = policy, slow-fail = plumbing.",
+   "verify": "the discriminator is LATENCY, not status. If leg 2 and leg 3 fail at the same speed you have shown nothing and must say UNREADABLE. Also confirm via an out-of-band listener that the fetcher actually dialled, so 'never attempted' is a measurement and not an inference.",
+   "source": "self",
+   "validated": true
   }
  ]
 }
