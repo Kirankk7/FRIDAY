@@ -385,3 +385,28 @@ I-heredoc backslash eaten x3              detected by: JARVIS                   
 **The pattern across I-17 and hunt #37's I-07 / R-02 / R-07 / C-01: the human catches are all
 CROSS-CHECKS AGAINST AN INDEPENDENT SOURCE, not deeper analysis of my own output.** That is the gap.
 Concretely, for hunt #39: before any cross-tenant claim, the identity oracle gets its own control leg.
+
+### I-18 · the control was chosen on an axis the oracle cannot move
+- **GIVEN** a differential probe whose verdict rests on "did the response change?"
+- **BAD** proving sensitivity with any pair that merely *feels* different, then reading every
+  no-change leg as the server rejecting the input
+- **GOOD** pick the sensitivity pair on an axis where the server is KNOWN to respond - ideally one
+  already observed responding in the capture - and compare CONTENT (hash), never size alone
+- **WHY** 2026-09-07, Klaviyo `POST /template/<tid>/preview`, testing whether it honours an inline
+  content field. Two failures, same endpoint, same session, opposite wrong answers:
+  1. Diffed response BYTE COUNT. Both campaign ids are 26-char ULIDs, so substituting one for the
+     other changes which bytes but not how many. 11 field legs returned "identical" and were one
+     step from being banked as ENFORCED / mass-assignment falsified.
+  2. Switched to a hash, then chose the sensitivity pair as campaign A vs campaign B - both VALID.
+     Preview does not interpolate campaign content, only whether the campaign resolves, so that is
+     precisely the axis the oracle is blind to. It reported the lane UNTESTABLE for an endpoint that
+     is perfectly testable.
+  The correct pair (valid vs belongs-to-nobody) was already in the walk HAR: own 35395B, ghost
+  32400B. With it, sensitivity showed -2995B / different hash, and the 11 legs then falsified
+  cleanly on real evidence.
+- **The lesson.** A control that cannot fail is not a control; it manufactures whatever verdict the
+  harness defaults to. The same endpoint yielded ENFORCED in pass 1 and UNTESTABLE in pass 2 purely
+  from how the control was specified. Before running any differential, state which observable the
+  control would change and cite where that observable was previously seen changing.
+- **Caught by:** SELF, but only because a sensitivity leg was demanded before banking. The first
+  pass had no such leg and its false ENFORCED was already written into a response.

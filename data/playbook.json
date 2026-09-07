@@ -10132,6 +10132,17 @@
    "verify": "an ACL diff sizes the PRINCIPAL, never the surface. 204 denied permissions is not a map of 204 endpoints. Any row claiming N/M enforcement must cite the gate per endpoint - from the route table, or from an observed owner-200 vs role3-403 delta on that exact path - not from name resemblance.",
    "source": "self",
    "validated": true
+  },
+  {
+   "id": "pb0755",
+   "class": "method",
+   "title": "CHOOSE THE SENSITIVITY CONTROL ON AN AXIS THE SERVER IS KNOWN TO MOVE - and diff content, never length",
+   "tell": "your verdict is 'the response did not change, so the input was rejected', and you have not separately proven the oracle can SEE a change",
+   "why": "2026-09-07, Klaviyo POST /template/<tid>/preview. Same endpoint gave two opposite wrong answers in one session. (1) Byte-count diff: both campaign ids are 26-char ULIDs, so substitution is length-preserving - 11 legs read 'identical' and nearly banked as mass-assignment FALSIFIED/ENFORCED. (2) Hash diff, but sensitivity pair was campaign A vs campaign B, both valid; preview only reacts to whether a campaign RESOLVES, not to which one, so the probe declared the lane UNTESTABLE. Correct pair was valid vs belongs-to-nobody, already sitting in the walk HAR as 35395B vs 32400B. With it: sensitivity -2995B, different hash, and the 11 legs falsified cleanly.",
+   "payload": "before the test legs, run one leg whose ONLY job is to move the observable, drawn from a delta already seen in the capture. Compare a hash of the body plus a substring check for your marker; length alone is blind to any fixed-width substitution (ULIDs, UUIDs, hashes, base64 of fixed size).",
+   "verify": "state up front which observable the control changes and where that change was previously witnessed. If you cannot cite it, you are guessing at the axis, and a control on the wrong axis manufactures the harness's default verdict rather than measuring anything.",
+   "source": "self",
+   "validated": true
   }
  ]
 }
