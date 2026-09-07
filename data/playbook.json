@@ -10088,6 +10088,17 @@
    "title": "AN LLM THAT NAMES YOUR LINK BUT CANNOT OPEN IT: injection channel OPEN, egress ABSENT - and the assistant will still CONFIDENTLY DESCRIBE the document it never fetched",
    "tell": "a support/docs chatbot that receives page context (page_dom, sourceUrl, notifications) alongside the user's question",
    "why": "2026-09-06 close-out. Five URL shapes planted in page_dom (anchor, bare URL, markdown link, 'open the reference', iframe+img) against a docs assistant, with a control carrying the SAME DOM minus the URL and an OAST listener self-tested live 20 minutes earlier (3 hits logged with source ASN). Result: 0 callbacks. The control proved page_dom reaches the model verbatim - it quoted our injected <h1> and <p> back. One reply NAMED the planted link and said it did not have its contents, then offered a support ticket. So the injection channel is open and the egress is missing: no URL-fetching tool. ⚠️ The trap: TWO other replies confidently DESCRIBED our planted 'source document' - 'covers the main sections of the dashboard', 'typically informs you about discrepancies' - entirely from the docs corpus. Our listener's whole body was 22 bytes of 'ok /marker'. Verdict on the CALLBACK and on whether the reply contains YOUR bytes, never on whether the model claims to have read it. A fluent description of a document is not evidence the document was fetched."
+  },
+  {
+   "id": "pb0751",
+   "class": "authz",
+   "title": "BEFORE ANY CROSS-TENANT CLAIM, THE IDENTITY ORACLE NEEDS ITS OWN CONTROL LEG - an id scraped from the loaded page is not an assertion about YOU",
+   "tell": "a session-scoped endpoint (takes no id argument) returns a record stamped with a tenant id that does not match the one you believe is yours",
+   "why": "2026-09-07. A GET taking no identifier returned one record whose company_id differed from the id regexed out of the page, reproduced 3/3 with a live control, no parent/child linkage, and the record's own scope field read 'company_only'. Every signal pointed at cross-tenant disclosure. It was false: the app embeds the VENDOR's own analytics tag, so the loaded page carried the vendor's tenant id next to ours, and the regex grabbed theirs. The true identity sat in a response header present on EVERY request, and in the account's own api-keys response. Three disambiguation batches were run first and none could catch it, because all three assumed the scraped id was ours - a control built on an unvalidated premise validates the premise, not the claim.",
+   "payload": "identity oracle, in order of trust: (1) a response header the server sets on every request for your session; (2) an authenticated account/me/api-keys endpoint that echoes your tenant; (3) NEVER a string scraped from page HTML. Validate the oracle against a CONTROL endpoint unrelated to the finding before comparing anything. A page contains ids belonging to many parties - analytics tags, embedded widgets, the vendor instrumenting its own product.",
+   "verify": "run the oracle against a control endpoint AND the suspect endpoint. If the control disagrees with your assumed identity, the finding is dead. Ask of every control: what reading does this rule out? If 'my own starting assumption' is not on that list, it disambiguates nothing.",
+   "source": "self",
+   "validated": true
   }
  ]
 }

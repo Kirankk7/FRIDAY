@@ -149,6 +149,27 @@ does not grow — that is the good outcome, not a missed one.
   same defect (a shape recorded without its type), different source (a hand-written note, not a
   generator).
 
+### I-17 · an identifier scraped from the page is not an identity assertion
+- **GIVEN** a probe needs to know "which tenant am I?" and the page contains an id-shaped string
+- **BAD** regexing the loaded HTML for `company_id` / `account_id` / `tenant` and treating the first
+  hit as your own identity
+- **GOOD** take identity ONLY from something the server returns FOR YOUR SESSION: a response header,
+  or an authenticated account/me endpoint. Validate the oracle against a control endpoint BEFORE
+  building any comparison on it.
+- **WHY** 2026-09-07. An endpoint that takes no identifier returned a record stamped with a company
+  id that did not match the one scraped from the page, and it reproduced 3/3. It read as a clean
+  cross-tenant disclosure and a report was one step from being drafted. The scraped id belonged to
+  the VENDOR: the app embeds the vendor's own analytics tag, so the page carried the vendor's tenant
+  id alongside ours. The true identity was in a response header present on every single request, and
+  in the account's own API-keys response. Both were visible in the first screenshot.
+- **The compounding failure, which is the real lesson.** Three separate "disambiguation" batches were
+  run before filing. Every one of them was constructed on the assumption that the scraped id was
+  ours, so none of them could detect that it was not. **A control built on an unvalidated premise
+  validates the premise, not the claim.** Ask of every control: *what reading does this rule out?*
+  If the answer does not include "my own starting assumption", it is not disambiguating anything.
+- **Caught by:** HUMAN. Kiran sent a screenshot that happened to include the response headers. The
+  console output that had been requested would not have contained them.
+
 ---
 
 > **The family these share.** I-01 · I-07 · I-07b and the C04 benchmark slip below are one shape:
@@ -349,3 +370,18 @@ S-02 archiveEntity on the control leg     detected by: ESCAPED                  
 **17 fired. JARVIS 7 · control 4 · human 4 · audit 1 · ESCAPED 1.**
 The escape (S-02) is the one that did real damage. The four human catches are the gap to close.
 
+---
+
+## hunt #38 running record
+```
+I-17 scraped id read as own identity      detected by: HUMAN (screenshot showed Cid header)
+                                          impact: NONE - falsified before filing. Would have been
+                                          a false cross-tenant report against a mature programme.
+I-blob 193 base64 WASM slices as tokens   detected by: JARVIS (count was implausible)   impact: none
+I-0x08 regex compiled with a control byte  detected by: JARVIS (suppressor output review) impact: two
+                                          suppressors were silent no-ops for an unknown period
+I-heredoc backslash eaten x3              detected by: JARVIS                          impact: ~20 min
+```
+**The pattern across I-17 and hunt #37's I-07 / R-02 / R-07 / C-01: the human catches are all
+CROSS-CHECKS AGAINST AN INDEPENDENT SOURCE, not deeper analysis of my own output.** That is the gap.
+Concretely, for hunt #39: before any cross-tenant claim, the identity oracle gets its own control leg.
