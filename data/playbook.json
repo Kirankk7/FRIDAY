@@ -10110,6 +10110,17 @@
    "verify": "the discriminator is LATENCY, not status. If leg 2 and leg 3 fail at the same speed you have shown nothing and must say UNREADABLE. Also confirm via an out-of-band listener that the fetcher actually dialled, so 'never attempted' is a measurement and not an inference.",
    "source": "self",
    "validated": true
+  },
+  {
+   "id": "pb0753",
+   "class": "llm",
+   "title": "AUTHORIZATION CANNOT BE READ THROUGH AN LLM'S TOOL-SELECTION BEHAVIOUR - which tool a model picks is SAMPLED, not computed, so a differential across probe legs is noise until n>1",
+   "tell": "the only thing separating your probe legs is whether the agent CHOSE to call a tool, or which tool it chose - i.e. the oracle runs through a language model",
+   "why": "2026-09-07. An agent took a client-supplied `customer_profile_id` and held two profile WRITE tools. One run each of own-id / ghost-id / omitted gave own=tool-called, ghost=no-tool, omitted=no-tool - which reads exactly like 'an unknown id is rejected'. Repeating three times per leg inverted it: omitted called a tool 3/3, own 2/3, ghost 1/3. The 'control' was sampling variance. Separately, the profile tools never fired in 9 runs, so the authorization question was never on the code path at all.",
+   "payload": "run every LLM-mediated leg at least 3x and report the COUNT, not the outcome. Then move the verdict onto a deterministic observable: the tool's own output, an HTTP status, or a before/after state diff. If the only difference you can measure is model behaviour, the answer is UNTESTABLE.",
+   "verify": "before interpreting any leg, confirm the tool you actually care about appears in the trace. A skill marked live does not mean its tools route - a data source may be unprovisioned. 0/9 appearances is the tell that the lane is gated, not enforced.",
+   "source": "self",
+   "validated": true
   }
  ]
 }
