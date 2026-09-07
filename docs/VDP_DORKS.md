@@ -263,5 +263,5 @@ is the point: most of what a dork surfaces is already somebody's public programm
 Three regex bugs were caught only by checking against real page text — never trust these
 patterns without re-reading the page:
 - `"will not seek prosecution"` missed by *pursue/take/initiate legal*
-- `"in-scope"` hyphenated, missed by `in scope`
+- `"in-scope"` hyphenated, missed by `\bin scope\b`
 - `"you will not be paid a reward"` scored **reward=True** until `no_reward` was taught to win

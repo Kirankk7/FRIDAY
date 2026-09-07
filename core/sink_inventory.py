@@ -67,7 +67,7 @@ _SERIALIZED = (
 
 _PARAM_HINTS = (
     ("template", re.compile(r"templ|layout|render|body_html|expr|formula|"
-                            r"handlebars|jinja|liquid|freemarker|subject", re.I)),
+                            r"handlebars|jinja|liquid|freemarker|\bsubject\b", re.I)),
     # `options`, `args`, and bare `exec`/`script` matched ordinary routes (/setup/api/v1/options)
     # and buried the real sinks. sweep.py learned the same generic-word trap for path params:
     # "bare name/page matched operationName/appName/per_page ... under ~100 FPs".

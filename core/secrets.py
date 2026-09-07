@@ -215,8 +215,23 @@ _SLASH_PATH = re.compile(r"^/[A-Za-z0-9._~-]+(?:/[A-Za-z0-9._~-]+)+$")
 _CSS_SELECTOR = re.compile(r"^\[[A-Za-z_:][\w:.-]*(?:[~|^$*]?=[^\]]*)?\]$")
 
 # An absolute URL into a public docs/help site is not an "internal" anything.
-_PUBLIC_DOC_URL = re.compile(r"^https?://[^/]*(?:developers?|docs?|help|support|learn|api-docs)\."
-                             r"[^/]+/|^https?://[^/]+/(?:documentation|docs|help)/", re.I)
+_PUBLIC_DOC_URL = re.compile(r"^https?://[^/]*\b(?:developers?|docs?|help|support|learn|api-docs)\."
+                             r"[^/]+(?:/|$)|^https?://[^/]+/(?:documentation|docs|help)/", re.I)
+# base64-encoded image bytes: PNG/GIF/JPEG structure encoded, never credential material.
+# (observed: EAAAABCAYAAA...SUVORK5CYII matched the Facebook EAA token format.)
+_IMAGE_B64_MARKERS = (
+    "iVBORw0KGgo",        # PNG signature
+    "SUVORK5CYII",        # PNG IEND trailer
+    "RFWHRTb2Z0d2FyZQ",   # tEXtSoftware
+    "lEQVQ", "JREFU", "SURBQ",   # IDAT chunk at the three byte offsets
+    "R0lGOD",             # GIF87a / GIF89a
+    "/9j/",               # JPEG SOI + APP0
+)
+
+# A dotted all-lowercase identifier is an i18n/message key, not a token.
+# (observed: an i18n key matched "OAuth Access Token".)
+_I18N_KEY = re.compile(r"^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*){2,}$")
+
 _ANGLE_TOKEN = re.compile(r".*<[a-zA-Z_]+>.*")
 
 _COMMON_WORDS = {
@@ -290,6 +305,10 @@ def is_likely_false_positive(value, name="", strict=False) -> bool:
         return True
     # A link into someone's public documentation is not an internal endpoint. The corpus's
     # "Internal API Endpoint" pattern matched a developers.facebook.com/documentation/... URL.
+    if any(mk in v for mk in _IMAGE_B64_MARKERS):
+        return True           # slice of an embedded image, not a token
+    if _I18N_KEY.match(v):
+        return True           # dotted lowercase message key
     if _PUBLIC_DOC_URL.search(v):
         return True
 
@@ -340,6 +359,34 @@ def mask(value: str) -> str:
     return "%s...%s (%d chars)" % (v[:4], v[-4:], len(v))
 
 
+# ---------------------------------------------------------------------------
+# Blob-slice suppression (earned 2026-09-07, full-bundle sweep).
+#
+# 193 "Facebook Access Token" / "Twitter Bearer Token" hits came out of TWO chunks. Both embed a
+# base64-encoded WASM binary: one contiguous run of 826,227 characters, another of 52,886. The
+# corpus patterns for EAA... and AAAAAAAA... match slices INSIDE that run. The value-only filter
+# cannot see this — the slice looks exactly like a token in isolation. The tell is not the value,
+# it is the CONTEXT: a real credential is delimited (quote, =, whitespace) and is at most a few
+# hundred characters; a blob slice sits in the middle of an unbroken base64 field of arbitrary
+# length. So the check needs the match offsets, which only scan_secrets has.
+_B64_RUN_LIMIT = 1024     # longest plausible single credential, generously over-sized
+
+
+def _blob_runs(body, limit=_B64_RUN_LIMIT):
+    """[(start, end)] of contiguous base64-ish runs longer than `limit`. Computed once per body."""
+    return [(m.start(), m.end())
+            for m in re.finditer(r"[A-Za-z0-9+/_-]{%d,}={0,2}" % limit, body)]
+
+
+def _inside_blob(runs, start, end):
+    for a, b in runs:
+        if start >= a and end <= b:
+            return True
+        if start >= b:
+            continue
+    return False
+
+
 def scan_secrets(text, url="", fp_filter=True, max_chars=5_000_000, budget_s=2.5,
                  per_pattern_cap=500):
     """The hunting scanner: 150 vendor formats, false-positive filtered.
@@ -352,6 +399,7 @@ def scan_secrets(text, url="", fp_filter=True, max_chars=5_000_000, budget_s=2.5
     if not text:
         return []
     body = text[:max_chars]
+    runs = _blob_runs(body) if fp_filter else []
     deadline = time.monotonic() + budget_s
     out, seen = [], set()
     for meta, rx in rows:
@@ -368,6 +416,8 @@ def scan_secrets(text, url="", fp_filter=True, max_chars=5_000_000, budget_s=2.5
                 value = value.strip()
                 if fp_filter and is_likely_false_positive(value, meta["name"], strict):
                     continue
+                if runs and _inside_blob(runs, m.start(), m.end()):
+                    continue          # slice out of an embedded binary, not a credential
                 key = (meta["name"], value, url)
                 if key in seen:
                     continue

@@ -5831,6 +5831,78 @@ def _t_timeline_package():
 run_test("F4: submission package zips run+report+evidence", _t_timeline_package)
 
 
+def _secrets_blob_slice():
+    # Earned 2026-09-07 (full-bundle sweep): 193 "Facebook Access Token" hits came out
+    # of two chunks that embed a base64-encoded WASM binary — one contiguous run of 826,227 chars.
+    # The corpus patterns match slices INSIDE that run. A value-only filter cannot see this; the
+    # tell is the match's CONTEXT, not its value. Both directions are asserted, because a
+    # suppressor without its own control is indistinguishable from a scanner that found nothing
+    # (pb0741).
+    import random
+    import string
+    from core import secrets as S
+
+    random.seed(7)
+    alphabet = string.ascii_letters + string.digits
+    token = "EAA" + "".join(random.choice(alphabet) for _ in range(80))
+    blob = "".join(random.choice(alphabet) for _ in range(4000))
+
+    alone = 'const t = "%s";' % token
+    buried = 'var w="%s%s%s";' % (blob, token, blob)
+
+    def names(text, flt=True):
+        return sorted({f["name"] for f in S.scan_secrets(text, fp_filter=flt)})
+
+    if not names(alone):
+        return "control failed: blob suppressor ate a delimited, high-entropy token"
+    if names(buried):
+        return "suppressor did not fire on a token buried in a 4000-char base64 run: %s" % names(buried)
+    if not names(buried, False):
+        return "filter-off shows nothing — the silence proves nothing about the suppressor"
+    return True
+
+
+def _engine_regex_control_bytes():
+    # Earned 2026-09-07: `\b` written through a Windows bash heredoc arrived in two source files as
+    # a literal 0x08 BACKSPACE. `_PUBLIC_DOC_URL` and the sink template-engine detector compiled
+    # without error and then matched nothing, ever — a suppressor silently demoted to a no-op reads
+    # exactly like a target with no false positives. Compilation is not validation; the pattern
+    # SOURCE has to be inspected.
+    import re
+    import io
+    import os
+
+    suspect = set(range(0, 9)) | {11, 12} | set(range(14, 32))
+
+    bad = []
+    for path in ("core/secrets.py", "core/sink_inventory.py", "core/route_inventory.py",
+                 "core/pivot.py", "data/secret_patterns.json"):
+        full = os.path.join(os.path.dirname(os.path.abspath(__file__)), path)
+        if not os.path.exists(full):
+            continue
+        raw = io.open(full, "rb").read()
+        for code in suspect:
+            if bytes([code]) in raw:
+                bad.append("%s contains control byte 0x%02x" % (path, code))
+
+    from core import secrets as S
+    rows, _meta = S.corpus()
+    for meta, rx in rows:
+        for ch in rx.pattern:
+            if ord(ch) in suspect:
+                bad.append("corpus pattern %r carries control char 0x%02x" % (meta["name"], ord(ch)))
+                break
+
+    if bad:
+        return "; ".join(bad[:6])
+    return True
+
+
+run_test("Secrets: blob-slice suppressor (both directions)", _secrets_blob_slice)
+run_test("Engine: no control bytes in regex sources", _engine_regex_control_bytes)
+
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # CONSOLE SUMMARY
 # ══════════════════════════════════════════════════════════════════════════════
