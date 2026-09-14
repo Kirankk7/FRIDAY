@@ -90,6 +90,11 @@ become a reason to delay the first real behavioural observation. Offline where p
 Four inventories, not one. Routes say what exists; the other three say what can be *reached*,
 *crossed*, and *interpreted*.
 
+> 📕 **The concrete ordered runbook for the pre-credential phase is `docs/UNAUTH_RECON.md`.**
+> Born from hunt #39, where the programme was disabled before a single authenticated request —
+> everything banked there was earned with no account. Do the unauth phase FIRST and COMPLETELY;
+> it is the only part of a hunt nobody can withdraw afterwards.
+
 - [ ] **Route/operation table.** SPA bundles: fetch the **runtime chunk map**, not just what the HAR
       loaded — the HAR is a sample, the manifest is the ceiling. Server-rendered: docs, `llms.txt`,
       `robots.txt`, sitemaps.
