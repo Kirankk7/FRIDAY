@@ -1,6 +1,6 @@
 # UNAUTH RECON — the pre-credential runbook
 
-**Born 2026-09-14 out of hunt #39 (Free Mobile).** That hunt produced the most complete
+**Born 2026-09-14 out of hunt #39.** That hunt produced the most complete
 unauthenticated surface map we have ever built, and then the programme was disabled before a single
 authenticated request was made. Everything below was earned with **no account, no credentials, and
 no cooperation from the target.**
