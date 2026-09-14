@@ -20,7 +20,7 @@ THE RULE, and the only thing that matters here:
     but it CANNOT issue a trusted negative verdict.
 
 Statuses are deliberately not booleans:
-    INSTRUMENT_VERIFIED    - fixture markers recovered; a negative on real data is trustworthy
+    INSTRUMENT_VERIFIED    - fixture markers recovered UNDER THIS CONTRACT; see the scope note below
     INSTRUMENT_UNVERIFIED  - ran, did not recover the markers; negatives are BLOCKED
     INSTRUMENT_ERROR       - did not run at all; negatives are BLOCKED
     FIXTURE_INVALID        - the CONTROL itself is broken; the instrument is NOT implicated
@@ -32,6 +32,16 @@ reported UNVERIFIED. Blaming the instrument for a malformed control is the same 
 level up. Two preflight checks run before the instrument is ever invoked:
   1. every assembled marker must actually appear in the assembled fixture
   2. where a real-world FORMAT is declared, the fixture must contain a token matching it
+
+VERIFIED IS SCOPED, NOT GLOBAL. It means: this instrument, this fixture, this callable, this
+invocation - nothing wider. A secret scanner that passes here can still miss another encoding, a
+nested archive, a minified or truncated file, a binary/text boundary, a format not in the contract,
+an excluded path, or anything past a size limit. So the sentence a verified negative licenses is:
+
+    "no marker matched under the verified instrument contract"
+
+and never "there are no secrets". Result.scope carries that qualifier so it lands in the writeup
+instead of being remembered as a global pass.
 
 Usage:
     from core.instrument_check import verify
@@ -89,6 +99,7 @@ class Result:
     status: str
     trusts_negative: bool
     error: str = ""
+    scope: str = ""          # what VERIFIED actually covers; empty when nothing is verified
 
     def __str__(self) -> str:
         head = f"[{self.status}] {self.instrument} / {self.fixture}"
@@ -96,7 +107,8 @@ class Result:
         if self.missing:
             body += f"  MISSING: {', '.join(self.missing[:6])}"
         if self.trusts_negative:
-            tail = "  -> negatives TRUSTED"
+            tail = ("  -> negatives TRUSTED **within this contract only**: " + self.scope +
+                    "\n     say 'no marker matched under the verified contract', NOT 'clean'")
         elif self.status == "FIXTURE_INVALID":
             tail = "  -> CONTROL IS BROKEN, instrument NOT implicated: " + self.error
         else:
@@ -149,8 +161,14 @@ def verify(instrument: str, run: Callable[[str], Iterable[str]]) -> Result:
     missing = [m for m in markers if m not in blob]
     detected = len(markers) - len(missing)
     ok = not missing
+    # The scope is the whole point of the VERIFIED wording: it names what was actually exercised,
+    # so a later writeup cannot quietly widen "this fixture passed" into "the tool is trustworthy".
+    scope = (f"instrument={instrument} fixture={fixture} "
+             f"callable={getattr(run, '__name__', type(run).__name__)} markers={len(markers)} "
+             f"input=one utf-8 text file; archive/binary/minified/truncated/size-limit NOT tested")
     return Result(instrument, fixture, True, len(markers), detected, missing,
-                  "INSTRUMENT_VERIFIED" if ok else "INSTRUMENT_UNVERIFIED", ok)
+                  "INSTRUMENT_VERIFIED" if ok else "INSTRUMENT_UNVERIFIED", ok,
+                  "", scope if ok else "")
 
 
 def as_json(r: Result) -> str:
