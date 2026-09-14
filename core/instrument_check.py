@@ -23,6 +23,15 @@ Statuses are deliberately not booleans:
     INSTRUMENT_VERIFIED    - fixture markers recovered; a negative on real data is trustworthy
     INSTRUMENT_UNVERIFIED  - ran, did not recover the markers; negatives are BLOCKED
     INSTRUMENT_ERROR       - did not run at all; negatives are BLOCKED
+    FIXTURE_INVALID        - the CONTROL itself is broken; the instrument is NOT implicated
+
+FIXTURE_INVALID exists because a control can create the false negative it was built to catch.
+On the first run here, the fake Google key in the fixture had 38 characters after its prefix
+instead of 35, so a CORRECT scanner pattern rightly missed it and a WORKING instrument was
+reported UNVERIFIED. Blaming the instrument for a malformed control is the same error one
+level up. Two preflight checks run before the instrument is ever invoked:
+  1. every assembled marker must actually appear in the assembled fixture
+  2. where a real-world FORMAT is declared, the fixture must contain a token matching it
 
 Usage:
     from core.instrument_check import verify
@@ -34,6 +43,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from dataclasses import dataclass, asdict
 from typing import Callable, Iterable
 
@@ -42,19 +52,28 @@ SPLIT_TOKEN = "<|>"   # separator inside fixture files; stripped on load
 FIXTURE_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                            "fixtures", "instrument")
 
-# instrument name -> (fixture file, markers that a working instrument MUST recover)
+# instrument -> (fixture file, [(marker parts, real-world format regex or None)])
+# Markers are stored SPLIT so no secret-shaped literal is committed. The format regex is the
+# independent check on the FIXTURE: it is the shape the real credential actually has, so a
+# fixture token that does not match it is malformed and the control is void.
 CONTRACTS = {
     "secret_scan": (
         "secret-positive-v1.txt",
-        # also split, for the same reason - joined by _m() below
-        [("AKIA", "IOSFODNN7EXAMPLE"), ("GOCSPX", "-"), ("ghp", "_"), ("AIza", "Sy"),
-         ("xoxb", "-"), ("sk", "_live_"), ("eyJ","hbGciOiJIUzI1NiJ9"),
-         ("BEGIN RSA PRI", "VATE KEY")],
+        [(("AKIA", "IOSFODNN7EXAMPLE"), "AKIA" + r"[0-9A-Z]{16}(?![0-9A-Za-z])"),
+         (("GOCSPX", "-"),              "GOCSPX" + r"-[\w-]{20,}"),
+         (("ghp", "_"),                 "ghp" + r"_[\w]{20,}"),
+         (("AIza", "Sy"),               "AIza" + r"[0-9A-Za-z_\-]{35}(?![0-9A-Za-z_\-])"),   # <- caught the 38-char bug
+         (("xoxb", "-"),                "xoxb" + r"-[\w-]{20,}"),
+         (("sk", "_live_"),             "sk" + r"_live_[0-9A-Za-z]{16,}"),
+         (("eyJ", "hbGciOiJIUzI1NiJ9"), r"eyJ[\w-]+\.eyJ[\w-]+\.[\w-]+"),
+         (("BEGIN RSA PRI", "VATE KEY"), None)],
     ),
     "endpoint_extract": (
         "endpoints-positive-v1.js",
-        [("/api/v1/fixture/plain", ""), ("/api/v1/fixture/template/", ""),
-         ("/fixture/single-quoted", ""), ("/api/v1/fixture/in-fetch-call", "")],
+        [(("/api/v1/fixture/plain", ""), None),
+         (("/api/v1/fixture/template/", ""), None),
+         (("/fixture/single-quoted", ""), None),
+         (("/api/v1/fixture/in-fetch-call", ""), None)],
     ),
 }
 
@@ -76,8 +95,12 @@ class Result:
         body = f"  recovered {self.detected}/{self.expected}"
         if self.missing:
             body += f"  MISSING: {', '.join(self.missing[:6])}"
-        tail = ("  -> negatives TRUSTED" if self.trusts_negative
-                else "  -> negatives BLOCKED: this instrument cannot report 'clean'")
+        if self.trusts_negative:
+            tail = "  -> negatives TRUSTED"
+        elif self.status == "FIXTURE_INVALID":
+            tail = "  -> CONTROL IS BROKEN, instrument NOT implicated: " + self.error
+        else:
+            tail = "  -> negatives BLOCKED: this instrument cannot report 'clean'"
         return "\n".join([head, body, tail])
 
 
@@ -91,8 +114,8 @@ def verify(instrument: str, run: Callable[[str], Iterable[str]]) -> Result:
         return Result(instrument, "-", False, 0, 0, [], "INSTRUMENT_ERROR", False,
                       f"no contract defined for '{instrument}'")
 
-    fixture, parts = CONTRACTS[instrument]
-    markers = ["".join(p) for p in parts]
+    fixture, spec = CONTRACTS[instrument]
+    markers = ["".join(parts) for parts, _fmt in spec]
     path = os.path.join(FIXTURE_DIR, fixture)
     try:
         # Markers are stored SPLIT by SPLIT_TOKEN so no secret-shaped literal is ever committed
@@ -101,6 +124,20 @@ def verify(instrument: str, run: Callable[[str], Iterable[str]]) -> Result:
     except OSError as e:
         return Result(instrument, fixture, False, len(markers), 0, markers,
                       "INSTRUMENT_ERROR", False, f"fixture unreadable: {e}")
+
+    # --- PREFLIGHT: validate the CONTROL before blaming the instrument -------------------
+    absent = [m for m in markers if m not in text]
+    if absent:
+        return Result(instrument, fixture, False, len(markers), 0, absent,
+                      "FIXTURE_INVALID", False,
+                      "marker(s) not present in the assembled fixture: " + ", ".join(absent))
+    malformed = [ "".join(parts) for parts, fmt in spec
+                  if fmt and not re.search(fmt, text) ]
+    if malformed:
+        return Result(instrument, fixture, False, len(markers), 0, malformed,
+                      "FIXTURE_INVALID", False,
+                      "fixture token(s) do not match the real-world format: " + ", ".join(malformed))
+    # -------------------------------------------------------------------------------------
 
     try:
         found = list(run(text))
