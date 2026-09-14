@@ -410,3 +410,32 @@ Concretely, for hunt #39: before any cross-tenant claim, the identity oracle get
   control would change and cite where that observable was previously seen changing.
 - **Caught by:** SELF, but only because a sensitivity leg was demanded before banking. The first
   pass had no such leg and its false ENFORCED was already written into a response.
+
+### I-19 · the control was built from a SCRAPED identifier, so it was never a control
+- **GIVEN** an object-selector probe (IDOR shape) where the "own object" leg is an identifier
+  harvested from page HTML, a bundle, or an archive — rather than one the application itself used
+- **BAD** treating that scraped id as the must-succeed leg, then reading N identical refusals as the
+  endpoint enforcing authorization
+- **GOOD** obtain the selector from a CAPTURE — drive the feature and read the request the app
+  actually sends. Only an id the application used is a valid control
+- **WHY** 2026-09-14, an insurance group's unauthenticated `getJsonDocument({id})` endpoint — the
+  only real lead on the target. Six legs: two "controls" (GUIDs scraped from the calculator pages),
+  a null GUID, a random GUID, a malformed value, and empty. **All six returned an identical
+  `404 / 0 bytes`.** The endpoint was correctly recorded UNREADABLE rather than ENFORCED — but the
+  cause was not the target. Page GUIDs are component, template or analytics ids; none of them is a
+  document id, so **no leg could ever have succeeded.**
+  Then a second failure on top of the first: I explained the 404s as the missing Sitecore
+  curly-brace id format. Re-testing the SAME id **unbraced** returned a byte-identical `200`,
+  disproving it outright. The tidy explanation had been accepted for one message before the
+  disproving leg ran.
+  What resolved it: opening the calculator in a browser and reading the real request off the
+  network tab — `?id={441080D3-…}` — in about sixty seconds. With that id as the control the probe
+  became readable immediately, and the lane FALSIFIED honestly (public config, no PII).
+- **The lesson.** Two rules, both violated in one probe. (1) **A scraped identifier is not a
+  control** — a control must be an object the application demonstrably accepts, which usually means
+  a capture, not a bundle. (2) **When every leg including the control is identical, suspect your own
+  input before the target's behaviour**, and test the explanation you just invented by running the
+  leg that would falsify it. `pb0766`.
+- **Caught by:** SELF for the UNREADABLE verdict (the control rule held, and stopped a false
+  ENFORCED). SELF for the braces error too, but only because the unbraced leg was run —
+  had it not been, a wrong explanation would have been written into the matrix as fact.
