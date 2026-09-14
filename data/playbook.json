@@ -10264,6 +10264,17 @@
    "verify": "a tidy explanation that survives no test is worth nothing - always run the leg that would DISPROVE it (here: the same id without the braces). Bundles give the denominator; only a capture gives a valid selector. (bundles-are-denominator-hars-are-discovery)",
    "source": "hunt #40",
    "validated": true
+  },
+  {
+   "id": "pb0767",
+   "class": "method",
+   "title": "AN INSTRUMENT THAT CANNOT FIND A PLANTED POSITIVE CANNOT REPORT CLEAN - keep a local known-positive fixture per recurring instrument",
+   "tell": "an extractor or scanner reports zero findings and you are about to write ENFORCED or 'clean'",
+   "why": "2026-09-14, reviewing a public bug-bounty framework. Its oracle container's header names the failure exactly: 'Every scanner fails open. Handed an argument it does not understand, or a session that has died, it exits having sent no requests and the runner records clean for every vector. A clean result and a never-ran result are byte-identical in the UI.' Their number: 53 vectors reported free of SQL injection in 40 seconds, on an application that demonstrably had it. This is the INSTRUMENT-side twin of our existing TARGET-side control: ours proves the target refused, this proves the tool can see anything at all. Four of our own failures in two weeks were this class - bracket-named downloads writing 0 bytes at HTTP 200 (twice), a CRLF URL list returning curl 000 that looked exactly like an IP block, and an IDOR control built from a scraped id that could never have succeeded.",
+   "payload": "core/instrument_check.py -> verify('secret_scan', fn) ; fixtures/instrument/*.  Statuses are INSTRUMENT_VERIFIED / INSTRUMENT_UNVERIFIED / INSTRUMENT_ERROR, never a boolean.",
+   "verify": "THE FIXTURE ITSELF MUST BE VALID. On the first run our fixture's fake Google key had 38 chars after the AIza prefix instead of 35, so a CORRECT pattern rightly missed it and the tool was falsely marked UNVERIFIED. A control that is itself invalid manufactures a false verdict - the same disease it exists to catch. Validate the fixture against the real format before trusting a failure.",
+   "source": "hunt #40 repo screen",
+   "validated": true
   }
  ]
 }

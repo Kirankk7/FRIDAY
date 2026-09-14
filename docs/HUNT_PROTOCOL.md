@@ -179,6 +179,15 @@ is the failure this protocol exists to stop. [[coverage-sweep-rule]]
 
 **Every probe needs a positive control in the same batch.**
 
+> 🔬 **Two controls, not one.** The list below is the TARGET-side control: an object we own,
+> through the same code path. It cannot see an instrument that never ran. The INSTRUMENT-side
+> control is `core/instrument_check.py` — a local fixture with known-positive markers that a
+> working extractor MUST recover. **An instrument that fails its positive control may still report
+> observations, but it CANNOT issue a trusted negative.** Earned from four real failures in two
+> weeks: 0-byte writes at HTTP 200, curl `000` that mimicked an IP block, a "control" built from a
+> scraped id that could never succeed, and a secret scan reporting clean with nothing proving it
+> could see a secret at all. (`pb0767`)
+
 - [ ] Control uses an object I own, through the same code path, and MUST succeed.
 - [ ] Control fails → the run is **UNREADABLE**. No verdict either way. Fix and re-run.
 - [ ] Control returns an empty body → **blind oracle**. Pick a different endpoint.
