@@ -10220,6 +10220,50 @@
    "verify": "when a whole batch fails identically, FIRST send one control request to a known-good URL before concluding you are blocked - identical failure across all legs is an instrument signature, not a target behaviour (pb0618)",
    "source": "hunt #39",
    "validated": true
+  },
+  {
+   "id": "pb0763",
+   "class": "recon",
+   "title": "A SELF-HOSTED POLICY THAT SAYS 'VALID FOR ALL SITES THAT REFER TO THIS FILE' IS A MECHANICAL SCOPE TEST - hash-compare the canonical security.txt across every candidate host",
+   "tell": "a VDP policy names BRANDS or 'our systems' but publishes no domain list, and its security.txt contains a Canonical: line",
+   "why": "2026-09-14, a European insurance group. The policy listed 16 brand NAMES including foreign subsidiaries - useless as scope. Its security.txt said 'valid for all sites of <org> and its brands THAT REFER TO IT'. Fetching /.well-known/security.txt on each candidate and md5-comparing turned a guess into proof: 10 hosts returned the BYTE-IDENTICAL PGP-signed file, three (incl. two foreign subsidiaries and a sister company) did not and are therefore different legal entities. An 11th in-scope host was later found the same way by following their own sitemap. Under a jurisdiction with no safe-harbour doctrine (NL/DE/UK), 'probably in scope' is not authorisation - this converts it to evidence.",
+   "payload": "for h in <candidates>; do curl -sL https://$h/.well-known/security.txt | md5sum; done   # keep only hosts matching the canonical hash",
+   "verify": "compare HASHES, not 'does it 200'. A soft-404 HTML page also returns 200 and will read as in-scope. Also: a 000/timeout is UNREACHABLE, not out-of-scope (pb0762) - do not silently drop it from the denominator.",
+   "source": "hunt #40",
+   "validated": true
+  },
+  {
+   "id": "pb0764",
+   "class": "method",
+   "title": "TRACE THE LOGIN REDIRECT CHAIN BEFORE ASSUMING THE PORTAL IS IN SCOPE - auth handoffs routinely leave the scope boundary",
+   "tell": "the in-scope host has a /login or /_login path and you are about to test 'the application'",
+   "why": "2026-09-14, a European insurance group. The 10 hosts whose scope was PROVEN were all marketing sites. Tracing /_login showed the real application is elsewhere: -> a third-party identity broker -> an Azure AD B2C tenant on a subdomain -> an api. subdomain. NONE of the three served the canonical security.txt, so the entire authenticated surface sat OUTSIDE provable scope. Two of them were additionally IPv6-only and unreachable from the hunter's network. The B2C host is a Microsoft product, which the programme excluded as third-party software anyway. Discovering this at the GATE costs one curl; discovering it after a day of work costs a day.",
+   "payload": "curl -s -D - -o /dev/null -L --max-redirs 6 'https://<host>/login' | grep -iE '^HTTP/|^location:'   # then scope-test EVERY new hostname in the chain",
+   "verify": "IP adjacency is NOT ownership. Three hosts in the same /64 suggests common operation, and proves nothing about permission. Ask the programme; do not infer.",
+   "source": "hunt #40",
+   "validated": true
+  },
+  {
+   "id": "pb0765",
+   "class": "method",
+   "title": "A SOFT-200 ERROR PAGE READS AS A LIVE ENDPOINT IF YOU ONLY CHECK STATUS - verdict on content-type AND body, never on the code",
+   "tell": "an endpoint recovered from a bundle returns 200 and you are about to record it as deployed",
+   "why": "2026-09-14, a European insurance group. /api/v1/<service>/<name> returned 200 - while every control returned 404. It looked like the one live endpoint of the family. It was text/html, 23 516 bytes, and its body text was literally 'error': the site shell rendered at 200. A status-only read would have logged a live API that does not exist. The inverse also occurred on the same target: a REAL endpoint returned 404 with 0 bytes and NO content-type while the control 404 returned 21 643 bytes of HTML - the difference in SHAPE is what proved the path was routed.",
+   "payload": "curl -s -o body -w '%{http_code}|%{content_type}|%{size_download}' <url>   # then read the first 200 bytes of body",
+   "verify": "establish the 404 FINGERPRINT first (status + size + content-type) and compare every probe against it. Equal status with different size/type = a different handler.",
+   "source": "hunt #40",
+   "validated": true
+  },
+  {
+   "id": "pb0766",
+   "class": "method",
+   "title": "WHEN EVERY LEG INCLUDING THE CONTROL RETURNS IDENTICAL, SUSPECT YOUR OWN INPUT FIRST - and fix it with a CAPTURE, not a better guess",
+   "tell": "6 legs of an IDOR probe all return the same status and the same byte count, controls included",
+   "why": "2026-09-14, a European insurance group. An unauthenticated document-fetch endpoint (getJsonDocument({id})) was the only real lead. Six legs - two 'controls', a null id, a random id, malformed, empty - ALL returned 404/0b. Correctly recorded UNREADABLE (pb0618 + protocol S4) rather than ENFORCED. The cause was mine: the 'controls' were GUIDs SCRAPED FROM PAGE HTML, which are component/template/analytics ids, not document ids. A scraped identifier is not a valid object id and therefore not a control. I then guessed the fix was the Sitecore curly-brace id format - and re-testing the SAME id UNBRACED returned an identical 200, disproving it. What actually resolved it: driving the app in a browser and reading the real request off the network tab. 60 seconds, and the lead was falsifiable.",
+   "payload": "browser: navigate to the feature, read_network_requests urlPattern=<endpoint>  -> copy the id the app itself sends, use THAT as the control",
+   "verify": "a tidy explanation that survives no test is worth nothing - always run the leg that would DISPROVE it (here: the same id without the braces). Bundles give the denominator; only a capture gives a valid selector. (bundles-are-denominator-hars-are-discovery)",
+   "source": "hunt #40",
+   "validated": true
   }
  ]
 }
