@@ -10353,6 +10353,18 @@
    "source": "instrument-control-2026-09-16",
    "validated": "",
    "technique": "Gate every /search/code verdict on the incomplete_results flag, not on total_count. A repo:-qualified query on api.github.com/search/code returns HTTP 200, {\"total_count\":0,\"incomplete_results\":true,\"items\":[]} - reproducible, 3/3 attempts, no error field, no message. The same term with org: instead of repo: returns 1576 complete. total_count alone cannot distinguish \"nothing matched\" from \"the backend gave up\"."
+  },
+  {
+   "id": "pb0775",
+   "class": "method",
+   "title": "Code-search hit counts on a bounty target measure the hostname FAME, not its exposure - read the repos, never the total",
+   "tell": "",
+   "why": "2026-09-16. Wildcard hostnames returned 728 / 389 / 248 / 94 hits and every single top result was an aggregator - our own in-scope wildcard list was sitting inside bounty-targets-data. Quoting \"728 hits\" as a finding would have been a denominator lie of the exact §0 shape: the number is real and measures the wrong thing. The vendor org had 11 repos and 0 real secrets, which is the honest, statable result.",
+   "payload": "curl -s --oauth2-bearer \"$GITHUB_TOKEN\" https://api.github.com/orgs/<vendor> | jq .public_repos\n# then: /search/code?q=<pattern>+org:<vendor>  - bounded, countable, and it is THEIR code\n# always gate on incomplete_results (pb0774), and run a common-word control inside the org first",
+   "verify": "Redact every captured value BEFORE printing it, then classify. On this run 7 password hits in upload.gradle were Gradle PROPERTY LOOKUPS (project['nexusPassword']), not values - printing lengths and shapes instead of contents is what made that visible instead of filing a leaked-credential report.",
+   "source": "hunt-41-corpora-2026-09-16",
+   "validated": "",
+   "technique": "Before treating any code-search total as exposure, open the top repositories. On a bug-bounty target the high-count hits are public AGGREGATORS: bounty-targets-data and h1domains (which literally republish the programme scope), adblock/hosts lists (StevenBlack/hosts, AdGuard filters) for anything named ads-*, and OSINT tool collections. Search the vendor ORG instead (api.github.com/orgs/<vendor>) - that is where their own code is, and it is a countable denominator."
   }
  ]
 }
