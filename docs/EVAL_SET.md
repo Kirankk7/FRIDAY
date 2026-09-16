@@ -439,3 +439,31 @@ Concretely, for hunt #39: before any cross-tenant claim, the identity oracle get
 - **Caught by:** SELF for the UNREADABLE verdict (the control rule held, and stopped a false
   ENFORCED). SELF for the braces error too, but only because the unbraced leg was run —
   had it not been, a wrong explanation would have been written into the matrix as fact.
+
+
+---
+
+### I-20 · the test setup destroyed the signal it was measuring
+**Hunt #41, 2026-09-16.** To get "a clean signal" I ran `am force-stop the app package` before sending
+the PoC broadcast. Force-stopped Android apps are in the **STOPPED** state and receive **no broadcasts
+at all** (`FLAG_EXCLUDE_STOPPED_PACKAGES`). The null result was guaranteed by my own setup, not by the
+target's behaviour.
+**Shape:** a hygiene step added *for* cleanliness silently became the independent variable.
+**Catch:** ask of every null result — *could my setup alone have produced this?* Re-run with the
+setup step removed before recording anything.
+
+### I-21 · path translation silently rewrote the instrument's target
+**Hunt #41.** `adb shell uiautomator dump /sdcard/c.xml` under Git Bash reported
+`dumped to: /Files/Git/sdcard/c.xml` — MSYS rewrote the **device** path. Every subsequent read came
+back empty, and I nearly recorded "the premium activities display nothing", the **opposite** of the
+truth (they display a paywall).
+**Caught by:** the control screen (Settings) reporting **0 text nodes**, which is impossible.
+**Fix:** `MSYS_NO_PATHCONV=1` for any command whose path argument belongs to another OS.
+
+### I-22 · the oracle does not discriminate, so the batch proves nothing
+**Hunt #41.** `am broadcast` prints `Broadcast completed: result=0` whether or not a receiver runs.
+Target and control produced byte-identical output. Compounding it, the "control" component
+(`OtpSmsReceiver`) **did not exist** — a name I assembled from an unrelated dex string, which is
+`I-19` repeating inside the same hunt.
+**Rule:** before trusting a batch, verify the control component EXISTS, and verify the oracle can
+produce two different outcomes.

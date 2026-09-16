@@ -10286,6 +10286,61 @@
    "verify": "Before adopting: (1) which OBSERVED failure does this remove - not which design does it improve; (2) does the thing being exposed have a type and a trust status today; (3) state the measurable BEFORE building. Corollary on retrieval: better retrieval over a badly SHAPED corpus returns well-labelled bad priors faster - ours is 767 entries, 4.9% validated, thickest in the classes that produced zero bugs. Provenance metadata says where a bad prior came from; it does not make the prior good. Fix corpus shape before retrieval technology. Corollary on scope: a reviewer's 7-dimension model is a subsystem; keep only the dimensions with an observed failure behind them.",
    "source": "architecture review, post hunt #40",
    "validated": true
+  },
+  {
+   "id": "pb0769",
+   "class": "method",
+   "title": "WE HAVE NEVER RETURNED TO A TARGET - 14 hunts, 14 targets, 0 repeats, and every resume trigger we wrote went unfired",
+   "tell": "a hunt closes with findings filed, or with lanes recorded UNTESTABLE pending state we could later obtain",
+   "why": "2026-09-16, checking a shared Medium article's one checkable claim against our own data. The article was a marketing funnel with zero technical content (5th instance of 'a public artefact is never the edge'), but it asserted '70% of earnings came from ~8 programmes I keep returning to; familiarity compounds'. Our record: hunts #28-#41 are FOURTEEN different targets with ZERO repeats. another target produced 2 filed bugs and we left. another target 2, we left. another target 2, we left. Resume triggers are written into 5 memory files (<t>, <t>, <t>, target-queue, <t>) and NOT ONE has ever been fired. Every target that ever paid off was abandoned after a single pass, while we spent the next hunt paying full re-learning cost on a stranger.",
+   "payload": "At hunt close, alongside the retro, answer: (1) what STATE would reopen this - a second tenant, a paid tier that became free, a new feature; (2) is that state now obtainable that was not before? Re-read the resume triggers of PARKED hunts before screening a brand-new target. A target where the auth model, route table and bundle corpus are already mapped starts at hour 3, not hour 0 - the bundle carve-out exists precisely to make that possible.",
+   "verify": "Do NOT convert this into 'never leave a target'. The counter-evidence is real: 12 of our closed hunts are genuine fortresses with all classes verdicted, and returning to those buys nothing. The claim is narrower - a target that PRODUCED a finding has demonstrated its developers make the kind of mistake we can find, and we have never tested that hypothesis even once. Also reject the same article's report advice: inflating impact from a public user count ('~2M accounts affected') is the overclaim that earns Informative, and contradicts never-self-assign-severity.",
+   "source": "shared writeup screen, hunt #41",
+   "validated": false
+  },
+  {
+   "id": "pb0770",
+   "class": "method",
+   "title": "A SECURITY CHECK THAT IS CALLED AND WHOSE RESULT IS DISCARDED - grep for invoke-without-move-result",
+   "tell": "auditing an Android component, or any code where a boolean guard function exists",
+   "why": "2026-09-16 hunt #41, the only finding of the hunt. the target's exported OTP receiver IMPLEMENTS the messaging vendor's sender verification correctly (reads the _ci_ PendingIntent, calls getCreatorPackage(), compares against an allowlist containing exactly the two vendor package names) - and onReceive calls it then DISCARDS THE BOOLEAN. In Dalvik that is an invoke-virtual returning Z with NO move-result following it. The developers wrote the guard and did not apply it. This is far more common and far more findable than a missing guard, because the presence of the check makes the code LOOK correct to a reviewer skimming for absence.",
+   "payload": "Dalvik: find `invoke-*` whose descriptor returns Z/I and where the NEXT instruction is not `move-result`. androguard: iterate get_instructions() pairwise. Java/JS equivalent: a call to isValid()/verify()/check()/authorize() used as a bare statement rather than in an if. ALSO grep the manifest for exported components with no permission AND no readPermission AND no writePermission - v1 of my own extractor checked only `permission` and produced a FALSE 'unguarded provider'.",
+   "verify": "PROVE the missing move-result is not a disassembler artefact: show the SAME method emitting move-result elsewhere (mine did, 2 instructions later after getStringExtra). RULE OUT R8: an unused return can be dropped by the optimiser, but the CALL is still emitted and here the callee has side effects, so the source itself ignores it. RULE OUT 'the helper is not a check': read its body - allowlist contents settle it. Four alternative explanations were tested and eliminated before this was called a finding.",
+   "source": "hunt #41 the target",
+   "validated": true
+  },
+  {
+   "id": "pb0771",
+   "class": "method",
+   "title": "adb shell is uid 2000 - it is NOT the attacker model. Build the unprivileged APK.",
+   "tell": "testing Android exported components, intents or broadcasts",
+   "why": "2026-09-16. `am start` DOES discriminate (non-exported -> SecurityException 'not exported from uid NNNNN') so it is a valid oracle for ACTIVITIES. `am broadcast` does NOT: it enqueues and prints 'Broadcast completed: result=0' whether or not any receiver runs, so identical output on target and control proves nothing. Worse, shell holds broadcast privileges an ordinary app lacks, so even a delivered broadcast from shell would not demonstrate that a third-party app can reach the component.",
+   "payload": "Minimal PoC APK with NO Gradle: javac -bootclasspath android.jar -> d8 -> aapt2 link --manifest -> add classes.dex to the zip -> zipalign -> apksigner. ~8.5 KB, builds in seconds, and the logcat line `uid=10193 pkg=<poc>` IS the evidence (an ordinary app uid, not 2000). Toolchain is all direct-download from dl.google.com: cmdline-tools, build-tools, platform-NN (android.jar), system image.",
+   "verify": "State in the report which uid sent it. And note the Android 8+ rule: manifest receivers do NOT get most IMPLICIT broadcasts, but DO receive EXPLICIT ones - so `pm query-receivers -a <action>` returning 'No receivers found' is NOT a defence; setComponent() still delivers. Control that query against a known action (BOOT_COMPLETED gave 375).",
+   "source": "hunt #41 the target",
+   "validated": true
+  },
+  {
+   "id": "pb0772",
+   "class": "method",
+   "title": "A RESULT THAT EQUALS YOUR LIMIT IS A CAP, NOT A RESULT - and your own analysis code does it too",
+   "tell": "any enumeration returning a round number, and any summary you print about your own data",
+   "why": "2026-09-16 hunt #41, THREE occurrences across two independent corpora plus one in my own code. Wayback CDX domain query: limit=40000 returned exactly 40000 rows, all one host, hiding every subdomain. Common Crawl domain query: limit=4000 returned exactly 4000, same host, 0 subdomains. CC per-host on www: limit=500 returned exactly 500. AND my own host inventory used collections.Counter.most_common(25) on 28 hosts - silently hiding 3, one of which (a third-party logging host) another reviewer then found and I had to concede.",
+   "payload": "After any enumeration: assert count < limit, else re-query at finer granularity (per-host instead of per-domain). In analysis code, never print most_common(N) as if it were the whole set - print len() beside it.",
+   "verify": "Per-host re-query is the fix that worked every time: Wayback per-host found 18 hosts/1644 URLs the domain query never showed; a single-host CDX query returned 32 archived URLs for a host the domain query reported as absent.",
+   "source": "hunt #41 the target",
+   "validated": true
+  },
+  {
+   "id": "pb0773",
+   "class": "method",
+   "title": "THE CLIENT IS IN SCOPE, ITS BACKEND IS NOT - check where the API actually lives BEFORE mapping it",
+   "tell": "a scope list of web domains or mobile apps, before any recon effort is spent",
+   "why": "2026-09-16 hunt #41, this killed two full surfaces. The web app's entire API (auth/send-otp, verify-otp, search, unlist, userArchive, geoip, v1/batch, crossDomain) runs on asia-south1-<target>-web.cloudfunctions.net - GOOGLE's apex, matching no wildcard and not a listed asset. The Android app's 106 MB APK referenced exactly TWO in-scope hosts in the entire binary. A retired in-scope host (webapi-noneu.the target.com, NXDOMAIN with a valid cert) was the tell: the service had MIGRATED off the in-scope domain. I mapped 66 hosts and 430 bundle files before establishing this.",
+   "payload": "On the FIRST capture or the FIRST bundle pull, extract every host the client talks to and classify each against the scope list. If the API apex is not in scope, the remaining surface is the client itself: for web, SSR routes + server actions; for mobile, exported components, deeplinks, providers, backup config, network security config.",
+   "verify": "The client can still be the finding. Hunt #41's only finding was entirely LOCAL to the in-scope APK (an exported receiver), needing no in-scope network host at all.",
+   "source": "hunt #41 the target",
+   "validated": true
   }
  ]
 }
