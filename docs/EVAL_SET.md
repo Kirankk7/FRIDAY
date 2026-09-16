@@ -392,7 +392,7 @@ Concretely, for hunt #39: before any cross-tenant claim, the identity oracle get
   no-change leg as the server rejecting the input
 - **GOOD** pick the sensitivity pair on an axis where the server is KNOWN to respond - ideally one
   already observed responding in the capture - and compare CONTENT (hash), never size alone
-- **WHY** 2026-09-07, Klaviyo `POST /template/<tid>/preview`, testing whether it honours an inline
+- **WHY** 2026-09-07, a marketing-automation target, `POST /template/<tid>/preview`, testing whether it honours an inline
   content field. Two failures, same endpoint, same session, opposite wrong answers:
   1. Diffed response BYTE COUNT. Both campaign ids are 26-char ULIDs, so substituting one for the
      other changes which bytes but not how many. 11 field legs returned "identical" and were one
@@ -467,3 +467,84 @@ Target and control produced byte-identical output. Compounding it, the "control"
 `I-19` repeating inside the same hunt.
 **Rule:** before trusting a batch, verify the control component EXISTS, and verify the oracle can
 produce two different outcomes.
+
+---
+
+# HUNT #41 AUDIT — 2026-09-16. 40 signatures walked, not sampled.
+
+## OCCURRED, SELF-CAUGHT (13)
+| sig | what happened |
+|---|---|
+| I-07 | Common Crawl's JSON **error object** was counted as a record; control returned 1 where it must return 0. Fixed to count only lines carrying a `url` key |
+| I-08 | `/api/who-called-me/<n>`: own number and 2 controls all identical. Recorded **PARTIAL**, not "enforced" |
+| I-10 | a second-tier host on the target answers **200 / 14 327 b for every path incl. control**. Would have filed "source maps exposed"; the same-batch control killed it |
+| I-11 | `curl -w` with an extra positional argument fired a **second request** — twice. Those `000` lines were mine |
+| I-12 | CRLF in a command file → curl `000`, which mimics an IP block. Diagnosed with a control each time; fixed structurally with `newline='
+'` |
+| I-19 | built a control component (`OtpSmsReceiver`) out of a **string scraped from the dex**. It never existed ⇒ was never a control |
+| I-20 | `am force-stop` before the broadcast test — stopped apps receive no broadcasts, so the null result was guaranteed by my own setup |
+| I-21 | MSYS path translation rewrote `/sdcard/c.xml` → `/Files/Git/sdcard/...`. Caught only because the Settings control reported 0 text nodes |
+| I-22 | `am broadcast` prints `Broadcast completed: result=0` whether or not a receiver ran ⇒ target and control identical ⇒ batch proved nothing |
+| C-03 | notes asserted **"55 hosts" and "66 hosts"**; only 11 were recoverable. Rebuilt from CT: 86 names, 15 in-scope, union 32 |
+| C-05 | Wayback `limit=40000` returned **exactly 40000**; Common Crawl `limit=4000` returned **exactly 4000**. A result equal to the limit is a cap |
+| R-05 | pitched a third-party-platform endpoint as disclosing other merchants' `partnerKey`. Reading the call site showed **no client-supplied selector exists**. Retracted |
+| I-23 | **NEW** — see below |
+
+## OCCURRED, KIRAN CAUGHT (3)
+| sig | what happened |
+|---|---|
+| C-01 | said **"looking like a fortress"** with 9 of 11 classes `NOT TESTED`. *"dont tell me this is a fortress before finishing everything"* |
+| C-06 | recommended parking `/directory/` having probed **nothing** on it. *"we have not tested anything"* |
+| C-07 | **NEW** — the micro-class audit. *"check properly"* |
+
+## NOT OBSERVED THIS HUNT (24)
+I-01 · I-02 · I-03 · I-04 · I-05 (no OAST used) · I-06 · I-07b · I-09 · I-13 · I-14 · I-15 · I-16 ·
+I-17 · I-18 · R-01 · R-02 · R-03 · R-04 · R-06 · R-07 · C-02 · C-04 · S-01 · S-02 · S-03 · S-04
+
+```
+INSTRUMENT QUALITY = self-caught / total occurred = 13 / 16 = 81%
+```
+⚠️ Read it honestly: the three Kiran caught were all **coverage/stop-pivot**, never instrument. My
+instruments catch my instruments; they do not catch **me deciding I am finished**. That is the same
+split as every prior hunt and it has not moved.
+
+---
+
+### C-07 · a verdict was REACHED but never entered in the instrument
+- **CLASS** coverage
+- **WHY** 2026-09-16. The micro table held 14 rows. Six verdicts we had actually reached were sitting
+  in prose only — subdomain takeover (N/A, reasoned), insecure deserialization, Universal-Link hijack
+  (FALSIFIED against a control), App-Links delegation (FALSIFIED via code search), the gRPC oracle
+  (UNTESTABLE/ROE) — and, worst, **the Android exported-receiver finding: the hunt's ONLY confirmed
+  finding, the entire report #1, had no row at all.** Three further classes (cache poisoning, cache
+  deception, request smuggling) had never been considered anywhere.
+- **DISTINCT FROM C-03** — C-03 is an inventory that is genuinely incomplete. Here the WORK was done
+  and the VERDICT was reached; only the accountability artefact never recorded it. A matrix that omits
+  your own finding cannot show you what is missing.
+- **CATCH** after every probe run, ask: *does this verdict have a ROW?* And at close, diff the rows
+  against the findings list — a finding with no row is an automatic fail.
+- **WHO CAUGHT IT** Kiran, on the third "check properly" of the hunt.
+
+### S-05 · a lane was ranked best-in-hunt without checking its FIRST precondition
+- **CLASS** stop/pivot
+- **WHY** 2026-09-16. Called an embedded-platform API lane *"the best untested lane in this
+  hunt"* across three turns, and wrote a full console-batch instrument for it. I had checked the
+  bundle, the API, the auth model and the JWT claim structure — but never whether the app could still
+  be **installed**. the platform's own listing says *"This app is not currently available"* on that store The lane was never reachable. Kiran was mid-signup for a partner account on that platform when
+  the search returned 15 unrelated apps.
+- **CATCH** before ranking any lane, test its cheapest gating precondition FIRST — can I obtain the
+  credential / install the app / reach the tier at all? Order preconditions by cost, not by interest.
+- **WHO CAUGHT IT** Kiran's screenshot, though I diagnosed the cause.
+
+### I-23 · a success-shaped response that means the backend gave up
+- **CLASS** instrument
+- **WHY** 2026-09-16. GitHub `/search/code` answered a `repo:`-qualified query with **HTTP 200** and
+  `{"total_count":0,"incomplete_results":true,"items":[]}` — no error, no message, reproducible 3/3.
+  The same term with `org:` returned 1576 complete. Reading `total_count` alone cannot separate
+  "nothing matched" from "the query timed out", and the whole target-identifier sweep would have
+  been recorded as **"no leaked identifiers found"** from a green 200.
+- **DISTINCT FROM I-03/C-05** — nothing was truncated and no limit was hit. The API *declares* its own
+  failure in a field beside the number, and the failure is invisible to anyone reading the number.
+- **CATCH** gate every verdict on the API's own completeness field, never on the count. Run the
+  positive control FIRST: the control failing is what exposed this.
+- **WHO CAUGHT IT** self, via the instrument positive control (`pb0767`).
