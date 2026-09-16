@@ -10365,6 +10365,18 @@
    "source": "hunt-41-corpora-2026-09-16",
    "validated": "",
    "technique": "Before treating any code-search total as exposure, open the top repositories. On a bug-bounty target the high-count hits are public AGGREGATORS: bounty-targets-data and h1domains (which literally republish the programme scope), adblock/hosts lists (StevenBlack/hosts, AdGuard filters) for anything named ads-*, and OSINT tool collections. Search the vendor ORG instead (api.github.com/orgs/<vendor>) - that is where their own code is, and it is a countable denominator."
+  },
+  {
+   "id": "pb0776",
+   "class": "method",
+   "title": "A host count in your own notes with no host LIST behind it is not a denominator - rebuild it from Certificate Transparency",
+   "tell": "",
+   "why": "2026-09-16. My own notes asserted \"55 hosts\" and \"66 hosts\" in two places. Only 11 hostnames were actually recoverable from the file - the lists had never been written down. CT returned 86 hostnames, 15 matching an in-scope wildcard, of which 8 appeared in NO prior corpus; the union was 32. The whole sweep then showed only 4 of 32 discriminate at all, which is the number that actually governs what can be tested. Exactly the section-0 failure shape: a count that looks whole because nothing prompts a re-check.",
+   "payload": "curl -s \"https://crt.sh/?q=%25.<domain>&output=json\" | python -c \"import sys,json;print(len({n.strip().lower() for r in json.load(sys.stdin) for n in (r.get('name_value') or '').split(chr(10)) if n.strip().endswith('.<domain>') and '*' not in n}))\"\n# then per host: root vs /zz-<nobody>-control -> equal status+length = dead oracle = UNREADABLE, not enforced",
+   "verify": "The sweep IS its own control: a host whose root response is byte-identical to a belongs-to-nobody path discriminates nothing, so no verdict can be taken from it. Report \"N of M discriminate\", never \"M hosts tested\".",
+   "source": "hunt-41-host-denominator-2026-09-16",
+   "validated": "",
+   "technique": "Never carry a remembered breadth number forward. Re-derive the host denominator from CT logs (crt.sh ?q=%25.<domain>&output=json) - passive, zero requests to the target - then UNION it with every other corpus, then filter by the programme wildcards. Sweep every host root with a per-host belongs-to-nobody control and classify DISCRIMINATES vs dead-oracle before testing anything."
   }
  ]
 }
