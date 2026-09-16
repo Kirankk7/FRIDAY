@@ -10341,6 +10341,18 @@
    "verify": "The client can still be the finding. Hunt #41's only finding was entirely LOCAL to the in-scope APK (an exported receiver), needing no in-scope network host at all.",
    "source": "hunt #41 the target",
    "validated": true
+  },
+  {
+   "id": "pb0774",
+   "class": "method",
+   "title": "GitHub code search returns total_count:0 WITH incomplete_results:true - a timeout wearing the costume of a clean negative",
+   "tell": "",
+   "why": "2026-09-16. Ran the instrument positive control BEFORE trusting any negative (pb0767) and it failed: a query that must return hits returned 0. Without that control this reads as a clean sweep of the target org and gets written down as \"no leaked identifiers found\" - the exact sentence that must never be written from a blocked instrument. Sibling of pb0772 (a result equal to your limit is a cap): both are silent truncation, one at the limit, one at the timeout. The tell is a FIELD the API already gives you and that nobody reads.",
+   "payload": "curl -s --oauth2-bearer \"$GITHUB_TOKEN\" \"https://api.github.com/search/code?q=<term>+org:<org>&per_page=1\" | python -c \"import sys,json;d=json.load(sys.stdin);print(d['total_count'],d['incomplete_results'])\"\n# incomplete_results true -> UNREADABLE, re-query narrower or by org, never record 0\n# prefer org:<org> over repo:<owner>/<name> - repo: scoping times out on this endpoint\n# --oauth2-bearer keeps the credential out of the command text",
+   "verify": "Two controls in the same batch: a term that MUST hit (total>0, incomplete false) and a belongs-to-nobody string that MUST return 0 (total 0, incomplete false). Both must pass or the run is UNREADABLE. Auth note: a classic PAT with ZERO scopes authenticates fine (scopes header empty, 5000/hr core, 30/min search) - no scope is needed to search public code, so never grant repo.",
+   "source": "instrument-control-2026-09-16",
+   "validated": "",
+   "technique": "Gate every /search/code verdict on the incomplete_results flag, not on total_count. A repo:-qualified query on api.github.com/search/code returns HTTP 200, {\"total_count\":0,\"incomplete_results\":true,\"items\":[]} - reproducible, 3/3 attempts, no error field, no message. The same term with org: instead of repo: returns 1576 complete. total_count alone cannot distinguish \"nothing matched\" from \"the backend gave up\"."
   }
  ]
 }
