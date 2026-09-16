@@ -548,3 +548,18 @@ split as every prior hunt and it has not moved.
 - **CATCH** gate every verdict on the API's own completeness field, never on the count. Run the
   positive control FIRST: the control failing is what exposed this.
 - **WHO CAUGHT IT** self, via the instrument positive control (`pb0767`).
+
+### C-03 RECURRENCE LOG — hunt #41, four passes on one denominator
+- **WHY** 2026-09-16. The in-scope host count went **66 → 32 → 148 → 157** across one hunt. Pass 1 was
+  a number with no list behind it. Pass 2 came from Certificate Transparency and I called it *"the real
+  breadth denominator"* — CT cannot see hosts behind a wildcard certificate. Pass 3 came from the APK
+  dex and I reported it as final — I had mined **only the dex**, not `assets/`, not `resources.arsc`.
+  Pass 4 came from the target's OWN service registry plus one hostname in `assets/`.
+- **THE SHAPE** every correction arrived from a **source I had not yet mined**. Not one came from
+  re-examining the number I had just defended. Each new source made the previous total look complete
+  in hindsight and authoritative at the time.
+- **CATCH** before stating any denominator, list the corpora NOT yet mined and say so next to the
+  number: *"157, from dex + assets + registry; NOT from urlscan (capped 100/649) or Wayback."* A
+  denominator without its source list is pass-1 again under a bigger number.
+- **WHO CAUGHT IT** Kiran, four times, each time by asking me to check again rather than by supplying
+  the answer.
