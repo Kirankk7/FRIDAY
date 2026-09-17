@@ -10377,6 +10377,30 @@
    "source": "hunt-41-host-denominator-2026-09-16",
    "validated": "",
    "technique": "Never carry a remembered breadth number forward. Re-derive the host denominator from CT logs (crt.sh ?q=%25.<domain>&output=json) - passive, zero requests to the target - then UNION it with every other corpus, then filter by the programme wildcards. Sweep every host root with a per-host belongs-to-nobody control and classify DISCRIMINATES vs dead-oracle before testing anything."
+  },
+  {
+   "id": "pb0777",
+   "class": "method",
+   "title": "A control is only as strong as every path AROUND it - test the bypass, never read the class name",
+   "tell": "",
+   "why": "2026-09-17, screening a recon tool whose headline claim was \"the single choke point every outbound URL must pass through\". The class existed, was well written, deny-by-default, exclusions first, audited. And the client called the HTTP library with follow_redirects=True, so an in-scope URL that 302s off-domain is fetched and analysed while the audit log records only the original ALLOW. A second reviewer read the README and rated that component the strongest part of the repo. The difference was not intelligence, it was reading the code path instead of the claim.",
+   "payload": "# the generic bypass test for any outbound guard\n# 1. stand up two local servers on different ports\n# 2. first 302s to the second\n# 3. point the tool at the first with the second OUT of scope\n# 4. assert the second was never contacted - not \"fetched then discarded\"\n# see core/scope_guard.py::_selftest for a working 40-line version",
+   "verify": "The assertion must be that the out-of-scope host was NEVER CONTACTED, not that its response was discarded. Checking response.url after the fact cannot un-send the request, un-resolve the DNS, or un-leak a forwarded header. Verified empirically: httpx strips Cookie on a cross-origin redirect but forwards arbitrary custom headers.",
+   "source": "repo-screen-2026-09-17",
+   "validated": "",
+   "technique": "When a tool, SDK or target claims a security control, do not verify it by finding the code that implements it. Enumerate the paths that reach the protected operation WITHOUT passing through it, and test one. For an outbound-request guard the bypass paths are: redirects, browser navigation, DNS-derived destinations, WebSocket upgrades, subprocess tools, and retry/fallback clients."
+  },
+  {
+   "id": "pb0778",
+   "class": "method",
+   "title": "The audit log IS the deliverable - a control that acts correctly but logs incompletely has already failed",
+   "tell": "",
+   "why": "2026-09-17. A guard let a redirect through AND logged only the first URL. Even where no credential leaked, the record said \"ALLOW in-scope-host\" while the network had gone somewhere else. That record is the artefact a researcher would show a programme to prove they stayed in scope - so an incomplete log is not a logging bug, it is a false compliance claim, and it is worse than the request itself because it is the thing you would rely on when challenged.",
+   "payload": "assert len(guard.decisions) == expected_hops   # not >= 1\n# each row: {url, hop, ALLOW|DENY, reason}; a DENY must be recorded, not just acted on",
+   "verify": "Assert the COUNT of logged decisions equals the number of hops attempted, not merely that a decision exists. A log with one row for a two-hop request passes every \"is it logging?\" check and is still wrong.",
+   "source": "repo-screen-2026-09-17",
+   "validated": "",
+   "technique": "Scope enforcement has two jobs, not one: prevent unauthorised outbound activity, AND accurately record what activity occurred. Test the second separately. After any guarded run, diff the audit log against the actual destinations contacted; every hop, retry and redirect must appear as its own row with its own decision."
   }
  ]
 }
