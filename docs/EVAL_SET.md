@@ -563,3 +563,28 @@ split as every prior hunt and it has not moved.
   denominator without its source list is pass-1 again under a bigger number.
 - **WHO CAUGHT IT** Kiran, four times, each time by asking me to check again rather than by supplying
   the answer.
+
+### C-08 · the matrix was never CREATED — five days of verdicts with no instrument
+- **CLASS** coverage
+- **WHY** 2026-09-22, hunt #42. `HUNT_PROTOCOL.md` §3.5 says the matrix is its own file,
+  `workspace/coverage/<target>_matrix.md`, **created at the FIRST capture with every row
+  `NOT TESTED`** — "a matrix built at close is a report; a matrix built early is an instrument."
+  It was never created. Across five days the hunt produced two HARs, five probe runs, ~70 requests
+  and **six ENFORCED verdicts — all six inside class 1** — while ten of eleven classes sat at zero
+  probes and class 10's sink inventory was never built at all. The working-notes file grew to 1135
+  lines, which felt like thorough documentation and functioned as the opposite: no artefact
+  anywhere showed that ten classes were empty.
+- **DISTINCT FROM C-07** — C-07 is a verdict missing its ROW in a matrix that exists. This is the
+  matrix not existing. C-07 is auditable and self-correctable at close; this is not auditable at
+  all, by anyone, including me. It is also distinct from C-03: no denominator was wrong here, they
+  were all stated correctly — in the wrong artefact, one that cannot show absence.
+- **THE SHAPE** depth inside one class reads as progress. Six verdicts with passing controls felt
+  like a well-run hunt, and by every local measure it was. Completeness is not visible from inside
+  the class you are working in, which is the entire reason the protocol puts the instrument
+  outside the notes.
+- **CATCH** the matrix file is created by the same action that opens the target file — not later,
+  not "once there is something to put in it." An empty matrix full of `NOT TESTED` **is** the
+  point. Before any second probe run in a hunt, confirm the file exists on disk.
+- **WHO CAUGHT IT** Kiran — *"build the matrix file first how can u forget to build it bro..very
+  bad"* — after five days. Not self-caught, and `/hunt` reporting "0/11 classes" in my own state
+  report one turn earlier did not trigger it either.
