@@ -588,3 +588,24 @@ split as every prior hunt and it has not moved.
 - **WHO CAUGHT IT** Kiran — *"build the matrix file first how can u forget to build it bro..very
   bad"* — after five days. Not self-caught, and `/hunt` reporting "0/11 classes" in my own state
   report one turn earlier did not trigger it either.
+
+### I-24 · UNREADABLE became a resting place instead of a repair order
+- **CLASS** instrument
+- **WHY** 2026-09-22, hunt #42. On 2026-09-17 a probe's positive control returned 401 on an
+  endpoint that had returned 200 in the capture minutes earlier. I correctly recorded the run as
+  **UNREADABLE** — and then moved to a different asset and left it. Five days later the same lane
+  was re-run with one added request header and the control passed immediately, 16.5 KB of data.
+  The class sat at UNREADABLE in the coverage matrix the entire time, indistinguishable at a
+  glance from a lane the target had actually closed.
+- **DISTINCT FROM `pb0767`** — that rule says an instrument failing its control cannot issue a
+  trusted negative, and it worked: no false verdict was banked. The failure here is what happened
+  AFTER the correct verdict. UNREADABLE is the one verdict in the vocabulary that describes *my*
+  equipment rather than the target, so it is the only one that carries an implicit to-do. Treated
+  as terminal, it silently converts an instrument bug into apparent coverage.
+- **THE SHAPE** the other five verdicts are conclusions; UNREADABLE is a fault report. Filing a
+  fault report and closing the ticket is not the same as fixing the fault.
+- **CATCH** an UNREADABLE row names the SUSPECTED CAUSE and the REPAIR, not just the failure, and
+  is re-attempted before the hunt advances to another asset. If the cause is unknown, that is the
+  next experiment — not a reason to move on.
+- **WHO CAUGHT IT** self, but only after Kiran said "rerun the e series" — the decision to go back
+  was his, not mine.
