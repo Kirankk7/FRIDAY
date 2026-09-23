@@ -687,3 +687,27 @@ split as every prior hunt and it has not moved.
   gate and expect UNTESTABLE verdicts — do not discover it four lanes deep.
 - **WHO CAUGHT IT** self, but only after the fourth lane closed the same way; the pattern was
   visible after the second.
+
+### R-05 · a lane retired on a principle instead of a measurement
+- **CLASS** reasoning
+- **WHY** 2026-09-23, hunt #42, second instance in one hunt. (a) I called a credential-minting
+  endpoint a non-finding because I ASSUMED the tenant gate covering one path covered it too; the
+  user asked "but we were able to create one — isn't that a finding?", I tested it, and it returned
+  a clean ENFORCED verdict that had simply never been measured. (b) I marked a visibility flag
+  UNTESTABLE because "no safe benign value exists to prove the field writable" — true-sounding, and
+  wrong: a benign control is only needed for the NEGATIVE case, because a **persisting bogus value
+  is self-controlling**. The user asked "what if it had a finding?", we built an exposure meter from
+  a second tenant, and ran it safely. It came back negative — still a real answer, and one I had
+  been about to bank as untested.
+- **THE SHAPE** the dangerous retirement is not the lazy one, it is the WELL-ARGUED one. "The gate
+  probably covers this" and "no safe control exists" both sound like discipline, and both close a
+  lane with zero measurement behind them. A verdict backed by reasoning reads identical, in the
+  matrix, to a verdict backed by evidence.
+- **DISTINCT FROM I-25** — that is an instrument scoped to the wrong object. This is deciding not
+  to build the instrument at all, for a reason that sounds like rigour.
+- **CATCH** before retiring any lane on reasoning rather than a result, state the experiment that
+  WOULD settle it and say explicitly why it cannot be run. If that sentence cannot be written
+  concretely, the lane is not retired — it is unmeasured. In particular: "no safe control exists"
+  must be checked against whether the POSITIVE outcome would be self-controlling.
+- **WHO CAUGHT IT** the user, both times, with a one-line question. Neither was self-caught, and
+  the second came after I had already written the first into the notes as a lesson.
