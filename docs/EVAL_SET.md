@@ -711,3 +711,29 @@ split as every prior hunt and it has not moved.
   must be checked against whether the POSITIVE outcome would be self-controlling.
 - **WHO CAUGHT IT** the user, both times, with a one-line question. Neither was self-caught, and
   the second came after I had already written the first into the notes as a lesson.
+
+### I-27 · the instrument's own normalisation manufactured a finding
+- **CLASS** instrument
+- **WHY** 2026-09-23, hunt #42. Testing whether a user-supplied filename could escape a
+  storage-key prefix, my probe extracted the key with `new URL(u).pathname`. **The URL constructor
+  resolves `../` client-side.** A control filename produced a 4-segment key; `../x` produced 3 and
+  `../../x` produced 2, so the output looked exactly like a server that had resolved the traversal
+  and let the object escape its tenant-scoped prefix. I was one message from writing it up.
+- **THE CORRECTION** re-reading the RAW response string with no URL parsing showed the server
+  emits the `..` segments verbatim — 4, then 5, then 6 segments. The server resolves nothing. The
+  key stays under the tenant prefix, and since object-store keys are flat strings, `..` is just
+  characters in a name. No traversal. The entire effect was my parser.
+- **WHY THIS ONE IS WORSE THAN I-24/I-25/I-26** those cost missed or unreadable verdicts — this one
+  fabricates a POSITIVE. A false negative wastes our time; a false report costs the programme's
+  time and our standing, and "AI-generated slop" is already a stated rejection reason on public
+  programmes.
+- **THE SHAPE** any parsing convenience that CANONICALISES — `new URL()`, path.resolve,
+  `decodeURIComponent`, JSON round-trips, a trimming regex — is a TRANSFORMATION sitting between
+  the server's answer and my verdict. If the thing under test IS the canonicalisation behaviour,
+  the convenience silently becomes the experiment.
+- **CATCH** when the hypothesis concerns encoding, normalisation, escaping or path handling,
+  assert against the RAW bytes of the response and print them. Any helper touching the value must
+  be justified out loud. A control that differs from the test ONLY in the property being
+  canonicalised is mandatory — here, comparing segment COUNTS against the control is what exposed it.
+- **WHO CAUGHT IT** self, immediately before reporting, while writing the follow-up probe's
+  rationale — the only one of today's four caught before it reached a verdict.
