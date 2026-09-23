@@ -609,3 +609,56 @@ split as every prior hunt and it has not moved.
   next experiment — not a reason to move on.
 - **WHO CAUGHT IT** self, but only after Kiran said "rerun the e series" — the decision to go back
   was his, not mine.
+
+### I-25 · endpoint-level control mistaken for field-level control
+- **CLASS** instrument
+- **WHY** 2026-09-23, hunt #42. A config-update endpoint took a ~20-field object. I tested six
+  fields for REFUSAL of a bad value — an unknown enum member, a real-but-not-offered one, an
+  invented one, a widened allowlist — and read all six "did not persist" as "the server
+  validates". The probe had **no control at all**. The follow-up control picked a display-name
+  field I had never shown to be writable; it did not move, and I nearly concluded the write path
+  was dead. A third run used a field proven writable in an earlier stage, and it moved — which
+  established only that the ENDPOINT works.
+- **THE SHAPE** a control on endpoint E proves E accepts writes. It says nothing about whether
+  FIELD f inside E is writable. If f is simply read-only on that handler, then "rejects the
+  dangerous value" and "rejects the nonsense value" are the same non-event, and neither is a
+  security property. A silently-ignored field and a validated field produce identical evidence:
+  200, unchanged state.
+- **DISTINCT FROM `pb0767` / I-24** — those cover an instrument whose control FAILS. Here the
+  control PASSED and was still the wrong control, because it was scoped to the wrong object.
+- **CATCH** every field under test needs its own **benign positive control**: same field, a value
+  that SHOULD be accepted, proven to persist by read-back. Only then does a refusal mean anything.
+  If no benign value exists that is safe to send — e.g. a visibility flag whose only other known
+  value would expose the object to third parties — the field is **UNTESTABLE**, never ENFORCED.
+- **THE UNDERLYING HABIT** five separate misses in one hunt trace to one pattern: testing the
+  negative case before establishing the positive one. Guessed a body shape before reading the call
+  site; guessed field names before dumping the structure; tested refusals before testing
+  acceptance. Read the benign case first, every time.
+- **WHO CAUGHT IT** Kiran — *"also why is you controls failing all the time..check properly bro"*.
+  I had reported each control failure honestly but treated them as unrelated accidents rather than
+  one habit.
+
+### I-26 · read-back inside the write-settle window manufactures refusals
+- **CLASS** instrument
+- **WHY** 2026-09-23, hunt #42. A config-update endpoint is **eventually consistent**: a measured
+  **~3.2s** between the 200 and the value appearing on the matching read. My probes read back
+  after **900ms** and recorded "did not persist" six times. I read that as "the server validates
+  its inputs" and was one turn from writing six ENFORCED verdicts into the matrix. Re-run with a
+  15s settle window, the controls landed at ~1.9s and ~2.9s and the real refusals held — same
+  tests, opposite meaning.
+- **HOW IT SURFACED** the probe's own summary contradicted itself: every test reported
+  "did not persist", yet final state showed one more array member than the baseline. The writes
+  had landed after the check AND after the restore. Without printing final state beside per-test
+  results, nothing would have shown.
+- **WHY IT IS ITS OWN SIGNATURE** `pb0767` and I-24 cover a control that FAILS; I-25 covers a
+  control scoped to the wrong object. Here the control PASSED, was correctly scoped, and was still
+  wrong — because it was sampled too early. A silently-ignored field and a not-yet-committed write
+  are identical at t+900ms.
+- **THE INVERSION** the danger is not a missed bug. It is that a timing artefact reads as a
+  SECURITY CONTROL. Fast read-back systematically produces "the server rejected it" for a server
+  that accepted everything.
+- **CATCH** never verdict a write from a single read-back. **Measure the settle time once per
+  endpoint** by toggling a field known to be writable and polling until it lands; then poll to at
+  least 4x that, and treat "never landed" as the only negative. Print final state beside per-test
+  results so a contradiction is visible rather than inferred.
+- **WHO CAUGHT IT** Kiran — same question as I-25. Neither was self-caught.
