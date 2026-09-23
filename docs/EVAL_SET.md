@@ -737,3 +737,30 @@ split as every prior hunt and it has not moved.
   canonicalised is mandatory — here, comparing segment COUNTS against the control is what exposed it.
 - **WHO CAUGHT IT** self, immediately before reporting, while writing the follow-up probe's
   rationale — the only one of today's four caught before it reached a verdict.
+
+### C-08 · ADDENDUM 2026-09-23 — the signature existed and did not change the behaviour
+The original C-08 (matrix never created) was logged 2026-09-22. On 2026-09-23, in the SAME hunt,
+matrix/reality drift recurred **four separate times**:
+
+1. quoted "4/11 classes closed" while the file said **0/11**
+2. claimed the hunt was done at **27%** coverage of an asset the blocker did not apply to
+3. claimed "11/11 verdicted" having **never read the micro matrix** (`0/6` closed, three rows still
+   naming an access blocker we had not had all day, two rows superseded by that morning's work)
+4. left a stale surface block (`45 ops / ~12 probed / 33 untested`) contradicting the denominators
+   table two screens above it, listing as "never attempted" two items completed hours earlier
+
+**All four were caught by the user, not by me.** Three of them by the same question: *"double check
+once again bro"*.
+
+- **WHY THE RULE FAILED** C-08 said *build the instrument*. It did not say *re-read it before
+  citing it*. An instrument that exists but is quoted from memory produces the identical failure to
+  having no instrument — with added false confidence, because a number now sounds sourced.
+- **THE TELL** every instance took the form "I said N, the file said M". The claim always cited a
+  document. The document was never open.
+- **CATCH** any figure that names a file is read FROM that file in the same turn, or it is not
+  stated. When closing a hunt: re-read the class matrix AND the micro matrix AND the denominators
+  table, in full, and diff them against the session's own results before writing "done".
+- **ALSO SURFACED BY THE 4th PASS** the DEPTH denominator (`flow transitions`) had read
+  **NOT NAMED** for the entire hunt while breadth figures were quoted freely. `HUNT_PROTOCOL` §8
+  requires BOTH. Naming the 5 flows took ten minutes and immediately showed 2 of 5 unwalked —
+  one scope-blocked, one (password change/reset) clean, reachable and simply never attempted.
