@@ -764,3 +764,53 @@ once again bro"*.
   **NOT NAMED** for the entire hunt while breadth figures were quoted freely. `HUNT_PROTOCOL` §8
   requires BOTH. Naming the 5 flows took ten minutes and immediately showed 2 of 5 unwalked —
   one scope-blocked, one (password change/reset) clean, reachable and simply never attempted.
+
+---
+
+## 📋 HUNT #42 CLOSING AUDIT (2026-09-23) — §7 mandated, performed late
+
+⚠️ **Performed only after the user's 6th "double check", and only because reading
+`HUNT_PROTOCOL.md` — for the first time this session — surfaced that §7 requires it.** The protocol
+says read the FILE, not memory of it; I worked from memory all day and skipped four mandated
+closing steps.
+
+### Signatures that OCCURRED this hunt
+
+| signature | occurred | caught by |
+|---|---|---|
+| **I-25** endpoint-level control mistaken for field-level | ✅ **3x** (allowlist probe · `title` control · billing chain test) | **user** (1st), self (2nd, 3rd) |
+| **I-26** read-back inside the write-settle window | ✅ 1x (6 false refusals at 900 ms vs a 3.2 s lag) | **user** |
+| **I-27** instrument's own normalisation manufactured a finding | ✅ **2x** (`new URL()` path traversal · regex matching `"token":""`) | **self**, both pre-report |
+| **C-08** matrix quoted from memory, not re-read | ✅ **4x** (`4/11` vs `0/11` · X-Series generalisation · micro matrix unread · stale 45/12/33 block) | **user**, all four |
+| **C-09** gate screened ACCESS not OBSERVABLE EFFECTS | ✅ 1x (5 lanes died on the same tier wall) | self, after the 4th lane |
+| **R-05** lane retired on a principle instead of a measurement | ✅ 2x (`/applications/developed` assumption · `showInAppMarket` "UNTESTABLE") | **user**, both |
+| **C-03** denominator corrected repeatedly | ✅ (45->46 ops · ~148->270 leaves · 103 FP-inflated sinks) | mixed |
+| **I-05** listener self-test before trusting silence | ❌ did NOT occur — listener was self-tested 3/3 before use | — |
+| **pb0767** instrument positive control | ❌ did not occur — instrument controls held | — |
+
+### INSTRUMENT QUALITY
+
+```
+total occurrences   13
+self-caught          5   (I-27 x2, C-09, I-25 x2)
+user-caught          8   (C-08 x4, I-25 x1, I-26, R-05 x2)
+
+INSTRUMENT QUALITY = 5 / 13 = 38%
+```
+
+Hunt #41 comparison: 4 self-caught / 8 occurred = 50%. **This hunt is WORSE (38%), on more
+occurrences (13 vs 8).**
+
+### What the audit says that the individual signatures do not
+
+1. **Every user-caught instance was the same question**: *"are you sure / double check once again"*.
+   Six times. Six findings. A question that reliably finds something is not a check — it is
+   evidence the close criterion is broken.
+2. **C-08 fired FOUR times the day after it was written.** A signature that does not change the
+   behaviour is documentation, not a control. What was missing is mechanical: *re-read the file in
+   the same turn as any figure that cites it.*
+3. **The two self-caught I-27s are the redeeming ones** — both would have become FALSE REPORTS, and
+   both were caught while writing the follow-up rationale. Writing out *why* a probe would work is
+   where my own errors surface; that is worth keeping as a habit, not a rule.
+4. **No new signature is added for the four skipped §7 steps.** They are not a new failure shape —
+   they are C-08 again: a file that exists, quoted from memory instead of read.
