@@ -662,3 +662,28 @@ split as every prior hunt and it has not moved.
   least 4x that, and treat "never landed" as the only negative. Print final state beside per-test
   results so a contradiction is visible rather than inferred.
 - **WHO CAUGHT IT** Kiran — same question as I-25. Neither was self-caught.
+
+### C-09 · the gate screened for ACCESS but not for OBSERVABLE EFFECTS
+- **CLASS** coverage
+- **WHY** 2026-09-23, hunt #42. The gate confirmed we could register, authenticate and reach the
+  application on a free tier — and we could. What it never asked was whether that tier can produce
+  an **observable effect**. Four independent lanes then died the same way, each after substantial
+  work: a callback URL stored but never dialled ("not active on this plan"); an API token minted
+  but refused at request time with a plan error; a server-side template writable but with no
+  reachable renderer; a preview endpoint reached and authenticated but erroring because the account
+  had no data to render.
+- **THE SHAPE** on a free tier, **writes are reachable and effects are not**. Every one of those
+  lanes produced a clean 200 on the write and nothing observable afterwards. A verdict needs the
+  effect, so each closed as UNTESTABLE — which is honest, but it is coverage bought at full price
+  and delivered empty.
+- **WHY IT LOOKS LIKE SECURITY** an ungated write followed by silence is indistinguishable, at a
+  glance, from a control that quietly refused. The write/effect asymmetry manufactures the
+  APPEARANCE of enforcement in exactly the lanes where nothing was tested at all.
+- **DISTINCT FROM #40's lesson** ("screen ACCESS first") — access was fine here. The missing
+  question is one step further on: *given this account, which classes can I actually OBSERVE?*
+- **CATCH** at gate time, pick the cheapest effect the target offers (a callback, a render, a
+  generated document, a state change visible on a second endpoint) and confirm ONE fires end to
+  end before committing lanes to it. If no effect is observable on the tier we hold, say so in the
+  gate and expect UNTESTABLE verdicts — do not discover it four lanes deep.
+- **WHO CAUGHT IT** self, but only after the fourth lane closed the same way; the pattern was
+  visible after the second.
