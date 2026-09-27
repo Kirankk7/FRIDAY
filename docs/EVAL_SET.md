@@ -812,6 +812,32 @@ once again bro"*.
   out to be ENFORCED** — had it been the finding, the evidence run would have been the one destroyed.
 - **WHO CAUGHT IT** Kiran, by reporting the logout. I had no output to notice it from.
 
+### I-30 · the control behaved unexpectedly and I filed it as "broken" instead of chasing it
+- **CLASS** instrument
+- **WHY** 2026-09-27, hunt #42. Testing whether a free-tier store could enable a paid feature, my
+  run had three cells: baseline, a "no-op control" that re-sent the CURRENT value, then the real
+  write. The no-op control **changed the state**. I noticed, wrote it down as "a no-op control that
+  was not a no-op", declared the run contaminated — and then built the verdict out of the
+  neighbouring cells anyway.
+- **WHAT IT ACTUALLY WAS** the control was the only cell that did anything. The endpoint's boolean
+  is INVERTED: `{"giftCardProductEnabled": false}` enables, `true` is inert. The control sent
+  `false`, so the control WAS the exploit. The mechanism was sitting in my own notes, one sentence
+  away, for roughly two hours.
+- **WHAT IT COST** the draft report named `{"giftCardProductEnabled": true}` as the trigger — a
+  request that does nothing. Had it been filed, the programme would have received steps that do not
+  reproduce. It was caught only because Kiran asked for better SCREENSHOTS, which sent the probe to
+  a second store, which was the first genuine cross-subject control the finding ever had.
+- **THE SHAPE** "the control is broken" is a HYPOTHESIS, not an observation. When an unexpected
+  control result is a STATE CHANGE in the direction of the thing under test, that is the single
+  most informative event in the run. Discarding it as noise throws away the answer.
+- **CATCH** any control that does not do what a control should do gets ONE follow-up request before
+  anything else proceeds: what exactly did it change, and why. A run containing an unexplained
+  control produces no verdict — not a weaker verdict, none. Related: I-12 (a failing benign control
+  means BROKEN, not enforced) is its mirror image; this is the case where the control SUCCEEDS at
+  something it should not have done.
+- **WHO CAUGHT IT** Kiran, indirectly — he asked for a cleaner PoC, not for a control. I had
+  recorded the anomaly and moved past it.
+
 ## 📋 HUNT #42 CLOSING AUDIT (2026-09-23) — §7 mandated, performed late
 
 ⚠️ **Performed only after the user's 6th "double check", and only because reading
@@ -859,3 +885,55 @@ occurrences (13 vs 8).**
    where my own errors surface; that is worth keeping as a habit, not a rule.
 4. **No new signature is added for the four skipped §7 steps.** They are not a new failure shape —
    they are C-08 again: a file that exists, quoted from memory instead of read.
+
+---
+
+## 📋 HUNT #42 CLOSE-OUT AUDIT — DAY 2 (2026-09-27), §7 mandated
+
+The 2026-09-23 audit below covered days 1-6. This covers the final day, on which 1 report was
+filed, 3 lanes were closed and 2 stale blockers were found to be false.
+
+### Occurrences, 2026-09-27
+
+| # | failure | signature | caught by |
+|---|---|---|---|
+| 1 | probe built with a PLACEHOLDER csrf token (`'1'`) although my own §3l names the real 32-hex global | I-fam / knowledge-not-reaching-action | self (re-run) |
+| 2 | batched a session-mutating probe after warning, in the same message, that it might mutate session state | **I-29 (new)** | **Kiran** (reported the logout) |
+| 3 | mechanism claimed from a two-cell present/absent experiment; survived 4 days in two files | **I-28 (new)** | self, but only as a side effect of #1 |
+| 4 | routed Kiran through the `#select-plan` UI wall a THIRD time, after he said so and after it was written in two files | C-09 / instruction ignores recorded constraint | **Kiran** |
+| 5 | anomalous control recorded as "broken" and stepped over; it was the exploit | **I-30 (new)** | **Kiran**, indirectly (asked for screenshots) |
+| 6 | OPEN LEADS carried `MISSING_STATE - 2nd developer account` for 5 days after dev2 existed; kept 2 reachable lanes shut | C-08 drift, 4th this hunt | self (checked before planning) |
+| 7 | vendor name written into an EVAL_SET entry destined for the PUBLIC repo | disclosure | self (pre-push gate) |
+| 8 | guessed `/products?limit=5`; not a real route | name-guess | self (404) |
+| 9 | said the store-B control "inverted the verdict" when it had only BROKEN it — overstated, one message early | R-fam / premature conclusion | self (next message) |
+| 10 | over-escalated a self-inflicted config change on our own disposable test store | calibration | **Kiran** ("chill bro") |
+
+```
+total occurred      10
+self-caught          6
+Kiran-caught         4
+INSTRUMENT QUALITY  60%     (hunt #41: 50% · hunt #42 day-1 audit: 38%)
+```
+
+### The number flatters the day
+
+60% is the best figure recorded, and it is misleading. **The single most expensive failure (#5) was
+Kiran's catch, and it was accidental** — he asked for better screenshots, not for a control. Without
+that request a report with non-reproducing steps goes to the programme. Three of my six self-catches
+(#1, #3, #8) were cheap instrument slips found within one request; only #6 and #7 were found by
+deliberately checking something before acting.
+
+**The honest reading: my catch RATE improved, my catch QUALITY did not.** The failures I find are
+the ones that announce themselves. The one that needed looking for was found by someone else.
+
+### Cross-cutting pattern — same shape, four times in one day
+
+#1, #2, #4 and #6 are one failure wearing four faces: **the knowledge was already written down, in
+my own files, and did not reach the next instruction.** Not a retrieval problem — a
+consultation problem. Each was preceded by a file that contained the answer.
+
+This is now the dominant failure family of the project and it is not addressed by adding
+signatures. Candidate remedy for the NEXT hunt, to be tested rather than assumed: before any
+instruction that (a) names a credential/token, (b) mutates state, or (c) sends Kiran to a UI,
+re-read the relevant section of the target file FIRST, in that turn, not from memory.
+
