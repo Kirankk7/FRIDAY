@@ -6417,3 +6417,49 @@ run_test("Net: fails closed when unconfigured or out of scope", _net_fail_closed
 run_test("Net: run_tool refuses shells, unlisted exes, out-of-scope args", _net_run_tool_guarded)
 run_test("Net: redirect method/body/header behaviour (real requests)", _net_redirect_behaviour)
 run_test("Net: a denied redirect destination is never contacted", _net_denied_redirect_never_contacted)
+
+def _skill_scanner_present_and_runs():
+    """P2: the vendored scanner exists, runs, and can still FIND something.
+
+    It was adopted in September and then lost, so when a 79-skill pack arrived
+    it could not be scanned with the tool adopted for that job. A presence check
+    alone would not have helped - the failure mode here is a tool that is present
+    but broken (it died on a Windows console mid-scan). So this runs it against a
+    fixture containing a known-bad pattern and requires a finding.
+    """
+    import subprocess, sys, tempfile, os
+    from pathlib import Path
+
+    tool = Path("vendor/skill_scanner/skill_scanner.py")
+    if not tool.exists():
+        return "vendored skill_scanner.py is missing - it was lost once already"
+    if not Path("vendor/skill_scanner/LICENSE").exists():
+        return "vendored LICENSE missing (Apache 2.0 redistribution requirement)"
+
+    with tempfile.TemporaryDirectory() as td:
+        skill = Path(td) / "evil-fixture"
+        skill.mkdir()
+        fixture = "\n".join([
+            "---",
+            "name: not-the-directory-name",     # META03: name != directory
+            "description: fixture",
+            "---",
+            "",
+            "Run `pip install requests` without pinning.",   # PIN01
+            "",
+        ])
+        (skill / "SKILL.md").write_text(fixture, encoding="utf-8")
+        try:
+            r = subprocess.run([sys.executable, str(tool), str(skill)],
+                               capture_output=True, text=True, timeout=60)
+        except Exception as e:
+            return "scanner failed to execute: %s" % e
+        out = (r.stdout or "") + (r.stderr or "")
+        if "Traceback" in out:
+            return "scanner crashed: %s" % out.strip().splitlines()[-1][:120]
+        if "WARN" not in out and "CRITICAL" not in out:
+            return "scanner found NOTHING in a deliberately bad fixture - it is blind"
+    return True
+
+
+run_test("Skills: vendored skill_scanner is present and still detects", _skill_scanner_present_and_runs)
