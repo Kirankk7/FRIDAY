@@ -767,6 +767,51 @@ once again bro"*.
 
 ---
 
+### I-28 · a two-cell present/absent experiment cannot separate two mechanisms
+- **CLASS** instrument
+- **WHY** 2026-09-23, hunt #42. E-Series CSRF was tested as header-PRESENT vs header-ABSENT:
+  present -> 200, absent -> 401. I wrote the mechanism down as **"custom-header-REQUIRED, not
+  token-validated"** and shipped it into the matrix and the notes as a starred insight. Two cells
+  cannot distinguish "any value in this header passes" from "the server verifies this value" —
+  both predict exactly the observed pair. The conclusion did not follow from the data.
+- **HOW IT SURFACED** 2026-09-27, by accident. I handed Kiran a probe carrying a PLACEHOLDER value
+  (`'1'`) in that header and read the resulting 401 as a dead session. Re-running with the real
+  token — a 32-hex JS global whose name I had already recorded in the target notes — returned 200
+  on the same tab, same session, same endpoint, minutes apart. Single variable: the token value.
+  **The server validates it.**
+- **THE SHAPE** whenever a control is an ABSENCE, it tests only that the thing is load-bearing. It
+  says nothing about HOW. The deciding cell is **present-but-WRONG** — a well-formed value that
+  should fail. Absent / valid / invalid is three cells, and only the third names the mechanism.
+- **WHY IT MATTERED ANYWAY** the verdict (CSRF ENFORCED) was right, and the correction makes their
+  defence STRONGER than recorded, not weaker. That is the trap: a wrong mechanism attached to a
+  right verdict never gets challenged by the verdict's own evidence. It survived four days and was
+  one report away from being told to the programme as fact.
+- **CATCH** any sentence of the form "X is required but not validated" — or any claim about a
+  mechanism rather than an outcome — needs the invalid-value cell before it is written down.
+- **WHO CAUGHT IT** self, but only as a side effect of a DIFFERENT error. Not found by looking.
+
+### I-29 · a session-mutating probe was run as a batch, so no cell was attributable
+- **CLASS** instrument
+- **WHY** 2026-09-27, hunt #42. Testing the store switcher `/store/{storeId}`, I batched three ids
+  — own store, our second store, and a nonexistent one — into a single console loop, having
+  explicitly told Kiran one line earlier that the endpoint might mutate session state. It did: the
+  session was invalidated, the page navigated to the sign-in screen, and the redirect **wiped the
+  console output before any of it could be read**. Which id caused the logout was unknowable, and
+  the run had to be redone from a fresh login.
+- **THE SHAPE** a probe whose side effect destroys the channel the probe reports through. Batching
+  is the default because it is cheap; it is exactly wrong when any cell can change the state the
+  later cells depend on, or can tear down the observation surface itself.
+- **THE TELL I IGNORED** I had written the warning myself, in the same message as the batch. The
+  knowledge was present and did not reach the instrument — same failure as the fake token in the
+  same hour, where the token's real source was already written in my own notes.
+- **CATCH** before batching, ask: can any cell change state the others read, or destroy the output
+  channel? If yes, one cell per run, and the result must be captured somewhere a navigation cannot
+  erase (a blocking `alert()`, or a value read back after re-login). Run the control ALONE first,
+  so a later cell's destruction is attributable by contrast.
+- **COST** three logins, one unreadable run, ~20 minutes. **Cheap only because the endpoint turned
+  out to be ENFORCED** — had it been the finding, the evidence run would have been the one destroyed.
+- **WHO CAUGHT IT** Kiran, by reporting the logout. I had no output to notice it from.
+
 ## 📋 HUNT #42 CLOSING AUDIT (2026-09-23) — §7 mandated, performed late
 
 ⚠️ **Performed only after the user's 6th "double check", and only because reading
