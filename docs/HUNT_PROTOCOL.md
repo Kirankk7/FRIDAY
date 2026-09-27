@@ -357,6 +357,18 @@ earned a clean REFUTED did its job.
       half costs nothing and buys the retro-run.
       Prune with `python scripts/prune_bundles.py` (dry-run) then `--delete`. Never hand-delete the
       keep-pile early, and never let anything but `.js`/`.map` into it.
+- [ ] **RECORD THE RULED-OUT ROWS (added 2026-09-27 — measured, not theorised).**
+      `record_ruled_out()` has existed for months and holds **76 rows across 33 hosts** (~2.3 each).
+      The knowledge-mining item was deferred until "~25 hunts with ruled-out data"; the hunt counter
+      passed 25 long ago and the DATA never accumulated. The trigger was watching the wrong number.
+      For EVERY class and micro-class verdicted this hunt, persist three things:
+      - the class and its outcome — **including the ones ruled out**;
+      - the evidence or reason, distinguishing **tested** from **merely untested**;
+      - confirmation it actually landed in the canonical target profile (read it back).
+      ⚠️ Track coverage SEPARATELY from productivity. More ruled-out rows do not mean better
+      findings; they mean we can finally measure what was tested versus what was learned.
+      Revisit knowledge-mining when ROWS — not hunts — pass ~200.
+
 - [ ] **`docs/EVAL_SET.md` audit** — walk every failure signature, mark occurred / not, and record
       whether I caught it or Kiran did. `INSTRUMENT QUALITY = self-caught / total occurred`.
       Add a NEW case only for a failure that actually happened; never invent one.
