@@ -45,14 +45,15 @@ def _fetch(url, timeout=8):
     ctx = ssl.create_default_context()
     ctx.check_hostname = False
     ctx.verify_mode = ssl.CERT_NONE
+    # P0 2026-09-27: this reaches candidate SUBDOMAINS of a live target, so it is
+    # one of only three call sites in the engine that must be scope-mediated.
+    # core.net raises rather than returning on DENY — a bypass has to be loud.
+    from core import net
     try:
-        r = urllib.request.urlopen(url, timeout=timeout, context=ctx)
-        return r.getcode(), r.read(20000).decode("utf-8", "replace")
-    except urllib.error.HTTPError as e:
-        try:
-            return e.code, e.read(20000).decode("utf-8", "replace")
-        except Exception:
-            return e.code, ""
+        _url, status, body, _chain = net.get(url, timeout=timeout, context=ctx)
+        return status, body[:20000].decode("utf-8", "replace")
+    except net.ScopeError:
+        raise
     except Exception:
         return None, None
 

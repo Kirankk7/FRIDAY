@@ -195,7 +195,12 @@ def _run_proxy(port: int) -> int:
     script = os.path.abspath(__file__)
     print(f"Capture proxy on 127.0.0.1:{port} — set your browser proxy there, then browse the target.")
     print("HTTPS: browse http://mitm.it through the proxy once to install the CA. Ctrl-C to stop + write inventory.")
-    return subprocess.call(["mitmdump", "-s", script, "-p", str(port), "-q"])
+    # P0 2026-09-27: mediated for the executable allowlist and shell=False.
+    # This argv carries NO destination - mitmdump listens on a local port and the
+    # target's traffic flows THROUGH it - so run_tool's URL check finds nothing to
+    # guard here, which is the correct outcome rather than a missing one.
+    from core import net
+    return net.run_tool(["mitmdump", "-s", script, "-p", str(port), "-q"], timeout=None).returncode
 
 
 if __name__ == "__main__":

@@ -187,9 +187,26 @@ class ScopeGuard:
 
     # ---------------------------------------------------------------- fetch
 
-    def get(self, url: str, headers: dict[str, str] | None = None, timeout: float = 20.0):
-        """Guarded GET. Redirects are NEVER followed automatically: each hop is
-        resolved against the current URL, guarded, logged, and only then
+    def get(self, url: str, headers: dict[str, str] | None = None, timeout: float = 20.0,
+            context=None):
+        """Guarded GET. See `request`."""
+        return self.request("GET", url, headers=headers, timeout=timeout, context=context)
+
+    def post(self, url: str, data: bytes | None = None,
+             headers: dict[str, str] | None = None, timeout: float = 20.0):
+        """Guarded POST. See `request`.
+
+        Added 2026-09-27 for P0. It lives HERE and not in the net adapter on
+        purpose: a second implementation of the redirect loop is a second
+        guard, and two guards is how this whole problem started.
+        """
+        return self.request("POST", url, data=data, headers=headers, timeout=timeout)
+
+    def request(self, method: str, url: str, *, data: bytes | None = None,
+                headers: dict[str, str] | None = None, timeout: float = 20.0,
+                context=None):
+        """Guarded request. Redirects are NEVER followed automatically: each hop
+        is resolved against the current URL, guarded, logged, and only then
         followed. Returns (final_url, status, body_bytes, chain) or None on DENY.
 
         `requests`/`httpx` are not assumed — uses urllib so this has no
@@ -200,6 +217,8 @@ class ScopeGuard:
 
         current = url
         sent = dict(headers or {})
+        meth = method.upper()
+        body = data
         chain: list[Decision] = []
 
         for hop in range(self.max_redirects + 1):
@@ -212,8 +231,14 @@ class ScopeGuard:
                 def redirect_request(self, *a, **k):  # noqa: ANN002, ANN003
                     return None
 
-            opener = urllib.request.build_opener(_NoRedirect)
-            req = urllib.request.Request(current, headers=sent)
+            handlers = [_NoRedirect]
+            if context is not None:
+                # Subdomain-takeover fingerprints live behind DANGLING certs, so the
+                # caller may supply a permissive context. Scope is still enforced on
+                # every hop; only certificate validity is relaxed, never the boundary.
+                handlers.append(urllib.request.HTTPSHandler(context=context))
+            opener = urllib.request.build_opener(*handlers)
+            req = urllib.request.Request(current, data=body, headers=sent, method=meth)
             try:
                 with opener.open(req, timeout=timeout) as r:
                     return (current, r.status, r.read(), chain)
@@ -224,6 +249,13 @@ class ScopeGuard:
                 if not location:
                     return (current, e.code, b"", chain)
                 nxt = urljoin(current, location)          # handles relative and //host
+                # RFC 9110 method rewriting. 307/308 preserve method AND body;
+                # 303 always becomes GET; 301/302 became GET for POST in practice
+                # and every major client does this. Dropping the body matters:
+                # replaying a POST body to a redirect target is how a write
+                # lands somewhere it was never authorised for.
+                if e.code == 303 or (e.code in (301, 302) and meth == "POST"):
+                    meth, body = "GET", None
                 sent, _ = strip_on_origin_change(sent, current, nxt)
                 current = nxt
             except Exception:                              # noqa: BLE001

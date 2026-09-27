@@ -152,12 +152,17 @@ def throttle(rate):
 
 def get(url, ua, timeout, rate, maxlen=200000):
     throttle(rate)
-    req = urllib.request.Request(url, headers={"User-Agent": ua, "Accept": "*/*"})
+    # P0 2026-09-27: this sweeps ARBITRARY hosts off a dork corpus, which makes it
+    # the highest-value scope-mediation point in the engine. core.net fails closed:
+    # no scope configured means no request, rather than a request to anywhere.
+    from core import net
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as r:
-            return r.status, r.read(maxlen).decode("utf-8", "replace"), r.geturl()
-    except urllib.error.HTTPError as e:
-        return e.code, "", url
+        final, status, body, _chain = net.get(
+            url, headers={"User-Agent": ua, "Accept": "*/*"}, timeout=timeout
+        )
+        return status, body[:maxlen].decode("utf-8", "replace"), final
+    except net.ScopeError:
+        raise
     except Exception as e:
         return 0, "{}: {}".format(type(e).__name__, e), url
 
@@ -286,6 +291,26 @@ def main():
     if args.report:
         report(args.report)
         return
+
+    # P0 2026-09-27: the scope IS the input list. Every host this sweep is allowed
+    # to touch comes from the file or URL list the operator supplied - nothing else.
+    # Without this, core.net fails closed and the sweep makes no requests at all,
+    # which is the intended behaviour: an unscoped sweep is the thing we are stopping.
+    from urllib.parse import urlsplit as _split
+    from core import net as _net
+    from core.scope_guard import Scope as _Scope
+    _hosts = []
+    if args.urls:
+        with open(args.urls, encoding="utf-8") as _f:
+            _hosts = [(_split(l.strip()).hostname or "") for l in _f
+                      if l.strip() and not l.startswith("#")]
+    elif args.domains:
+        with open(args.domains, encoding="utf-8") as _f:
+            _hosts = [l.strip() for l in _f if l.strip() and not l.startswith("#")]
+    _hosts = tuple(sorted({h for h in _hosts if h}))
+    if not _hosts:
+        ap.error("no hosts to sweep - refusing to run without a scope")
+    _net.configure(_Scope(in_scope=_hosts))
     if args.urls:
         with open(args.urls, encoding="utf-8") as f:
             urls = [l.strip() for l in f if l.strip() and not l.startswith("#")]

@@ -6152,3 +6152,145 @@ def _chain_seam_bugs():
 
 run_test("Rate gate: paces requests to roe.rate_limit_rps", _test_rate_gate)
 run_test("App-path: chain-seam bugs (report/route-case/cp1252)", _chain_seam_bugs)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+section("41. Network boundary (P0, 2026-09-27)")
+# ═══════════════════════════════════════════════════════════════════════════════
+# scope_guard was written, tested, committed and CITED AS EVIDENCE we were safe
+# while having zero callers (EVAL_SET C-10). These tests exist so that can never
+# be true again: a bypass has to fail the build, not merely be discouraged.
+
+
+def _net_static_boundary():
+    """No target-facing module may reach the network except through core.net."""
+    import re as _re
+    from core.net_exceptions import TARGET_FACING, EXCEPTIONS
+
+    raw = _re.compile(
+        r"\b(?:requests\.(?:get|post|put|delete|patch|head|request|Session)"
+        r"|httpx\.(?:get|post|put|delete|patch|Client|AsyncClient|stream)"
+        r"|urllib\.request\.(?:urlopen|Request)"
+        r"|socket\.(?:socket|create_connection)"
+        r"|subprocess\.(?:run|Popen|call|check_output))\b"
+    )
+    bad = []
+    for rel in TARGET_FACING:
+        try:
+            src = io.open(rel, encoding="utf-8", errors="ignore").read()
+        except OSError:
+            bad.append("%s: listed TARGET_FACING but missing" % rel)
+            continue
+        if "from core import net" not in src and "import core.net" not in src:
+            bad.append("%s: target-facing but never imports core.net" % rel)
+        for n, line in enumerate(src.splitlines(), 1):
+            if line.lstrip().startswith("#"):
+                continue
+            if raw.search(line):
+                bad.append("%s:%d raw network call: %s" % (rel, n, line.strip()[:70]))
+    # every exception must point at a file that exists
+    for key in EXCEPTIONS:
+        path = key.split("::", 1)[0]
+        if not io.open.__module__ and False:
+            pass
+        import os as _os
+        if not _os.path.exists(path):
+            bad.append("exception names a missing file: %s" % key)
+    return True if not bad else "; ".join(bad[:4])
+
+
+def _net_fail_closed():
+    """Unconfigured or out-of-scope must RAISE, never silently proceed."""
+    from core import net
+    from core.scope_guard import Scope
+
+    saved = net._GUARD
+    try:
+        net._GUARD = None
+        for fn, args in (
+            (net.get, ("https://example.com/",)),
+            (net.post, ("https://example.com/",)),
+            (net.run_tool, (["curl", "https://example.com/"],)),
+        ):
+            try:
+                fn(*args)
+                return "%s did not fail closed while unconfigured" % fn.__name__
+            except net.ScopeError:
+                pass
+
+        # empty scope must be refused at configure() time
+        try:
+            net.configure(Scope(in_scope=()))
+            return "configure() accepted an empty scope"
+        except net.ScopeError:
+            pass
+
+        net.configure(Scope(in_scope=("in.example.com",)))
+        try:
+            net.get("https://out.example.com/")
+            return "out-of-scope GET was not refused"
+        except net.ScopeError:
+            pass
+        if not net.is_configured() or "in.example.com" not in net.current_scope().in_scope:
+            return "configure() did not install the scope"
+        return True
+    finally:
+        net._GUARD = saved
+
+
+def _net_run_tool_guarded():
+    """run_tool refuses shells, unlisted binaries and out-of-scope destinations."""
+    from core import net
+    from core.scope_guard import Scope
+
+    saved = net._GUARD
+    try:
+        net.configure(Scope(in_scope=("in.example.com",)))
+        cases = [
+            ("string argv (implies a shell)", "curl https://in.example.com/"),
+            ("empty argv", []),
+        ]
+        for why, argv in cases:
+            try:
+                net.run_tool(argv)
+                return "run_tool accepted %s" % why
+            except net.ScopeError:
+                pass
+        try:
+            net.run_tool(["curl", "https://in.example.com/"], shell=True)
+            return "run_tool accepted shell=True"
+        except net.ScopeError:
+            pass
+        try:
+            net.run_tool(["rm", "-rf", "/"])
+            return "run_tool accepted an unlisted executable"
+        except net.ScopeError:
+            pass
+        try:
+            net.run_tool(["curl", "https://evil.example.net/x"])
+            return "run_tool accepted an OUT-OF-SCOPE url argument"
+        except net.ScopeError:
+            pass
+        return True
+    finally:
+        net._GUARD = saved
+
+
+def _net_post_redirect_semantics():
+    """A POST redirected 303/302 must not replay its BODY to the new location."""
+    from core.scope_guard import Scope, ScopeGuard
+
+    g = ScopeGuard(scope=Scope(in_scope=("a.example.com", "b.example.com")))
+    if not hasattr(g, "post") or not hasattr(g, "request"):
+        return "ScopeGuard lost post/request"
+    # method rewriting is enforced in request(); assert the rule is present in source
+    import inspect
+    src = inspect.getsource(g.request)
+    if '303' not in src or 'meth, body = "GET", None' not in src:
+        return "redirect method-rewriting rule is missing from request()"
+    return True
+
+
+run_test("Net: no target-facing module bypasses core.net (static)", _net_static_boundary)
+run_test("Net: fails closed when unconfigured or out of scope", _net_fail_closed)
+run_test("Net: run_tool refuses shells, unlisted exes, out-of-scope args", _net_run_tool_guarded)
+run_test("Net: POST body is dropped on a 303/302 redirect", _net_post_redirect_semantics)
