@@ -33,6 +33,26 @@ _pass = 0
 _fail = 0
 _skip = 0
 _failures  = []
+_skipped   = []          # (section, name, detail) — a skip is assurance NOT gained
+
+# 2026-09-27: a SKIP is not a pass. The suite coverage guard proves every defined
+# test RAN; it says nothing about what a skipped test failed to demonstrate. That
+# blind spot cost a real verdict: `xss_confirm` - a working DOM-XSS EXECUTION
+# oracle shipped in v1.3 - was believed not to exist because its test skips
+# silently without a browser, and hunt #42 class 4 closed at 0 of 40 routes on
+# the stated ground that execution could not be confirmed.
+#
+# Any test whose name contains one of these is a SECURITY capability. Skipping it
+# is an unresolved verification requirement and is reported as such, loudly, even
+# though the runner treats the skip itself as acceptable.
+_SECURITY_CRITICAL_SKIPS = (
+    "XSS execution confirm",
+    "scope",
+    "boundary",
+    "disclosure",
+    "redirect",
+    "skill_scanner",
+)
 _run_start = time.time()
 
 # Report data: list of {section, name, status, detail, duration_ms}
@@ -59,6 +79,7 @@ def _result(name: str, status: str, detail: str = "", duration_ms: float = 0.0):
             print(f"    {RED}{detail}{RESET}")
     elif status == "SKIP":
         _skip += 1
+        _skipped.append((_cur_section, name, detail))
         print(f"  {YELLOW}~{RESET} {name}  {YELLOW}(skipped){RESET}")
 
 def section(title: str):
@@ -6596,6 +6617,21 @@ elapsed_s  = time.time() - _run_start
 print(f"\n{BOLD}{'═'*50}{RESET}")
 print(f"{BOLD}  RESULTS: {GREEN}{_pass} passed{RESET}  {RED}{_fail} failed{RESET}  {YELLOW}{_skip} skipped{RESET}  / {total} total  ({elapsed_s:.1f}s){RESET}")
 print(f"{BOLD}{'═'*50}{RESET}")
+
+if _skipped:
+    _crit = [(sec, nm, d) for sec, nm, d in _skipped
+             if any(k.lower() in nm.lower() for k in _SECURITY_CRITICAL_SKIPS)]
+    print(f"\n{YELLOW}{BOLD}Skipped ({len(_skipped)}) — assurance NOT gained:{RESET}")
+    for sec, nm, d in _skipped:
+        mark = f"{RED}[SECURITY]{RESET} " if (sec, nm, d) in _crit else ""
+        print(f"  {YELLOW}~{RESET} {mark}{nm}    {CYAN}({sec}){RESET}")
+        if d:
+            print(f"      {d}")
+    if _crit:
+        print(f"\n{RED}{BOLD}  !!! {len(_crit)} SECURITY-CRITICAL test(s) did not run.{RESET}")
+        print(f"{RED}      These are UNRESOLVED VERIFICATION REQUIREMENTS, not passes."
+              f" Install the missing\n      dependency and re-run before treating the"
+              f" capability as demonstrated.{RESET}")
 
 if _failures:
     print(f"\n{RED}{BOLD}Failed tests:{RESET}")
