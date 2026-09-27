@@ -970,6 +970,32 @@ occurrences (13 vs 8).**
   say "I ran 488 of 488" cannot support any claim about coverage. Guard optional imports to SKIP.
 - **STATUS** section 6 guarded; **sections 7 and 13 still have the same shape and are NOT fixed.**
 
+### C-12 · the INDEX contradicted the file it points at, and I trusted the pointer
+- **CLASS** coverage
+- **WHY** 2026-09-27. `MEMORY.md` carried *"2 TRUECALLER REPORTS READY TO FILE — both complete,
+  blocked ONLY on H1 identity verification"*. The file it links to opens with
+  **"CLOSED 2026-09-17: BOTH FILED. #1 = #4036707, #2 = #4036739."** The reports had been filed for
+  **ten days**. I quoted the index line, told Kiran two finished reports were still waiting, and
+  passed it to an external reviewer whose entire recommended plan then opened with "unblock
+  Truecaller" — work that did not exist.
+- **WHY IT IS NOT PLAIN C-08** C-08 is quoting a document from MEMORY instead of reading it. Here I
+  *did* read a document — the wrong one. An index is a POINTER, and a pointer that is not rebuilt
+  when its target changes is worse than no index: it carries the authority of the file without the
+  content. Kiran caught it in one line: *"we have submitted the reports nah?"*
+- **WHAT ELSE IT HID** auditing the target revealed the scoreboard is internally inconsistent:
+  `## #14` appears TWICE, the two Truecaller filings have NO number at all (prose only, outside the
+  numbered sequence), and the header claims 16 filed when the numbered list tops at #16 *and* two
+  unnumbered filings exist. **The count is unknown**, and I deliberately did not invent a corrected
+  one — a total derived from an inconsistent cache is the same error one layer deeper.
+- **CATCH** never act on an index entry for anything with a STATUS. Open the file. An index may
+  carry a title and a pointer; the moment it carries a state — *blocked, pending, ready, open* —
+  it is a cache of something that changes, and the file is the only source. The existing scoreboard
+  rule said *"check the PLATFORM before asserting a status"*; today I failed the weaker version of
+  it, which is *check the FILE*.
+- **THE ASYMMETRY WORTH REMEMBERING** a stale index reads as confident, specific and actionable.
+  Nothing about the wrong line looked wrong.
+- **WHO CAUGHT IT** Kiran, immediately, from one sentence of my summary.
+
 ## 📋 HUNT #42 CLOSE-OUT AUDIT — DAY 2 (2026-09-27), §7 mandated
 
 The 2026-09-23 audit below covered days 1-6. This covers the final day, on which 1 report was
