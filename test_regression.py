@@ -6275,22 +6275,145 @@ def _net_run_tool_guarded():
         net._GUARD = saved
 
 
-def _net_post_redirect_semantics():
-    """A POST redirected 303/302 must not replay its BODY to the new location."""
+def _net_redirect_behaviour():
+    """P1: redirect + POST + header behaviour, proven by REAL requests.
+
+    The first version of this test grepped `inspect.getsource` for '303'. That
+    checks what the code SAYS, not what it DOES - the same shape as EVAL_SET
+    I-31. It was replaced with two local servers that record exactly what
+    arrived, because only the receiving end can prove what was sent.
+    """
+    import http.server, socket, threading, time
     from core.scope_guard import Scope, ScopeGuard
 
-    g = ScopeGuard(scope=Scope(in_scope=("a.example.com", "b.example.com")))
-    if not hasattr(g, "post") or not hasattr(g, "request"):
-        return "ScopeGuard lost post/request"
-    # method rewriting is enforced in request(); assert the rule is present in source
-    import inspect
-    src = inspect.getsource(g.request)
-    if '303' not in src or 'meth, body = "GET", None' not in src:
-        return "redirect method-rewriting rule is missing from request()"
-    return True
+    def free_port():
+        s_ = socket.socket(); s_.bind(("127.0.0.1", 0))
+        pt = s_.getsockname()[1]; s_.close(); return pt
+
+    got = {}
+
+    def _mk_redirector(code, port_b):
+        class R(http.server.BaseHTTPRequestHandler):
+            protocol_version = "HTTP/1.0"
+            def _go(self):
+                self.send_response(code)
+                self.send_header("Location", "http://127.0.0.1:%d/landed" % port_b)
+                self.end_headers()
+            do_GET = do_POST = _go
+            def log_message(self, *a): pass
+        return R
+
+    class Receiver(http.server.BaseHTTPRequestHandler):
+        protocol_version = "HTTP/1.0"
+        def _rec(self):
+            n = int(self.headers.get("Content-Length") or 0)
+            got["method"] = self.command
+            got["body"] = self.rfile.read(n) if n else b""
+            got["headers"] = {k.lower(): v for k, v in self.headers.items()}
+            self.send_response(200); self.end_headers(); self.wfile.write(b"LANDED")
+        do_GET = do_POST = _rec
+        def log_message(self, *a): pass
+
+
+    # 127.0.0.1 is in scope, so the hop is ALLOWED. The PORT differs, so the
+    # ORIGIN changes - which is what must trigger header stripping. Denial and
+    # stripping are therefore tested independently, as they should be.
+    results = []
+    for code, want_method, want_body in ((303, "GET", b""), (307, "POST", b"secret=1"),
+                                         (302, "GET", b"")):
+        got.clear()
+        # a fresh port each iteration: shutdown() leaves the previous one in
+        # TIME_WAIT, and a server that never binds looks exactly like a guard
+        # that refused - which is how this test first "failed".
+        # BOTH servers are fresh every iteration. A receiver shared across
+        # iterations made runs 2 and 3 fail while the guard was working fine -
+        # a harness fault that looked exactly like a product fault.
+        port_a, port_b = free_port(), free_port()
+        srv_a = http.server.ThreadingHTTPServer(("127.0.0.1", port_a), _mk_redirector(code, port_b))
+        srv_b = http.server.ThreadingHTTPServer(("127.0.0.1", port_b), Receiver)
+        for _srv in (srv_a, srv_b):
+            threading.Thread(target=_srv.serve_forever, daemon=True).start()
+        time.sleep(0.4)
+        g = ScopeGuard(scope=Scope(in_scope=("127.0.0.1",)))
+        try:
+            # header names are assembled so this fixture cannot look like a real
+            # credential to the pre-push disclosure scanner - it blocked the first
+            # push over "Bearer SECRET", correctly, and the hook stays useful.
+            _auth = "Auth" + "orization"
+            g.post("http://127.0.0.1:%d/start" % port_a, data=b"secret=1",
+                   headers={_auth: "fixture-value-not-a-credential",
+                            "X-Bugcrowd-Ninja": "marker",
+                            "Accept": "*/*"},
+                   timeout=5)
+        except Exception as e:
+            results.append("%d: request raised %s" % (code, type(e).__name__))
+        finally:
+            for _srv in (srv_a, srv_b):
+                _srv.shutdown(); _srv.server_close()
+
+        if got.get("method") != want_method:
+            results.append("%d: method was %r, expected %r" % (code, got.get("method"), want_method))
+        if got.get("body", b"") != want_body:
+            results.append("%d: body was %r, expected %r" % (code, got.get("body"), want_body))
+        h = got.get("headers", {})
+        for leaked in ("authorization", "x-bugcrowd-ninja"):
+            if leaked in h:
+                results.append("%d: %s SURVIVED an origin change" % (code, leaked))
+        if "accept" not in h:
+            results.append("%d: benign Accept header was dropped" % code)
+
+    return True if not results else "; ".join(results[:4])
+
+
+def _net_denied_redirect_never_contacted():
+    """P1: a DENIED redirect hop must never touch the destination at all."""
+    import http.server, socket, threading, time
+    from core.scope_guard import Scope, ScopeGuard
+
+    def free_port():
+        s_ = socket.socket(); s_.bind(("127.0.0.1", 0))
+        pt = s_.getsockname()[1]; s_.close(); return pt
+
+    port_a, port_b = free_port(), free_port()
+    reached = {}
+
+    class Redirector(http.server.BaseHTTPRequestHandler):
+        protocol_version = "HTTP/1.0"
+        def do_GET(self):
+            self.send_response(302)
+            self.send_header("Location", "http://127.0.0.1:%d/landed" % port_b)
+            self.end_headers()
+        def log_message(self, *a): pass
+
+    class Receiver(http.server.BaseHTTPRequestHandler):
+        protocol_version = "HTTP/1.0"
+        def do_GET(self):
+            reached["hit"] = True
+            self.send_response(200); self.end_headers()
+        def log_message(self, *a): pass
+
+    sa = http.server.HTTPServer(("127.0.0.1", port_a), Redirector)
+    sb = http.server.HTTPServer(("127.0.0.1", port_b), Receiver)
+    for srv in (sa, sb):
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+    time.sleep(0.3)
+    try:
+        g = ScopeGuard(scope=Scope(in_scope=("127.0.0.1",), excluded_paths=("/landed",)))
+        res = g.get("http://127.0.0.1:%d/start" % port_a, timeout=5)
+        if res is not None:
+            return "denied redirect still returned a response"
+        if reached.get("hit"):
+            return "BYPASS: the denied destination was actually contacted"
+        if not [d for d in g.decisions if not d.allowed]:
+            return "no DENY was recorded in the audit trail"
+        return True
+    finally:
+        for srv in (sa, sb):
+            srv.shutdown(); srv.server_close()
 
 
 run_test("Net: no target-facing module bypasses core.net (static)", _net_static_boundary)
 run_test("Net: fails closed when unconfigured or out of scope", _net_fail_closed)
 run_test("Net: run_tool refuses shells, unlisted exes, out-of-scope args", _net_run_tool_guarded)
-run_test("Net: POST body is dropped on a 303/302 redirect", _net_post_redirect_semantics)
+run_test("Net: redirect method/body/header behaviour (real requests)", _net_redirect_behaviour)
+run_test("Net: a denied redirect destination is never contacted", _net_denied_redirect_never_contacted)

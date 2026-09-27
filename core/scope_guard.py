@@ -258,7 +258,13 @@ class ScopeGuard:
                     meth, body = "GET", None
                 sent, _ = strip_on_origin_change(sent, current, nxt)
                 current = nxt
-            except Exception:                              # noqa: BLE001
+            except Exception as exc:                       # noqa: BLE001
+                # A transport failure is NOT a DENY. Returning None for both made
+                # them indistinguishable to every caller, which hid a real 307 bug
+                # during P1 testing. The decision log records which one happened.
+                self.decisions.append(
+                    Decision(current, False, "transport error: %s: %s" % (type(exc).__name__, exc), hop)
+                )
                 return None
 
         self.decisions.append(Decision(current, False, "redirect limit exceeded", self.max_redirects))
