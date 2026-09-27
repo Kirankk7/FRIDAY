@@ -6002,6 +6002,31 @@ run_test("Engine: no control bytes in regex sources", _engine_regex_control_byte
 # ══════════════════════════════════════════════════════════════════════════════
 import config as _cfg
 
+def _crit_skip_banner() -> str:
+    """HTML banner for security-critical SKIPs.
+
+    The console warns about these; the HTML report did not, and the report is the
+    artefact that gets KEPT. A skip rendered as a neutral amber counter is how an
+    unresolved verification requirement becomes background noise.
+    """
+    crit = [(sec, nm) for sec, nm, _d in _skipped
+            if any(k.lower() in nm.lower() for k in _SECURITY_CRITICAL_SKIPS)]
+    if not crit:
+        return ""
+    rows = "".join(
+        "<li><b>{}</b> <span style='opacity:.7'>({})</span></li>".format(
+            _html.escape(nm), _html.escape(sec))
+        for sec, nm in crit)
+    return (
+        '<div class="card" style="border-left:5px solid #ef4444;background:#2a1515;color:#fca5a5">'
+        '<h2 style="color:#fca5a5;margin-top:0">'
+        + str(len(crit)) +
+        ' SECURITY-CRITICAL test(s) did not run</h2>'
+        '<p>These are <b>UNRESOLVED VERIFICATION REQUIREMENTS</b>, not passes. '
+        'The capability they cover has NOT been demonstrated by this run.</p>'
+        '<ul>' + rows + '</ul></div>')
+
+
 def _generate_html_report():
     now     = datetime.datetime.now()
     ts      = now.strftime("%Y-%m-%d_%H%M%S")
@@ -6112,6 +6137,8 @@ def _generate_html_report():
     <div class="stat-box"><span class="stat-num" style="color:#94a3b8">{total}</span><span class="stat-lbl">Total</span></div>
     <div class="stat-box"><span class="stat-num" style="color:#7dd3fc">{'0' if _fail == 0 else str(_fail)}</span><span class="stat-lbl">{'All Clear' if _fail == 0 else 'Need Fix'}</span></div>
   </div>
+
+  {_crit_skip_banner()}
 
   <!-- Environment -->
   <div class="card">

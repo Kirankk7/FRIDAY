@@ -369,6 +369,20 @@ earned a clean REFUTED did its job.
       findings; they mean we can finally measure what was tested versus what was learned.
       Revisit knowledge-mining when ROWS — not hunts — pass ~200.
 
+- [ ] **ORACLE ACCOUNTING — separate "tested, nothing found" from "never testable" (2026-09-27).**
+      A class closed at `0/N` means nothing until you say WHICH of these it was. Hunt #42 class 4
+      closed at **0 of 40 routes** on the stated ground that execution could not be confirmed — while
+      `ultron_agent.xss_confirm()`, a working execution oracle, sat in the codebase with its test
+      skipping silently. Record five numbers, not one:
+      - **routes assessed**, and the authorisation status of each;
+      - **oracle availability** — was the confirming tool actually runnable this hunt, and did its
+        POSITIVE and NEGATIVE controls both pass? An oracle with no negative control can only say yes;
+      - **routes actually tested WITH the oracle** (never assume availability means it was used);
+      - **outcomes split three ways**: confirmed execution · non-executing reflection · unresolved;
+      - **security-critical tests skipped or blocked during the hunt**, from the runner's skip audit.
+      ⚠️ *Untestable-because-the-tool-was-missing* and *tested-and-clean* are different results and
+      must never share a row. The first is a gap in US; the second is a property of the TARGET.
+
 - [ ] **`docs/EVAL_SET.md` audit** — walk every failure signature, mark occurred / not, and record
       whether I caught it or Kiran did. `INSTRUMENT QUALITY = self-caught / total occurred`.
       Add a NEW case only for a failure that actually happened; never invent one.
