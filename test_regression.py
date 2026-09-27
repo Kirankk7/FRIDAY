@@ -292,10 +292,20 @@ run_test("Router: casual 'tell me a joke'",              _route_chat_or_none("te
 # ══════════════════════════════════════════════════════════════════════════════
 section("6. Brain Fast Path (greetings)")
 
-from core.brain import process_input, FAST_MESSAGES
+# 2026-09-27: this import was BARE, so a missing optional dependency (playwright,
+# pulled in transitively via browser_worker) aborted the ENTIRE file at section 6
+# and every later section silently never ran. Guarded to SKIP instead, matching
+# the convention already used for Playwright at the XSS-execution test.
+try:
+    from core.brain import process_input, FAST_MESSAGES
+    _BRAIN_ERR = None
+except Exception as _e:                     # noqa: BLE001
+    process_input, FAST_MESSAGES, _BRAIN_ERR = None, [], _e
 
 def _greeting(text):
     def _():
+        if _BRAIN_ERR is not None:
+            return None                     # SKIP: optional dependency missing
         t0 = time.time()
         resp = process_input(text)
         elapsed = time.time() - t0
@@ -6096,13 +6106,14 @@ def _generate_html_report():
     return fname
 
 
-report_file = _generate_html_report()
-print(f"\n{GREEN}{BOLD}Report saved:{RESET} {report_file}")
-print(f"Open with: start {report_file}\n")
-
-sys.exit(0 if _fail == 0 else 1)
 
 
+# ══════════════════════════════════════════════════════════════════════════════
+# NOTE 2026-09-27: sections 41-42 below were originally appended to the END of
+# this file — AFTER `sys.exit()`. They were dead code and had never executed,
+# in CI or anywhere, while being reported as "six tests now running in CI".
+# Anything added from here on must go ABOVE the report/exit block.
+# ══════════════════════════════════════════════════════════════════════════════
 # 40-day chaining dogfood regressions (JARVIS app-path seam bugs, 2026-06-28)
 
 def _test_rate_gate():
@@ -6290,6 +6301,21 @@ def _net_redirect_behaviour():
         s_ = socket.socket(); s_.bind(("127.0.0.1", 0))
         pt = s_.getsockname()[1]; s_.close(); return pt
 
+    def wait_ready(pt, limit=5.0):
+        # POLL, never sleep. Under full-suite load a fixed sleep was too short and
+        # the server was not accepting yet - and a connection refusal is
+        # indistinguishable from a guard DENY, so the test failed for a reason
+        # that had nothing to do with the guard. It passed in isolation and failed
+        # in CI, which is the definition of a flaky test, and a flaky test gets
+        # ignored until it is no longer a control at all.
+        end = time.time() + limit
+        while time.time() < end:
+            try:
+                c = socket.create_connection(("127.0.0.1", pt), timeout=0.2); c.close(); return True
+            except OSError:
+                time.sleep(0.02)
+        return False
+
     got = {}
 
     def _mk_redirector(code, port_b):
@@ -6333,7 +6359,11 @@ def _net_redirect_behaviour():
         srv_b = http.server.ThreadingHTTPServer(("127.0.0.1", port_b), Receiver)
         for _srv in (srv_a, srv_b):
             threading.Thread(target=_srv.serve_forever, daemon=True).start()
-        time.sleep(0.4)
+        if not (wait_ready(port_a) and wait_ready(port_b)):
+            results.append("%d: local test servers never became ready" % code)
+            for _srv in (srv_a, srv_b):
+                _srv.shutdown(); _srv.server_close()
+            continue
         g = ScopeGuard(scope=Scope(in_scope=("127.0.0.1",)))
         try:
             # header names are assembled so this fixture cannot look like a real
@@ -6463,3 +6493,10 @@ def _skill_scanner_present_and_runs():
 
 
 run_test("Skills: vendored skill_scanner is present and still detects", _skill_scanner_present_and_runs)
+
+
+report_file = _generate_html_report()
+print(f"\n{GREEN}{BOLD}Report saved:{RESET} {report_file}")
+print(f"Open with: start {report_file}\n")
+
+sys.exit(0 if _fail == 0 else 1)
