@@ -932,6 +932,44 @@ occurrences (13 vs 8).**
 - **WHO CAUGHT IT** external review's "scope enforcement is not uniformly centralized" criticism,
   aimed at another repo, applied to ours.
 
+### C-11 · the control was built, reported as live, and never wired to anything
+- **CLASS** coverage
+- **WHY** 2026-09-27. Four separate instances **in one day**, all the same shape:
+  `core/scope_guard.py` written, tested, committed and cited as evidence we were safe —
+  **zero callers**. `record_ruled_out()` shipped months ago — **76 rows across 33 hosts**.
+  `skill_scanner.py` adopted in September — **not kept**, so a 79-skill pack arrived and could not
+  be scanned by the tool adopted for that exact job. And six regression tests written to close the
+  first gap — appended **after `sys.exit()` at line 6113**, dead code that had never executed in CI
+  or anywhere, while I reported them as "six tests now running in CI".
+- **THE SHAPE** the artefact exists, is correct, passes its own checks in isolation, and is
+  connected to nothing. Every check I ran confirmed the artefact and none confirmed the WIRING.
+  Isolation testing is what makes this invisible: `exec()`-ing the test functions proved the logic
+  and said nothing about whether the file ever reaches them.
+- **WHY IT KEEPS HAPPENING** finishing feels like shipping. The last step — *who calls this?* — has
+  no output of its own, produces no green tick, and is therefore the step that gets skipped.
+- **CATCH** a control is not done when it passes. It is done when you can name **its caller** and
+  show it running **through the real entry point**. For a test: run the actual command CI runs and
+  grep your test's NAME in the output. For a module: `grep -rl` the import. Absence of the name is
+  the failure signal.
+- **AND THEN** once wired, the redirect test failed in the full suite while passing alone — a fixed
+  sleep that was too short under load, where a connection refusal is indistinguishable from a guard
+  DENY. **A flaky test is worse than no test:** it gets muted, and a muted test is a dead control
+  whose row still reads green. Poll for readiness; never sleep.
+- **WHO CAUGHT IT** an external reviewer's "verify from a clean checkout and confirm the six CI
+  tests actually run". I had claimed it three times without once running `python test_regression.py`.
+
+### I-32 · a fail-stop import silently voids the rest of a suite
+- **CLASS** instrument
+- **WHY** 2026-09-27. `test_regression.py` aborted at **section 6 of ~41** on
+  `ModuleNotFoundError: playwright`, pulled in transitively. It exits 1 — which looks like an
+  ordinary test failure — while ~35 sections never ran and reported nothing at all.
+- **THE SHAPE** a runner whose failure mode is indistinguishable from its normal failure mode.
+  Same family as the background-grep whose partial output looked complete, and the skill scanner
+  that died mid-run after exactly 3 WARNs, matching our recorded result.
+- **CATCH** compare the number of tests REPORTED against the number DEFINED. A suite that cannot
+  say "I ran 488 of 488" cannot support any claim about coverage. Guard optional imports to SKIP.
+- **STATUS** section 6 guarded; **sections 7 and 13 still have the same shape and are NOT fixed.**
+
 ## 📋 HUNT #42 CLOSE-OUT AUDIT — DAY 2 (2026-09-27), §7 mandated
 
 The 2026-09-23 audit below covered days 1-6. This covers the final day, on which 1 report was
