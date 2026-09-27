@@ -567,7 +567,7 @@ split as every prior hunt and it has not moved.
 ### C-08 · the matrix was never CREATED — five days of verdicts with no instrument
 - **CLASS** coverage
 - **WHY** 2026-09-22, hunt #42. `HUNT_PROTOCOL.md` §3.5 says the matrix is its own file,
-  `workspace/coverage/<target>_matrix.md`, **created at the FIRST capture with every row
+  `workspace/coverage/<target>/<target>_matrix.md`, **created at the FIRST capture with every row
   `NOT TESTED`** — "a matrix built at close is a report; a matrix built early is an instrument."
   It was never created. Across five days the hunt produced two HARs, five probe runs, ~70 requests
   and **six ENFORCED verdicts — all six inside class 1** — while ten of eleven classes sat at zero

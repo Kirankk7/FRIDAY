@@ -140,7 +140,7 @@ two reports filed — and THREE OF TEN CLASSES HAD ZERO PROBES. I was ready to c
 because Kiran asked twice: *"are you sure all classes and micro classes are done?"* The rule to run
 all 10 classes already existed; what did not exist was **an artefact that makes a gap visible**.
 
-- [ ] **The matrix is its OWN FILE: `workspace/coverage/<target>_matrix.md`.** One per hunt,
+- [ ] **The matrix is its OWN FILE: `workspace/coverage/<target>/<target>_matrix.md`.** One per hunt,
       named for the target, separate from the working notes. A matrix buried inside 1800 lines
       of probe output is not accountability — nobody can audit it, including me. One row per
       class, one row per micro-class. A claim in chat is not a matrix.
@@ -337,6 +337,14 @@ earned a clean REFUTED did its job.
 - [ ] Playbook entries added for what actually changes future action; target names scrubbed
       (public repo), pre-push hook hits enumerated individually.
 - [ ] Memory + `docs/` updated; `bash /d/hunt-doctrine/sync.sh` + commit + push, unprompted.
+- [ ] **ONE FOLDER PER TARGET (2026-09-27, Kiran).** Both trees are per-programme, not flat:
+      `workspace/coverage/<target>/` for notes, matrix, reports and extracted inventories;
+      `<scratchpad>/<target>/` for captures and evidence, with `_tools/` and `_scripts/` kept
+      separate from any target. The flat layout had reached 49 loose entries across 16 programmes
+      and hunt artefacts were indistinguishable from each other at a glance.
+      ⚠️ `sync.sh` globs `coverage/*/*_matrix.md` — one level deeper than before. The mirror stays
+      FLAT on purpose: matrix filenames already carry the target name and are unique.
+
 - [ ] **Artefact retention split (2026-09-06).** Two piles, not one:
       - **DELETE NOW** — HARs, cookies, tokens, request/response bodies, credentials, anything
         carrying *our* session. These are why the rule exists.

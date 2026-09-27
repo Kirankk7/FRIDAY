@@ -235,7 +235,7 @@ def pivot(finding, route_inventory=None, sink_inventory=None):
 
 
 def report(finding, pivot_result, chains=(), outcome="", state="CANDIDATE"):
-    """The block that goes into `workspace/coverage/<target>_matrix.md` under the finding.
+    """The block that goes into `workspace/coverage/<target>/<target>_matrix.md` under the finding.
 
     ⚠️ If a hunt produces zero useful pivots, the first question is whether the protocol generated
     good CANDIDATES — not whether the pivot was worth having. A pivot that asked the right question

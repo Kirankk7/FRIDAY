@@ -186,7 +186,7 @@ class SinkInventory:
         return sorted(k for k, v in self._k.items() if v["sinks"])
 
     def matrix_rows(self):
-        """Rows for `workspace/coverage/<target>_matrix.md`, under the RCE class."""
+        """Rows for `workspace/coverage/<target>/<target>_matrix.md`, under the RCE class."""
         out = ["| sink kind | found | probed | control | verdict |", "|---|---|---|---|---|"]
         for k in KINDS:
             v = self._k[k]

@@ -232,7 +232,7 @@ class RouteInventory:
                 "denominator": len(self._routes)}
 
     def matrix_rows(self, proven_gate=None):
-        """Lines for `workspace/coverage/<target>_matrix.md`. Every row states its denominator, and
+        """Lines for `workspace/coverage/<target>/<target>_matrix.md`. Every row states its denominator, and
         an undetermined gate prints as NOT TESTED rather than disappearing."""
         d = self.discontinuity(proven_gate) if proven_gate else None
         lines = ["| service | hosts | routes | gates proven | gate unknown | selectors |",
