@@ -68,6 +68,44 @@ def section(title: str):
     print(f"{BOLD}{CYAN}  {title}{RESET}")
     print(f"{BOLD}{CYAN}{'─'*50}{RESET}")
 
+# ══════════════════════════════════════════════════════════════════════════════
+# SUITE COVERAGE GUARD — added 2026-09-27
+# ══════════════════════════════════════════════════════════════════════════════
+# This file has 27 TOP-LEVEL project imports. Any one of them failing aborts the
+# whole file, and the process exits non-zero - which is indistinguishable from an
+# ordinary test failure while dozens of later sections never ran and reported
+# NOTHING. That is exactly how six tests sat after `sys.exit()` for a day while
+# being reported as "running in CI".
+#
+# The fix is the rule we already apply to hunts: STATE THE DENOMINATOR. Count the
+# run_test() calls DEFINED in this file, compare against how many actually ran,
+# and shout on any shortfall. Registered with atexit so it prints even when the
+# suite dies mid-file - the abort case is the one that needs it most.
+import atexit as _atexit
+import re as _re
+
+try:
+    _DEFINED_TESTS = len(_re.findall(r"^run_test\(", io.open(__file__, encoding="utf-8").read(), _re.M))
+except Exception:                                   # pragma: no cover
+    _DEFINED_TESTS = 0
+
+
+@_atexit.register
+def _suite_coverage_guard():
+    if not _DEFINED_TESTS:
+        return
+    ran = _pass + _fail + _skip
+    if ran >= _DEFINED_TESTS:
+        print("\n%sSUITE COVERAGE: ran %d of %d defined tests%s"
+              % (GREEN, ran, _DEFINED_TESTS, RESET))
+        return
+    print("\n%s%s!!! SUITE COVERAGE SHORTFALL: ran %d of %d defined run_test() calls "
+          "- %d NEVER EXECUTED%s"
+          % (BOLD, RED, ran, _DEFINED_TESTS, _DEFINED_TESTS - ran, RESET))
+    print("%s    A non-zero exit looks the same whether one test failed or the file "
+          "aborted halfway. It did not run everything it defines.%s" % (RED, RESET))
+
+
 def run_test(name: str, fn):
     """Run fn(). PASS on True/no-exception, FAIL on False/exception, SKIP on None."""
     t0 = time.time()
@@ -327,7 +365,14 @@ run_test("Fast path: 'how are you'",   _greeting("how are you"))
 # ══════════════════════════════════════════════════════════════════════════════
 section("7. System Agent")
 
-from agents.system_agent import system_agent
+# 2026-09-27: guarded. A bare top-level import here aborted the ENTIRE file
+# and every later section reported nothing. The suite coverage guard now makes
+# any shortfall loud, but these two are the ones that actually bit.
+try:
+    from agents.system_agent import system_agent
+    _SYSAGENT_ERR = None
+except Exception as _e:                     # noqa: BLE001
+    system_agent, _SYSAGENT_ERR = None, _e
 
 def _sys_action(action):
     def _():
@@ -569,9 +614,19 @@ run_test("Scheduler: no-schedule raw (no crash)", _sched_invalid_schedule)
 # ══════════════════════════════════════════════════════════════════════════════
 section("13. Tools Registry")
 
-from core.tools_registry import TOOLS, register_tool, unregister_tool, execute_tool
+# 2026-09-27: guarded. A bare top-level import here aborted the ENTIRE file
+# and every later section reported nothing. The suite coverage guard now makes
+# any shortfall loud, but these two are the ones that actually bit.
+try:
+    from core.tools_registry import TOOLS, register_tool, unregister_tool, execute_tool
+    _TOOLSREG_ERR = None
+except Exception as _e:                    # noqa: BLE001
+    TOOLS, register_tool, unregister_tool, execute_tool = {}, None, None, None
+    _TOOLSREG_ERR = _e
 
 def _registry_has_all_agents():
+    if _TOOLSREG_ERR is not None:
+        return None                 # SKIP: optional dependency missing
     required = {"system", "file", "veronica", "vision", "ultron",
                 "edith", "echo", "athena", "personal", "friday",
                 "scheduler", "self_improvement"}
@@ -579,16 +634,22 @@ def _registry_has_all_agents():
     return True if not missing else f"Missing agents: {missing}"
 
 def _registry_execute_known():
+    if _TOOLSREG_ERR is not None:
+        return None                 # SKIP: optional dependency missing
     r = execute_tool("system", "", action="system_info", parameters={})
     if not r.get("success"):
         return f"execute_tool(system_info) failed: {r.get('message')}"
     return True
 
 def _registry_execute_unknown():
+    if _TOOLSREG_ERR is not None:
+        return None                 # SKIP: optional dependency missing
     r = execute_tool("nonexistent_tool_xyz", "", action="do_thing", parameters={})
     return True if not r.get("success") else "Unknown tool should return failure"
 
 def _registry_dynamic():
+    if _TOOLSREG_ERR is not None:
+        return None                 # SKIP: optional dependency missing
     class _Dummy:
         def run(self, input_text="", action=None, parameters=None):
             return {"success": True, "message": "dummy ok", "data": {}}
@@ -965,6 +1026,8 @@ run_test("Router cache: caches None results",        _cache_stores_none)
 section("22. Tool-Result Memory")
 
 def _tool_memory_roundtrip():
+    if _TOOLSREG_ERR is not None:
+        return None                 # SKIP: optional dependency missing
     import core.tool_memory as _tm
     # snapshot + restore real file so we don't pollute it
     saved = None
@@ -5914,24 +5977,6 @@ run_test("Engine: no control bytes in regex sources", _engine_regex_control_byte
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# CONSOLE SUMMARY
-# ══════════════════════════════════════════════════════════════════════════════
-total      = _pass + _fail + _skip
-elapsed_s  = time.time() - _run_start
-
-print(f"\n{BOLD}{'═'*50}{RESET}")
-print(f"{BOLD}  RESULTS: {GREEN}{_pass} passed{RESET}  {RED}{_fail} failed{RESET}  {YELLOW}{_skip} skipped{RESET}  / {total} total  ({elapsed_s:.1f}s){RESET}")
-print(f"{BOLD}{'═'*50}{RESET}")
-
-if _failures:
-    print(f"\n{RED}{BOLD}Failed tests:{RESET}")
-    for name, detail in _failures:
-        print(f"  {RED}✗ {name}{RESET}")
-        if detail:
-            print(f"    {detail}")
-
-
-# ══════════════════════════════════════════════════════════════════════════════
 # HTML REPORT
 # ══════════════════════════════════════════════════════════════════════════════
 import config as _cfg
@@ -6493,6 +6538,73 @@ def _skill_scanner_present_and_runs():
 
 
 run_test("Skills: vendored skill_scanner is present and still detects", _skill_scanner_present_and_runs)
+
+
+def _prepush_target_name_boundaries():
+    """The disclosure hook must catch real leaks and ignore substring noise.
+
+    It blocked a push because a short programme name matched inside an ordinary
+    English word. Short names are substrings of common words, so this recurs. The
+    recurs. The fix uses lookarounds rather than \b because target names carry
+    dots and hyphens. Both directions are asserted: loosening a disclosure control
+    to silence one noisy match is how the control dies.
+    """
+    import importlib.util as iu, sys as _sys
+    spec = iu.spec_from_file_location("_pps", "scripts/prepush_scan.py")
+    m = iu.module_from_spec(spec); _sys.modules["_pps"] = m
+    try:
+        spec.loader.exec_module(m)
+    except Exception as e:
+        return "cannot load prepush_scan: %s" % e
+
+    # FICTIONAL names only. The first version of this test used two REAL programme
+    # names as fixtures and the pre-push hook blocked it - correctly. This repo is
+    # public, and a fixture is published like any other line. The hook caught a
+    # genuine leak that was introduced while fixing the hook.
+    # "quixo" is the substring case: it sits inside "quixotic" the way a short
+    # programme name sits inside ordinary English.
+    names = ["quixo", "fictional-target.test", "zzcorp"]
+    positive = ["+ the quixo programme", "+ Quixo Security", "+ https://quixo.example/api",
+                "+ quixo-staging.example", '+ target = "quixo"', "+ GET /quixo/users",
+                "+ see fictional-target.test for scope", "+ curl https://zzcorp.example/x"]
+    negative = ["+ a quixotic approach to testing", "+ quixoid_counter = 1",
+                "+ myquixotest = True", "+ zzcorporate_widget()", "+ ordinary line of code"]
+    HDR = "+++ b/x.py" + chr(10)     # chr(10): no escape survives a shell heredoc
+    bad = []
+    for line in positive:
+        if not m.scan(HDR + line, names):
+            bad.append("MISSED a real leak: %s" % line.strip())
+    for line in negative:
+        if [h for h in m.scan(HDR + line, names) if h[0].startswith("target name")]:
+            bad.append("FALSE POSITIVE: %s" % line.strip())
+    return True if not bad else "; ".join(bad[:3])
+
+
+run_test("Disclosure hook: target names match on boundaries, not substrings", _prepush_target_name_boundaries)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# CONSOLE SUMMARY — relocated 2026-09-27
+# ══════════════════════════════════════════════════════════════════════════════
+# This printed ~600 lines earlier, BEFORE the last two sections, so it announced
+# "488 total" while 496 tests actually ran. Those sections executed, fed the exit
+# code and the HTML report, and were simply absent from the line a human reads.
+# A summary that is not the LAST thing to run is a summary that can be wrong.
+total      = _pass + _fail + _skip
+elapsed_s  = time.time() - _run_start
+
+print(f"\n{BOLD}{'═'*50}{RESET}")
+print(f"{BOLD}  RESULTS: {GREEN}{_pass} passed{RESET}  {RED}{_fail} failed{RESET}  {YELLOW}{_skip} skipped{RESET}  / {total} total  ({elapsed_s:.1f}s){RESET}")
+print(f"{BOLD}{'═'*50}{RESET}")
+
+if _failures:
+    print(f"\n{RED}{BOLD}Failed tests:{RESET}")
+    for name, detail in _failures:
+        print(f"  {RED}✗ {name}{RESET}")
+        if detail:
+            print(f"    {detail}")
+
+
 
 
 report_file = _generate_html_report()

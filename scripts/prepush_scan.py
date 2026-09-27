@@ -84,7 +84,19 @@ def scan(diff: str, names: list) -> list:
     Path-aware so a hit names its file, and so this guard does not flag its own regex table (it caught
     itself on the first run — correct behaviour, wrong target)."""
     checks = [(lbl, rx) for lbl, rx in PATTERNS]
-    checks += [(f"target name '{n}'", re.compile(re.escape(n), re.I)) for n in names]
+    # 2026-09-27: target names were matched as bare SUBSTRINGS, so a short
+    # programme name fired inside an ordinary English word in a vendored scanner's
+    # regex and blocked a push. Short names are substrings of common words, so
+    # this WILL recur. (Illustrative only: "quixo" inside "quixotic".)
+    #
+    # Lookarounds, not \b: target names contain dots and hyphens
+    # ("foo.example", "foo-staging") where \b sits in the wrong place. These
+    # assert only that the name is not glued to another alphanumeric, so every
+    # real leak shape still matches - Foo, foo.example, foo-staging, /foo/,
+    # "foo" - while quixotic-style substrings do not.
+    checks += [(f"target name '{n}'",
+                re.compile(r"(?<![A-Za-z0-9])" + re.escape(n) + r"(?![A-Za-z0-9])", re.I))
+               for n in names]
 
     hits, path = [], ""
     for line in diff.splitlines():
