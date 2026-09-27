@@ -888,6 +888,50 @@ occurrences (13 vs 8).**
 
 ---
 
+### I-31 · a test drawn from the implementation's own list cannot detect what the list forgot
+- **CLASS** instrument
+- **WHY** 2026-09-27. `core/scope_guard.py` strips sensitive headers when a redirect changes
+  origin. Its `SENSITIVE_HEADERS` set named `x-bug-bounty` and `x-researcher`, with a comment
+  saying per-programme attribution headers "belong here too". **The header we send on every single
+  request is `X-Bugcrowd-Ninja`, and it was in neither the set nor any pattern.** A live test showed
+  it surviving four separate origin changes: cross host, cross scheme, cross port, sibling subdomain.
+- **WHY IT SURVIVED** the module's own self-test asserted on `X-Api-Key` and `X-Auth-Token` —
+  **both already in the set.** The test was written from the same list as the implementation, so it
+  could only ever confirm the entries that existed. It passed every run while the gap sat next to it.
+- **THE SHAPE** any test whose fixtures are drawn from the implementation's own enumeration verifies
+  MEMBERSHIP, never COVERAGE. It answers "do the listed cases work" and is structurally blind to
+  "what is missing from the list". Same family as I-28 (a two-cell experiment cannot separate two
+  mechanisms) — the instrument cannot reach the question being asked of it.
+- **FIX, and why it is not a longer list** the blocklist became documentation; the mechanism is now
+  an ALLOWLIST. Across an origin change only `accept`, `accept-language`, `accept-encoding`,
+  `user-agent`, `content-type`, `range` survive. A header nobody remembered is dropped BY DEFAULT
+  instead of forwarded by default. Enumerating names is name-guessing, which is this project's most
+  repeated instrument failure; default-deny removes the guess.
+- **CATCH** every fixture set must contain at least one item that is on NO list — the rewritten
+  self-test now carries `X-Totally-Unlisted` across all four origin-change axes.
+- **WHO CAUGHT IT** an external review, indirectly. It pushed back that my "we are clean" was a
+  SOURCE READ and not a test. Running the test took one command and inverted the answer. I had
+  spent the same day telling Kiran that reading a claim is not testing it.
+
+### C-10 · a guard that is correct and wired to nothing
+- **CLASS** coverage
+- **WHY** 2026-09-27, found in the same pass. `core/scope_guard.py` enforces scope on every redirect
+  hop. **No module imports it.** Twenty-one modules and scripts make network calls through
+  `requests` / `httpx` / `urllib` / subprocesses; `scope_guard` appears in none of them.
+  `core/url_guard.py` (a different, SSRF-only guard explicitly marked "do NOT apply to the security
+  agent") has exactly one caller.
+- **THE SHAPE** building a control and believing the system has the property the control provides.
+  The library was written, tested, committed, and cited in a repo screen as evidence we were safe —
+  without ever being called. **Existence is not enforcement.**
+- **HONEST EXPOSURE** live hunting runs through Kiran's browser console, not these modules, so the
+  practical risk today is low. But the target-facing ones (`vdp_sweep`, `takeover`, `threat_intel`,
+  `github_hunt`) are exactly where an out-of-scope fetch would be an RoE problem.
+- **CATCH** when a control is added, record its CALLERS, not just its tests. A guard with zero
+  callers is a plan, not a control. Mirrors the hunt-side rule *a control you can turn off is not a
+  control* — a control nothing calls is weaker still.
+- **WHO CAUGHT IT** external review's "scope enforcement is not uniformly centralized" criticism,
+  aimed at another repo, applied to ours.
+
 ## 📋 HUNT #42 CLOSE-OUT AUDIT — DAY 2 (2026-09-27), §7 mandated
 
 The 2026-09-23 audit below covered days 1-6. This covers the final day, on which 1 report was
