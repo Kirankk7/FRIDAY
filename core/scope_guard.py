@@ -42,6 +42,14 @@ ALLOWED_SCHEMES = ("http", "https")
 
 # Sent only to the origin the caller named. On ANY origin change these are
 # dropped, because a redirect is an instruction from the server, not from us.
+#
+# 2026-09-27 — THIS LIST IS NO LONGER THE MECHANISM, only documentation.
+# It named "x-bug-bounty" and "x-researcher" and a comment claiming that
+# per-programme attribution headers "belong here too". The header we actually
+# send on every request is X-Bugcrowd-Ninja, which was in neither. A live test
+# showed it surviving four different origin changes while the docstring said
+# otherwise. Enumerating header names is name-guessing, and name-guessing is
+# the single most repeated instrument failure in this project.
 SENSITIVE_HEADERS = frozenset(
     {
         "authorization",
@@ -52,9 +60,24 @@ SENSITIVE_HEADERS = frozenset(
         "x-auth-token",
         "x-session",
         "x-csrf-token",
-        # per-programme attribution/marker headers belong here too:
         "x-bug-bounty",
         "x-researcher",
+        "x-bugcrowd-ninja",
+    }
+)
+
+# THE MECHANISM: default-deny across an origin change. Anything not on this
+# short allowlist is dropped, so a header nobody remembered to list is dropped
+# BY DEFAULT rather than forwarded by default. Over-dropping on a cross-origin
+# redirect is harmless; under-dropping leaks credentials or identity.
+CROSS_ORIGIN_SAFE_HEADERS = frozenset(
+    {
+        "accept",
+        "accept-language",
+        "accept-encoding",
+        "user-agent",
+        "content-type",
+        "range",
     }
 )
 
@@ -123,7 +146,7 @@ def strip_on_origin_change(
         return dict(headers), []
     kept, dropped = {}, []
     for k, v in headers.items():
-        (dropped.append(k) if k.lower() in SENSITIVE_HEADERS else kept.__setitem__(k, v))
+        (kept.__setitem__(k, v) if k.lower() in CROSS_ORIGIN_SAFE_HEADERS else dropped.append(k))
     return kept, dropped
 
 
@@ -238,14 +261,32 @@ def _selftest() -> int:
             fails.append(f"evaluate({url}) = {got}, want {want} ({why})")
 
     # --- header stripping
-    hdrs = {"X-Api-Key": "fixture", "X-Auth-Token": "fixture", "Accept": "*/*"}
-    kept, dropped = strip_on_origin_change(hdrs, "https://a.example.com/", "https://b.other.com/")
-    if "X-Api-Key" in kept or "X-Auth-Token" in kept:
-        fails.append(f"sensitive headers survived an origin change: {kept}")
-    if "Accept" not in kept:
-        fails.append("benign header was dropped unnecessarily")
+    # The old version of this test used X-Api-Key and X-Auth-Token - both already
+    # in SENSITIVE_HEADERS. A test drawn from the implementation's own list can
+    # never detect what that list FORGOT, which is why it passed for ten days
+    # while X-Bugcrowd-Ninja leaked. Every case below includes at least one
+    # header that is on NO list.
+    hdrs = {
+        "X-Api-Key": "fixture",
+        "X-Auth-Token": "fixture",
+        "X-Bugcrowd-Ninja": "fixture",   # the one that actually leaked
+        "X-Totally-Unlisted": "fixture", # nobody will ever add this to a list
+        "Accept": "*/*",
+    }
+    for src, dst, why in (
+        ("https://a.example.com/", "https://b.other.com/", "cross host"),
+        ("https://a.example.com/", "http://a.example.com/", "cross scheme"),
+        ("https://a.example.com/", "https://a.example.com:8443/", "cross port"),
+        ("https://a.example.com/", "https://b.example.com/", "sibling subdomain"),
+    ):
+        kept, _ = strip_on_origin_change(hdrs, src, dst)
+        survivors = [k for k in kept if k.lower() not in CROSS_ORIGIN_SAFE_HEADERS]
+        if survivors:
+            fails.append(f"headers survived an origin change ({why}): {survivors}")
+        if "Accept" not in kept:
+            fails.append(f"benign header dropped unnecessarily ({why})")
     same, dropped2 = strip_on_origin_change(hdrs, "https://a.example.com/1", "https://a.example.com/2")
-    if len(same) != 3 or dropped2:
+    if len(same) != len(hdrs) or dropped2:
         fails.append("headers dropped on a SAME-origin redirect")
 
     # --- THE REGRESSION: the exact bypass this module exists to stop
