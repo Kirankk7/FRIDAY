@@ -1583,9 +1583,18 @@ def _xss_confirm_exec():
     srv = http.server.HTTPServer(("127.0.0.1", 0), _H)
     port = srv.server_address[1]
     threading.Thread(target=srv.serve_forever, daemon=True).start()
+    # 2026-09-28: xss_confirm is now SCOPE-GATED and fails closed, so a caller must
+    # declare its scope - exactly as a hunt does. Before this, the test called it with
+    # no scope at all, which the gate correctly refuses. The refusal showed up as a
+    # SKIP and the skip audit flagged it [SECURITY] within one run.
+    from core import net as _net
+    from core.scope_guard import Scope as _Scope
+    _saved = _net._GUARD
     try:
+        _net.configure(_Scope(in_scope=("127.0.0.1",)))
         r = U.xss_confirm(f"http://127.0.0.1:{port}/s?q=x", param="q", timeout=10)
     finally:
+        _net._GUARD = _saved
         srv.shutdown()
     if not r.get("success"):
         return None    # Playwright/browser unavailable -> SKIP (consistent with other browser tests)
@@ -6415,6 +6424,15 @@ def _net_redirect_behaviour():
         class R(http.server.BaseHTTPRequestHandler):
             protocol_version = "HTTP/1.0"
             def _go(self):
+                # DRAIN THE REQUEST BODY FIRST. Answering a POST with a redirect and
+                # closing while the client is still sending makes Windows reset the
+                # socket - ConnectionAbortedError [WinError 10053] - which the guard
+                # reports as a transport error and the test saw as "method was None".
+                # It is intermittent, so it looked like flakiness in the guard. It was
+                # this handler. Found in one run by the decision trail, not by a repro.
+                n = int(self.headers.get("Content-Length") or 0)
+                if n:
+                    self.rfile.read(n)
                 self.send_response(code)
                 self.send_header("Location", "http://127.0.0.1:%d/landed" % port_b)
                 self.end_headers()

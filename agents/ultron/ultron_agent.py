@@ -1197,6 +1197,66 @@ class UltronAgent:
         qs = dict(parse_qsl(parts.query))
         dialog = [False]
         hit = None
+
+        # ---- SCOPE GATE (2026-09-28) -------------------------------------------------
+        # This drives a REAL browser at a REAL target and is the most target-reaching
+        # thing in the engine, so it must sit behind the same boundary as every other
+        # target-facing call. A pre-check alone is not enough: a 302, a meta refresh or
+        # a JS navigation would walk the browser off-scope afterwards. Both halves below
+        # are required - the check refuses the entry point, the route handler refuses
+        # every hop after it.
+        from core import net as _net
+        try:
+            _guard = _net._require()
+        except _net.ScopeError as _e:
+            return {"success": False, "message": "scope not configured: %s" % _e,
+                    "data": {"findings": []}}
+        _d = _guard.check(url)
+        if not _d.allowed:
+            return {"success": False,
+                    "message": "REFUSED, out of scope: %s (%s)" % (url, _d.reason),
+                    "data": {"findings": []}}
+        _blocked = []
+
+        def _scope_route(route):
+            """Guard EVERY hop, including redirects.
+
+            MEASURED 2026-09-28: a plain `route.continue_()` is NOT enough. Playwright
+            follows a server 3xx below the interception layer - neither page.route nor
+            context.route fires again for the redirected URL, so an in-scope entry point
+            that 302s to an out-of-scope host reaches it before anything can object. A
+            post-hoc `page.url` check would notice only AFTER the request was sent, which
+            is useless for rules of engagement.
+
+            So the redirect is never handed to the browser's stack: fetch with
+            max_redirects=0, read the Location ourselves, and refuse it there. Verified -
+            the off-scope host received 0 requests.
+            """
+            from urllib.parse import urljoin as _join
+            try:
+                _u = route.request.url
+                if _u.startswith(("data:", "about:", "blob:")):
+                    return route.continue_()
+                _dec = _guard.check(_u)
+                if not _dec.allowed:
+                    _blocked.append((_u, _dec.reason))
+                    return route.abort()
+                _resp = route.fetch(max_redirects=0)
+                _loc = _resp.headers.get("location")
+                if _resp.status in (301, 302, 303, 307, 308) and _loc:
+                    _next = _join(_u, _loc)
+                    _nd = _guard.check(_next)
+                    if not _nd.allowed:
+                        _blocked.append((_next, "redirect hop: " + _nd.reason))
+                        return route.abort()
+                return route.fulfill(response=_resp)
+            except Exception as _e:                # noqa: BLE001
+                _blocked.append((route.request.url, "routing error: %s" % type(_e).__name__))
+                try:
+                    return route.abort()           # fail CLOSED on any routing error
+                except Exception:                  # noqa: BLE001
+                    return None
+        # ------------------------------------------------------------------------------
         try:
             from playwright.sync_api import sync_playwright
             with sync_playwright() as p:
@@ -1232,6 +1292,7 @@ class UltronAgent:
                     except Exception:
                         pass
                 page = ctx.new_page()
+                page.route("**/*", _scope_route)      # every request, every hop
                 page.on("dialog", lambda d: (dialog.__setitem__(0, True), d.dismiss()))
                 for pay in payloads:
                     q = dict(qs); q[param] = pay
