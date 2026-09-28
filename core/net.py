@@ -46,6 +46,9 @@ __all__ = [
 ]
 
 
+from core.scope_guard import TransportError  # noqa: F401  re-exported for callers
+
+
 class ScopeError(RuntimeError):
     """Raised when a request is denied, or attempted before scope is set.
 
@@ -100,11 +103,18 @@ def _require() -> ScopeGuard:
 
 def get(url: str, headers: dict[str, str] | None = None, timeout: float = 20.0,
         context=None):
-    """Guarded GET. Returns (final_url, status, body, chain). Raises on DENY."""
+    """Guarded GET. Returns (final_url, status, body, chain).
+
+    Raises ScopeError on a scope DENY and TransportError when the request never
+    completed. These must stay separate: a ScopeError means the BOUNDARY stopped
+    us and is always worth stopping for, while a dead host is ordinary. When both
+    raised ScopeError, the alarm fired for the ordinary case, and an alarm that
+    fires for the ordinary case gets ignored.
+    """
     g = _require()
     out = g.get(url, headers=headers, timeout=timeout, context=context)
     if out is None:
-        raise ScopeError(f"DENY or transport failure: {url}")
+        raise ScopeError(f"DENY: {url}")
     return out
 
 
@@ -114,11 +124,11 @@ def post(
     headers: dict[str, str] | None = None,
     timeout: float = 20.0,
 ):
-    """Guarded POST. Returns (final_url, status, body, chain). Raises on DENY."""
+    """Guarded POST. ScopeError on DENY, TransportError if it never completed."""
     g = _require()
     out = g.post(url, data=data, headers=headers, timeout=timeout)
     if out is None:
-        raise ScopeError(f"DENY or transport failure: {url}")
+        raise ScopeError(f"DENY: {url}")
     return out
 
 

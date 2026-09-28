@@ -150,6 +150,18 @@ def strip_on_origin_change(
     return kept, dropped
 
 
+class TransportError(RuntimeError):
+    """The request never completed: DNS, TCP, TLS, timeout, reset.
+
+    This is NOT a scope decision and must never be reported as one. Returning
+    None for both made a dead host indistinguishable from a refused one, which
+    cost three wrong diagnoses of a single test failure (EVAL_SET I-33) and,
+    worse, would have trained the operator to read a boundary alarm as "probably
+    just a down host". An alarm that fires for the ordinary case stops being an
+    alarm.
+    """
+
+
 @dataclass
 class ScopeGuard:
     scope: Scope
@@ -207,7 +219,9 @@ class ScopeGuard:
                 context=None):
         """Guarded request. Redirects are NEVER followed automatically: each hop
         is resolved against the current URL, guarded, logged, and only then
-        followed. Returns (final_url, status, body_bytes, chain) or None on DENY.
+        followed. Returns (final_url, status, body_bytes, chain), or None on a
+        scope DENY. A transport failure raises TransportError instead - the two
+        are different outcomes and a caller must not be able to confuse them.
 
         `requests`/`httpx` are not assumed — uses urllib so this has no
         dependency the rest of the engine does not already have.
@@ -259,13 +273,16 @@ class ScopeGuard:
                 sent, _ = strip_on_origin_change(sent, current, nxt)
                 current = nxt
             except Exception as exc:                       # noqa: BLE001
-                # A transport failure is NOT a DENY. Returning None for both made
-                # them indistinguishable to every caller, which hid a real 307 bug
-                # during P1 testing. The decision log records which one happened.
+                # A transport failure is NOT a DENY, and until 2026-09-28 this
+                # comment said so while the code returned None for both anyway -
+                # a control that existed only in prose (EVAL_SET C-11). Now the
+                # two are different TYPES, so no caller can conflate them by
+                # accident. DENY still returns None; only this path raises.
                 self.decisions.append(
                     Decision(current, False, "transport error: %s: %s" % (type(exc).__name__, exc), hop)
                 )
-                return None
+                raise TransportError("%s: %s (hop %d, %s)"
+                                     % (type(exc).__name__, exc, hop, current)) from exc
 
         self.decisions.append(Decision(current, False, "redirect limit exceeded", self.max_redirects))
         return None

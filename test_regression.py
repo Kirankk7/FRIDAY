@@ -6565,6 +6565,89 @@ def _net_denied_redirect_never_contacted():
 run_test("Net: no target-facing module bypasses core.net (static)", _net_static_boundary)
 run_test("Net: fails closed when unconfigured or out of scope", _net_fail_closed)
 run_test("Net: run_tool refuses shells, unlisted exes, out-of-scope args", _net_run_tool_guarded)
+def _net_deny_vs_transport_are_distinct():
+    """A refused host and a dead host must not look the same to a caller.
+
+    Both used to return None, so core.net raised ScopeError for both and its own
+    message said "DENY or transport failure" - it could not tell. That makes the
+    boundary alarm fire for the ordinary case of a host being down, and both real
+    callers (takeover, vdp_sweep) re-raise ScopeError while swallowing everything
+    else, so a dead host would have aborted a sweep as a scope violation.
+    """
+    import socket
+    from core import net
+    from core.scope_guard import Scope, ScopeGuard, TransportError
+
+    out = []
+
+    # --- cell 1: DENY. In-scope guard, out-of-scope URL. Nothing is contacted.
+    g = ScopeGuard(scope=Scope(in_scope=("127.0.0.1",)))
+    if g.get("http://denied.invalid/") is not None:
+        out.append("DENY did not return None")
+
+    # --- cell 2: TRANSPORT. In scope, but nothing is listening on that port.
+    #     A closed port is chosen over an unroutable address so the failure is
+    #     immediate and cannot be confused with a timeout.
+    sk = socket.socket()
+    sk.bind(("127.0.0.1", 0))
+    dead_port = sk.getsockname()[1]
+    sk.close()                                  # port now in scope AND closed
+    try:
+        g.get("http://127.0.0.1:%d/" % dead_port, timeout=5)
+        out.append("transport failure returned instead of raising")
+    except TransportError:
+        pass                                    # correct
+    except Exception as e:
+        out.append("transport raised %s, expected TransportError" % type(e).__name__)
+
+    # --- cell 3: the two must reach core.net callers as DIFFERENT types.
+    saved = net._GUARD
+    try:
+        net.configure(Scope(in_scope=("127.0.0.1",)))
+        try:
+            net.get("http://denied.invalid/")
+            out.append("net.get: DENY did not raise")
+        except net.ScopeError:
+            pass
+        except Exception as e:
+            out.append("net.get DENY raised %s, expected ScopeError" % type(e).__name__)
+
+        try:
+            net.get("http://127.0.0.1:%d/" % dead_port, timeout=5)
+            out.append("net.get: dead host did not raise")
+        except net.ScopeError:
+            # THE REGRESSION. A down host must never present as a boundary breach.
+            out.append("net.get: dead host raised ScopeError - the alarm fires for the ordinary case")
+        except TransportError:
+            pass
+        except Exception as e:
+            out.append("net.get transport raised %s" % type(e).__name__)
+    finally:
+        net._GUARD = saved
+
+    # --- cell 4: the message must not hedge about which one happened.
+    try:
+        net_msg = ""
+        saved2 = net._GUARD
+        net.configure(Scope(in_scope=("127.0.0.1",)))
+        try:
+            net.get("http://denied.invalid/")
+        except net.ScopeError as e:
+            net_msg = str(e)
+        finally:
+            net._GUARD = saved2
+        if "transport" in net_msg.lower():
+            out.append("DENY message still hedges: %r" % net_msg)
+    except Exception as e:
+        out.append("cell 4 raised %s" % type(e).__name__)
+
+    # True, not None: None is SKIP in this harness, so a test that returns None on
+    # success can never report assurance - it only ever SKIPs or FAILs. Mine did
+    # exactly that for one run and I read "493 passed" as covering it.
+    return True if not out else "; ".join(out)
+
+
+run_test("Net: a DENY and a dead host are different outcomes", _net_deny_vs_transport_are_distinct)
 run_test("Net: redirect method/body/header behaviour (real requests)", _net_redirect_behaviour)
 run_test("Net: a denied redirect destination is never contacted", _net_denied_redirect_never_contacted)
 
