@@ -1200,7 +1200,29 @@ class UltronAgent:
         try:
             from playwright.sync_api import sync_playwright
             with sync_playwright() as p:
-                browser = p.chromium.launch(headless=True)
+                # 2026-09-28: Playwright's bundled Chromium CANNOT be downloaded in this
+                # environment - egress is allowlisted and cdn.playwright.dev /
+                # storage.googleapis.com both return 400 while pypi.org returns 200. That
+                # left this oracle permanently SKIPped, which is why a working execution
+                # test was believed not to exist (EVAL_SET C-11 inverted).
+                #
+                # Fall back to a browser already installed on the machine. Chrome and Edge
+                # are both Chromium and Playwright drives them natively via `channel`, so
+                # this needs no download at all. Bundled build stays FIRST because it is
+                # the version Playwright pins and tests against.
+                browser = None
+                _why = []
+                for _kw in ({}, {"channel": "chrome"}, {"channel": "msedge"}):
+                    try:
+                        browser = p.chromium.launch(headless=True, **_kw)
+                        break
+                    except Exception as _e:              # noqa: BLE001
+                        _why.append("%s: %s" % (_kw.get("channel", "bundled"),
+                                                str(_e).splitlines()[0][:80]))
+                if browser is None:
+                    return {"success": False,
+                            "message": "no usable Chromium: " + " | ".join(_why),
+                            "data": {"findings": []}}
                 ctx = browser.new_context()
                 if cookie:
                     try:

@@ -6463,11 +6463,15 @@ def _net_redirect_behaviour():
             # credential to the pre-push disclosure scanner - it blocked the first
             # push over "Bearer SECRET", correctly, and the hook stays useful.
             _auth = "Auth" + "orization"
+            # 20s, not 5: this section now runs after the headless-browser tests and
+            # a loaded machine made hop 2 time out. The guard reports a timeout the
+            # same way it reports a DENY - as None - so a slow box looked exactly
+            # like a refused redirect.
             g.post("http://127.0.0.1:%d/start" % port_a, data=b"secret=1",
                    headers={_auth: "fixture-value-not-a-credential",
                             "X-Bugcrowd-Ninja": "marker",
                             "Accept": "*/*"},
-                   timeout=5)
+                   timeout=20)
         except Exception as e:
             results.append("%d: request raised %s" % (code, type(e).__name__))
         finally:
@@ -6475,7 +6479,12 @@ def _net_redirect_behaviour():
                 _srv.shutdown(); _srv.server_close()
 
         if got.get("method") != want_method:
-            results.append("%d: method was %r, expected %r" % (code, got.get("method"), want_method))
+            # the guard logs a transport error distinctly from a DENY; surface it,
+            # otherwise a flake reports only "method was None" and costs a repro.
+            _trail = "; ".join("hop%d %s %s" % (d.hop, "ALLOW" if d.allowed else "DENY", d.reason[:60])
+                               for d in g.decisions) or "no decisions logged"
+            results.append("%d: method was %r, expected %r [%s]"
+                           % (code, got.get("method"), want_method, _trail))
         if got.get("body", b"") != want_body:
             results.append("%d: body was %r, expected %r" % (code, got.get("body"), want_body))
         h = got.get("headers", {})
