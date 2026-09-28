@@ -996,6 +996,34 @@ occurrences (13 vs 8).**
   Nothing about the wrong line looked wrong.
 - **WHO CAUGHT IT** Kiran, immediately, from one sentence of my summary.
 
+### I-33 · I diagnosed a test failure three times without reading what the failure said
+- **CLASS** instrument
+- **WHY** 2026-09-28. `Net: redirect method/body/header behaviour` failed intermittently with
+  `method was None, expected 'GET'`. I called it flaky and "fixed" it **three** times: a shared
+  receiver across iterations, then a `0.4s` sleep replaced by a readiness poll, then a `5s` timeout
+  raised to `20s`. Every one of those was a real plausible cause. None of them was THE cause. The
+  actual cause was in the test's own redirector: it answered a POST and closed **without draining
+  the request body**, so Windows reset the socket — `ConnectionAbortedError [WinError 10053]`.
+- **WHAT MADE IT INVISIBLE** `ScopeGuard` reports a transport error and a DENY **the same way** —
+  as `None`. So an aborted socket was indistinguishable from a correctly refused redirect, and the
+  only visible symptom was `method was None`, which points at the guard. Three times I read that
+  symptom as evidence about the system under test. It was evidence about nothing.
+- **WHAT ACTUALLY FOUND IT** not a repro, not a fourth guess — **printing the guard's own decision
+  log on failure**. It already recorded `hop0 DENY transport error: ConnectionAbortedError`. The
+  data had been there the whole time and no code path showed it to me. First failure after I
+  surfaced it named the cause exactly; the fix passed at 2120ms.
+- **CATCH** an intermittent failure gets **one** guess. If the second fix does not hold, stop
+  fixing and make the failure self-explaining instead — the cost of the trail is minutes and it
+  pays on the first occurrence. And when two different conditions collapse to the same return value
+  (`None` for both "refused" and "the socket died"), that is not a reporting detail, it IS the
+  defect: **a diagnostic that cannot distinguish a control failure from a real negative is
+  [[pb0767]] wearing a different coat.**
+- **THE PART THAT SHOULD NOT BE COMFORTABLE** I was willing to re-attribute the same failure three
+  times rather than spend one turn asking what it actually said. "Flaky" is the word I reach for
+  when I want to stop investigating and still feel finished.
+- **WHO CAUGHT IT** self — but only on the fourth pass, and only after building the instrument I
+  should have built on the second.
+
 ## 📋 HUNT #42 CLOSE-OUT AUDIT — DAY 2 (2026-09-27), §7 mandated
 
 The 2026-09-23 audit below covered days 1-6. This covers the final day, on which 1 report was
