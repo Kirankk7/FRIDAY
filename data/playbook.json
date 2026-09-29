@@ -10401,6 +10401,48 @@
    "source": "repo-screen-2026-09-17",
    "validated": "",
    "technique": "Scope enforcement has two jobs, not one: prevent unauthorised outbound activity, AND accurately record what activity occurred. Test the second separately. After any guarded run, diff the audit log against the actual destinations contacted; every hop, retry and redirect must appear as its own row with its own decision."
+  },
+  {
+   "id": "pb0779",
+   "class": "bfla",
+   "stack": "any",
+   "difficulty": "easy",
+   "technique": "A BUSINESS-LOGIC ERROR IS PROOF YOU PASSED THE AUTH LAYER. The tell for a missing authorization check is NOT a 200 - it is a 400/500 carrying a real VALIDATION message. `{\"message\":\"account_id is required\"}` means the request sailed past the auth middleware and landed in application code; only `401/403` means a gate stopped it. Programmes ship whole controller families this way: the public controllers (login, payments, orders) get the policy, the internal-sounding ones (Jobs, Notification, Support, Admin) never had the middleware applied. Pair every probe with a KNOWN-GATED endpoint on the same host as the contrast control - same API, same environment, and the difference in refusal shape IS the finding.",
+   "payload": "unauthenticated request with a deliberately INVALID body; compare refusal shape vs a known-gated route",
+   "tell": "anonymous request returns a field-level validation error instead of an auth rejection. Also: a static shared secret checked inside the handler is not authentication - no identity, no audit trail, usually no lockout",
+   "source": "medium writeup batch 2026-09-29 (Rohith S, $400 ASP.NET Core internal controllers)",
+   "ref": "",
+   "validated": false,
+   "verify": "confirm a properly-gated route on the SAME host returns 401/403 to the same client",
+   "added": "2026-09-29"
+  },
+  {
+   "id": "pb0780",
+   "class": "recon",
+   "stack": "any",
+   "difficulty": "medium",
+   "technique": "A PROXY BLOCKLIST COVERS THE FAMOUS PATH, NOT THE ALTERNATE TRANSPORT TO THE SAME CAPABILITY. When a reverse proxy/WAF 403s the well-known admin paths, ask which OTHER interface reaches the same backend: a CLI endpoint, an RPC transport, a legacy handler, a mobile/API twin, a websocket. Observed: /manage and /script returned 403 while /cli was untouched and carried the identical privileged surface. The blocklist is written from a list of KNOWN URLs, so it inherits whatever that list forgot - the same failure as testing from an implementation's own route table.",
+   "payload": "enumerate transports, not paths: <base>/cli, /rpc, /soap, /graphql, /jsonrpc, legacy handler names",
+   "tell": "some admin paths 403 while the app still exposes a second interface to the same functions",
+   "source": "medium writeup batch 2026-09-29 (Rohith S, Jenkins CVE-2024-23897)",
+   "ref": "",
+   "validated": false,
+   "verify": "prove the alternate transport reaches the SAME capability, not merely that it returns 200",
+   "added": "2026-09-29"
+  },
+  {
+   "id": "pb0781",
+   "class": "bfla",
+   "stack": "any",
+   "difficulty": "easy",
+   "technique": "RANK ENDPOINTS BY WHAT THEY DO, NOT BY WHETHER THEY ANSWER. Authorization sweeps default to breadth - every route, same probe - which spends the budget on read endpoints. Invert it: find the endpoint with the most dangerous VERB first (executes a query, triggers a job, dispatches a notification, voids an invoice, resets an account) and test the auth boundary THERE. The question is not 'can I reach this?' but 'what can this DO if I should not be able to reach it?'",
+   "payload": "n/a - ordering heuristic for an authz sweep",
+   "tell": "a handler whose name contains exec/run/trigger/dispatch/send/void/reset/regenerate/sync",
+   "source": "medium writeup batch 2026-09-29 (Rohith S, $5000 privileged backend function)",
+   "ref": "",
+   "validated": false,
+   "verify": "the capability must be demonstrable on an object we own before any cross-principal claim",
+   "added": "2026-09-29"
   }
  ]
 }
