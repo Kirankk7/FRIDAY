@@ -69,8 +69,8 @@ FIXTURE_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__fil
 CONTRACTS = {
     "secret_scan": (
         "secret-positive-v1.txt",
-        [(("AKIA", "IOSFODNN7EXAMPLE"), "AKIA" + r"[0-9A-Z]{16}(?![0-9A-Za-z])"),
-         (("GOCSPX", "-"),              "GOCSPX" + r"-[\w-]{20,}"),
+        [(("AKIA", "QZ7X4M2NKP9WVT3B"), "AKIA" + r"[0-9A-Z]{16}(?![0-9A-Za-z])"),
+         (("GOCSPX", "-"),              "GOCSPX" + r"-[\w-]{28}(?![\w-])"),   # exactly 28: a LOOSER check here accepted a 23-char fixture and blamed the scanner
          (("ghp", "_"),                 "ghp" + r"_[\w]{20,}"),
          (("AIza", "Sy"),               "AIza" + r"[0-9A-Za-z_\-]{35}(?![0-9A-Za-z_\-])"),   # <- caught the 38-char bug
          (("xoxb", "-"),                "xoxb" + r"-[\w-]{20,}"),

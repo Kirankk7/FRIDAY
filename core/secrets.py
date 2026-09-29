@@ -44,6 +44,11 @@ _SECRET_PATTERNS = [
     ("AWS session/temp key",     re.compile(r"ASIA[0-9A-Z]{16}")),
     ("Google API key",           re.compile(r"AIza[0-9A-Za-z\-_]{35}")),
     ("Google OAuth client id",   re.compile(r"[0-9]+-[0-9A-Za-z_]{32}\.apps\.googleusercontent\.com")),
+    # 2026-09-29: the CLIENT SECRET had no rule in THIS list while the client ID did. Note the
+    # hunting scanner does not read this list at all - it loads data/secret_patterns.json, which
+    # already had a correct GOCSPX rule. Two tables, and the visible one is not the live one.
+    # Length is 28 exactly, matching the corpus and the real credential format.
+    ("Google OAuth client secret", re.compile(r"GOCSPX-[0-9A-Za-z_-]{28}")),
     ("Slack token",              re.compile(r"xox[baprs]-[0-9A-Za-z-]{10,48}")),
     ("Slack webhook",            re.compile(r"https://hooks\.slack\.com/services/T[0-9A-Z]+/B[0-9A-Z]+/[0-9A-Za-z]+")),
     ("Stripe live secret key",   re.compile(r"[sr]k_live_[0-9a-zA-Z]{20,40}")),
@@ -63,7 +68,12 @@ _SECRET_PATTERNS = [
 # route, which we found by hand because this regex could not). jsluice and GhostJS are BOTH blind to
 # template literals; this is the one JS-extraction case where we now beat them.
 # FP check before landing: 37 real files / 223 KB -> +9 endpoints, 0 junk, 0 lost.
-_ENDPOINT_RE = re.compile(r"""["'`](/[a-zA-Z0-9_][a-zA-Z0-9_./?=&%:{}$-]{2,120})["'`]""")
+# 2026-09-29: the old class handled `/api/v2/entity/${id}` (path FIRST) but NOT
+# `${base}/api/v1/thing` (VARIABLE first) - and the comment above claimed template-literal support
+# outright, so the gap read as a solved problem. The control caught it: the fixture's template line
+# is exactly the variable-prefixed form. An optional ${...} prefix is now allowed after the
+# delimiter; the path itself must still start with `/`, so the FP surface does not widen.
+_ENDPOINT_RE = re.compile(r"""["'`](?:\$\{[^}]{1,40}\})?(/[a-zA-Z0-9_][a-zA-Z0-9_./?=&%:{}$-]{2,120})["'`]""")
 
 # Sensitive files the caller GETs on the base host; (path, [content signatures that confirm exposure]).
 SENSITIVE_PATHS = [

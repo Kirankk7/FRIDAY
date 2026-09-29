@@ -57,6 +57,70 @@ def _params_from_request(raw_req: str, url: str) -> set:
     return params
 
 
+def parse_har(path: str) -> dict:
+    """Parse a browser HAR export -> the SAME inventory shape as parse_export.
+
+    HARs are our primary capture format (DevTools, not Burp) and every hunt was
+    re-parsing them with a throwaway script. Reusing `_build_inventory` means a HAR
+    and a Burp export cannot drift into two different schemas.
+
+    ⚠️ A HAR records what the BROWSER did. That is a SAMPLE of the surface, never
+    its ceiling, so any number taken from here is a floor: say `n observed`, never
+    `n of n`. The bundles are the denominator; this is discovery.
+    """
+    import json as _json
+
+    path = os.path.expanduser(path)
+    if not os.path.exists(path):
+        return {"success": False, "message": "I couldn't find that HAR.", "data": {}}
+    try:
+        with open(path, encoding="utf-8") as fh:
+            entries = _json.load(fh)["log"]["entries"]
+    except Exception as e:
+        return {"success": False, "message": f"That doesn't look like a HAR: {str(e)[:60]}", "data": {}}
+
+    records = []
+    for en in entries:
+        req, res = en.get("request", {}), en.get("response", {})
+        url = (req.get("url") or "").strip()
+        if not url:
+            continue
+        # Rebuild raw messages so _params_from_request and the auth tagger see the
+        # same text they already see for Burp items.
+        rh = "\r\n".join("%s: %s" % (h.get("name", ""), h.get("value", ""))
+                         for h in req.get("headers", []))
+        rbody = (req.get("postData") or {}).get("text", "") or ""
+        sh = "\r\n".join("%s: %s" % (h.get("name", ""), h.get("value", ""))
+                         for h in res.get("headers", []))
+        sbody = (res.get("content") or {}).get("text", "") or ""
+        records.append({
+            "url": url,
+            "method": req.get("method", "GET"),
+            "status": str(res.get("status", "")),
+            "request": "%s %s HTTP/1.1\r\n%s\r\n\r\n%s" % (req.get("method", "GET"), url, rh, rbody),
+            "response": "HTTP/1.1 %s\r\n%s\r\n\r\n%s" % (res.get("status", ""), sh, sbody),
+            "mime": (res.get("content") or {}).get("mimeType", ""),
+            "req_body": rbody,
+            "res_body": sbody,
+            "started": en.get("startedDateTime", ""),
+            "time_ms": en.get("time", 0),
+        })
+
+    if not records:
+        return {"success": False, "message": "No entries in that HAR.", "data": {}}
+
+    inv = _build_inventory(records)
+    inv["items"] = len(entries)
+    inv["records"] = records          # callers need bodies for the input inventory
+    tags = inv["tags"]
+    tagbits = [f"{len(v)} {k}" for k, v in tags.items() if v]
+    msg = (f"Ingested {len(entries)} HAR entries: {len(inv['endpoints'])} unique endpoints "
+           f"across {len(inv['hosts'])} host(s), {len(inv['params'])} parameters. "
+           f"Methods: {', '.join(f'{m} x{c}' for m, c in sorted(inv['methods'].items()))}."
+           + (f" Tagged: {', '.join(tagbits)}." if tagbits else ""))
+    return {"success": True, "message": msg, "data": inv}
+
+
 def parse_export(path: str) -> dict:
     """Parse a Burp XML export -> endpoint inventory."""
     path = os.path.expanduser(path)
