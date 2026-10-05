@@ -1024,7 +1024,7 @@ occurrences (13 vs 8).**
 - **WHO CAUGHT IT** self — but only on the fourth pass, and only after building the instrument I
   should have built on the second.
 
-### I-34 · SEVEN wrong-shaped instruments in one hunt — the controls carried it, not my test design
+### I-34 · EIGHT wrong-shaped instruments in one hunt — the controls carried it, not my test design
 - **CLASS** instrument
 - **WHY** Hunt #43 (a secrets-management SaaS), 2026-10-05. In one session I built seven probes whose SHAPE was wrong,
   each producing a plausible result that was false:
@@ -1041,12 +1041,26 @@ occurrences (13 vs 8).**
      synced to the mirror**, live for ~40 minutes.
   6. POST batch sent with no `_csrf` -> four cells unreadable.
   7. `SPA shell?` detector tested for `/public/assets/` after the build changed asset paths.
+  8. 🔴 **The inverse of #5, found at close-out.** A write landed; my state read (`for_import`) returned
+     nothing for that object, so I told the operator "the write did not persist". The server-rendered
+     hydration payload then showed the object present, populated, with a fresh `updatedAt`. **`for_import`
+     is a PROJECTION — it does not carry every field or every object.** I read one reader's silence as
+     state, which is the same error as #5 with the trust pointed the other way.
 - **THE COMMON SHAPE** every one was a BOOLEAN derived from a string match or a response field,
   never from the raw artefact. Each took seconds to write and each was wrong in a way that LOOKED
   like a result.
 - **CATCH** `#5` gives the rule, and it generalises:
   > **An echoed field is the server saying what it CLAIMS it did. Only a SEPARATE READ shows what it
   > DID. The write response and the state read must come from different endpoints.**
+- **AND `#8` gives its mirror image, which cost a wrong statement to the operator:**
+  > **ABSENCE FROM A PROJECTION IS NOT ABSENCE FROM STATE.** A reader that returns a SUBSET of fields
+  > can only be used to confirm presence, never to prove discard. To prove a field was discarded you
+  > need a reader that is documented or demonstrated to carry that field — otherwise the verdict is
+  > UNREADABLE. Two readers disagreeing is not ambiguity: the one that SHOWS the object wins.
+- **WHAT ACTUALLY WORKED, all eight times:** printing the RAW BYTES around the marker. Four of the eight
+  died the moment raw context was printed instead of a boolean. The close-out verdict that mattered
+  (`<`-escaping at the JSON serialiser inside a nonce'd module script) was unreadable as a boolean
+  and obvious as 300 bytes of context.
   And for detectors: **print the raw bytes around a hit before naming it.** Four of the seven died
   the moment raw context was printed.
 - **WHO CAUGHT IT** six self-caught, within minutes, by controls or raw output.

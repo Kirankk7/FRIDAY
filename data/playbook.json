@@ -10443,6 +10443,48 @@
    "validated": false,
    "verify": "the capability must be demonstrable on an object we own before any cross-principal claim",
    "added": "2026-09-29"
+  },
+  {
+   "id": "pb0782",
+   "class": "instrument",
+   "stack": "any",
+   "difficulty": "low",
+   "technique": "Absence from a projection is not absence from state. A reader returning a SUBSET of fields can confirm presence but can never prove discard; to prove a field was discarded, use a reader demonstrated to carry that field, else the verdict is UNREADABLE. When two readers disagree, the one that SHOWS the object wins.",
+   "payload": "write field X -> read via projection A (silent) -> read via server-rendered hydration payload (object present, fresh updatedAt)",
+   "tell": "projection omits the object entirely while a second reader shows it populated",
+   "source": "own hunt",
+   "ref": "hunt #43 close-out, EVAL_SET I-34 #8",
+   "validated": true,
+   "verify": "confirm the chosen reader carries the field on a KNOWN-set control object before trusting its silence",
+   "added": "2026-10-05"
+  },
+  {
+   "id": "pb0783",
+   "class": "xss",
+   "stack": "ssr json-in-script",
+   "difficulty": "low",
+   "technique": "A stored field reflected into a server-rendered inline <script> is a JS-context sink, not a DOM-text one. Judge it on raw bytes: unicode-escaping < and > as </> at the JSON serialiser is the canonical </script>-breakout defence. Escaping quotes alone is not.",
+   "payload": "store <tag>MARKER</tag> in the field, then read 300 raw bytes either side of MARKER in the inline script AND in the raw server HTML",
+   "tell": "\"field\":\"<tag>MARKER</tag>\" = enforced; literal < inside the script string = breakout candidate",
+   "source": "own hunt",
+   "ref": "hunt #43 class 4 close",
+   "validated": true,
+   "verify": "fetch(location.href) and locate the marker in the SERVER HTML too - same bytes proves server-side encoding rather than post-hoc framework escaping",
+   "added": "2026-10-05"
+  },
+  {
+   "id": "pb0784",
+   "class": "xss",
+   "stack": "html",
+   "difficulty": "low",
+   "technique": "A <textarea> hit is not evidence of escaping. Textarea content is RCDATA, so tags inside it NEVER parse as elements regardless of encoding. The only decisive probe for that sink is a </textarea> breakout.",
+   "payload": "</textarea><zqc>MARKER</zqc>",
+   "tell": "querySelector returns nothing for a marker sitting in a textarea even when the field is unescaped",
+   "source": "own hunt",
+   "ref": "hunt #43 - nearly recorded as ENFORCED",
+   "validated": true,
+   "verify": "identify the PARENT element of the reflection before choosing the probe shape",
+   "added": "2026-10-05"
   }
  ]
 }
