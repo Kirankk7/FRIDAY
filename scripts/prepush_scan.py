@@ -63,15 +63,23 @@ def _base_ref(explicit: str = "") -> str:
     return ""        # nothing pushed yet -> scan the whole history
 
 
-def _target_names() -> list:
-    """Program/host names from the gitignored .hunt_targets (never hardcoded — see module docstring)."""
-    root = _git("rev-parse", "--show-toplevel").strip() or "."
-    path = os.path.join(root, ".hunt_targets")
-    if not os.path.exists(path):
-        return []
-    with open(path, encoding="utf-8", errors="replace") as f:
-        return [ln.strip() for ln in f
-                if ln.strip() and not ln.lstrip().startswith("#") and len(ln.strip()) >= 3]
+def _corpus_state():
+    """-> (names, ok, message). The corpus is GENERATED; verify it is current before trusting it.
+
+    This used to be a plain "if the file is missing, return []" - so a missing or stale corpus
+    meant zero names checked, the credential patterns still ran, and the scan exited 0 printing
+    CLEAN. Fail-OPEN on the half of the guard that matters most, and it is how three live
+    programmes stayed invisible while the hook reported "72 target name(s) checked".
+    """
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    try:
+        import gen_hunt_targets as gen
+    except Exception as exc:                                   # generator missing/broken
+        return [], False, "cannot import the corpus generator (%s)" % exc
+    ok, msg = gen.check()
+    if not ok:
+        return [], False, msg
+    return gen.names_from_registry(), True, msg
 
 
 _SELF = "scripts/prepush_scan.py"     # its own pattern definitions are patterns, not secrets
@@ -126,13 +134,26 @@ def main() -> int:
         print("pre-push scan: nothing outgoing.")
         return 0
 
-    names = _target_names()
+    names, corpus_ok, corpus_msg = _corpus_state()
+    if not corpus_ok:
+        print("")
+        print("  PUSH BLOCKED — the disclosure corpus cannot be trusted:")
+        print("")
+        print("    " + corpus_msg)
+        print("")
+        print("  A name corpus that cannot be verified complete turns this guard into")
+        print("  false assurance: it reports CLEAN while unable to see live programmes.")
+        print("  assurance: it would report CLEAN while being unable to see live programmes.")
+        print("    python scripts/gen_hunt_targets.py              # regenerate from the registry")
+        print("    python scripts/gen_hunt_targets.py --self-test  # prove it detects what it holds")
+        return 1
+
     hits = scan(diff, names)
     scope = f"{base}..HEAD" if base else "staged changes"
     if not hits:
-        print(f"pre-push scan: clean ({scope}"
-              + (f", {len(names)} target name(s) checked)." if names else
-                 ", no .hunt_targets file — credential patterns only)."))
+        print(f"pre-push scan: clean ({scope}) — {corpus_msg}")
+        print("  The count is meaningful: the corpus hash matches the registry that produced it,")
+        print("  so these are all currently-configured programmes, not whatever a stale file held.")
         print("  Still read the diff: grep cannot see prose, notes, or context only a human recognises.")
         return 0
 
