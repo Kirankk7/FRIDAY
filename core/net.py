@@ -101,6 +101,22 @@ def _require() -> ScopeGuard:
     return _GUARD
 
 
+
+def _why_denied(guard, since: int, url: str) -> str:
+    """Name the hop that was actually refused, not the URL we started from.
+
+    MEASURED 2026-09-29: an in-scope host whose redirect left scope reported
+    "DENY: https://<in-scope-host>/", which reads as "your scope list is wrong".
+    The real event was hop 1 leaving for a third-party IdP - the guard working
+    exactly as intended. A refusal that misnames its own cause costs a repro every
+    time, the same way collapsing DENY and transport error into one None did.
+    """
+    for d in reversed(guard.decisions[since:] or guard.decisions[-4:]):
+        if not d.allowed:
+            return "DENY at hop %d: %s (%s) [started from %s]" % (d.hop, d.url, d.reason, url)
+    return "DENY: %s (no decision recorded)" % url
+
+
 def get(url: str, headers: dict[str, str] | None = None, timeout: float = 20.0,
         context=None):
     """Guarded GET. Returns (final_url, status, body, chain).
@@ -112,9 +128,10 @@ def get(url: str, headers: dict[str, str] | None = None, timeout: float = 20.0,
     fires for the ordinary case gets ignored.
     """
     g = _require()
+    before = len(g.decisions)
     out = g.get(url, headers=headers, timeout=timeout, context=context)
     if out is None:
-        raise ScopeError(f"DENY: {url}")
+        raise ScopeError(_why_denied(g, before, url))
     return out
 
 
@@ -126,9 +143,10 @@ def post(
 ):
     """Guarded POST. ScopeError on DENY, TransportError if it never completed."""
     g = _require()
+    before = len(g.decisions)
     out = g.post(url, data=data, headers=headers, timeout=timeout)
     if out is None:
-        raise ScopeError(f"DENY: {url}")
+        raise ScopeError(_why_denied(g, before, url))
     return out
 
 

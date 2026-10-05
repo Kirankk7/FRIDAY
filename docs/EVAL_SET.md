@@ -1024,6 +1024,42 @@ occurrences (13 vs 8).**
 - **WHO CAUGHT IT** self — but only on the fourth pass, and only after building the instrument I
   should have built on the second.
 
+### I-34 · SEVEN wrong-shaped instruments in one hunt — the controls carried it, not my test design
+- **CLASS** instrument
+- **WHY** Hunt #43 (a secrets-management SaaS), 2026-10-05. In one session I built seven probes whose SHAPE was wrong,
+  each producing a plausible result that was false:
+  1. "blind oracle" — searched for a secret VALUE the endpoint never returns by design (`value:null`,
+     `revealStatus:UNREVEALED`). Nearly recorded the oracle as blind.
+  2. POST sent to a GET+query reveal path -> recorded the 404 as a refusal.
+  3. `secrets/referenceable` GET returned the SPA shell -> lane logged as probed when it was not.
+  4. HTML-injection FALSE POSITIVE: tested `marker in body`, but the marker was alphanumeric and
+     survived percent-encoding inside an `og:url` meta tag. **A marker that survives the encoding you
+     are testing for cannot detect that encoding's absence.**
+  5. 🔴 **`visType` — the costly one.** The write response echoed `visType:0`, so I recorded
+     "DISCARDED — mass assignment ENFORCED". A later `for_import` read showed `rawVisibility:
+     "restricted"`: the field had PERSISTED. **A wrong ENFORCED verdict, written to the matrix and
+     synced to the mirror**, live for ~40 minutes.
+  6. POST batch sent with no `_csrf` -> four cells unreadable.
+  7. `SPA shell?` detector tested for `/public/assets/` after the build changed asset paths.
+- **THE COMMON SHAPE** every one was a BOOLEAN derived from a string match or a response field,
+  never from the raw artefact. Each took seconds to write and each was wrong in a way that LOOKED
+  like a result.
+- **CATCH** `#5` gives the rule, and it generalises:
+  > **An echoed field is the server saying what it CLAIMS it did. Only a SEPARATE READ shows what it
+  > DID. The write response and the state read must come from different endpoints.**
+  And for detectors: **print the raw bytes around a hit before naming it.** Four of the seven died
+  the moment raw context was printed.
+- **WHO CAUGHT IT** six self-caught, within minutes, by controls or raw output.
+  🔴 **#5 was caught only because Kiran asked "are you sure the hunt is closed...double check bro".**
+  Without that question a false ENFORCED stays in the record permanently. The hunt's own matrix said
+  `FULLY CLOSED 0/11` and `phase: unauth recon` (stale by hours) at that moment — I had synced it
+  twice in that state.
+- **THE UNCOMFORTABLE READING** instrument quality was the limiting factor of this hunt, not the
+  target's difficulty. The target is well built, but I could not have told the difference between
+  "well built" and "my probe was malformed" without the controls. **A hunt where 7 instruments are
+  wrong and 0 findings emerge cannot distinguish a fortress from a blind spot** — the two look
+  identical from the inside.
+
 ## 📋 HUNT #42 CLOSE-OUT AUDIT — DAY 2 (2026-09-27), §7 mandated
 
 The 2026-09-23 audit below covered days 1-6. This covers the final day, on which 1 report was
