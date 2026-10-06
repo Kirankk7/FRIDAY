@@ -15,11 +15,14 @@ cannot bypass invokes it at the transition where violation matters.
 ## ENFORCEMENT OWNERS THAT ACTUALLY EXIST
 
 ```
-.git/hooks/pre-push        the only unavoidable automatic entry point in the repository
+engine repo   .git/hooks/pre-push      disclosure guard, corpus completeness verified
+mirror repo   .git/hooks/pre-commit    closure gate (added 2026-10-06)
 ```
 
-That is the complete list. There are no pre-commit hooks, no `.claude/hooks`, no settings-level
-hooks. Everything else in the table below is either invoked by convention or by memory.
+Two. Everything else in the table below is invoked by convention or by memory. Note WHERE the
+second one lives: coverage matrices are gitignored in the engine repo and tracked in the private
+mirror, so the mirror commit is the transition at which a closure claim becomes durable. A gate
+placed in the engine repo would have been correct-looking and never fired.
 
 ## P0 — hard invariants. Violation must block.
 
@@ -33,7 +36,7 @@ hooks. Everything else in the table below is either invoked by convention or by 
 | 6 | Never buy a paid plan to reach a lane | — | — | ❌ memory only |
 | 7 | No DoS, brute force, spam, or social engineering | — | — | ❌ memory only, and programme-specific |
 | 8 | HARs and session artefacts in the scratchpad only, deleted at hunt close | `scripts/prune_bundles.py` covers the `.js`/`.map` keep-pile only | prints intruders, exits non-zero — **and nothing runs it** | ⚠️ **detects, never fires** |
-| 9 | No class or hunt called CLOSED without a stated denominator | — | — | ❌ memory only — **this is the P0-B target** |
+| 9 | No class or hunt called CLOSED without a stated denominator | **mirror pre-commit** → `scripts/closure_gate.py` | exit 1; requires a proof carrying per class a verdict from the fixed vocabulary, a stated denominator, and `closure_delta` = 0 from the final review | ✅ **real** (2026-10-06) |
 
 **Note A.** 19 modules import an HTTP library directly rather than going through `core/net.py`,
 so the guard is a convention rather than a choke point. Inspected: the target-reaching ones
@@ -70,7 +73,7 @@ and that difference is the whole point of this document.
 
 ```
 rules enumerated                     22
-enforced by something unavoidable     1      (#2, pre-push)
+enforced by something unavoidable     2      (#2 pre-push, #9 mirror pre-commit)
 structural but bypassable             1      (#1, scope guard)
 detects but nothing invokes it        2      (#8, #17)
 user-invoked by design                1      (#14)
@@ -78,9 +81,10 @@ structurally unenforceable            1      (#16, operator-paste boundary)
 enforced by model memory alone        16
 ```
 
-**16 of 22 rules have no enforcement owner.** And the four that drifted most in the last hunt —
-mirror sync, matrix update, post-hunt retro, state the denominator — are all in that 16. That is
-not a coincidence worth noting; it is the entire finding.
+**15 of 22 rules have no enforcement owner.** Of the four that drifted most in the last hunt —
+mirror sync, matrix update, post-hunt retro, state the denominator — one now has an owner and
+three do not. That the drifting four were all in the memory column is not a coincidence worth
+noting; it is the entire finding.
 
 ## WHAT THIS CHANGES
 
@@ -92,9 +96,11 @@ fail at a measurable rate. Three consequences:
    records this: *the signature existed and did not change the behaviour.*
 2. **An owner must be named before a rule is written down.** A new rule whose enforcement field
    reads "memory" is a note, and should be filed as one rather than as doctrine.
-3. **The next build is the one that moves #9 out of the memory column** — a pre-commit hook that
-   refuses a matrix marked closed unless a closure proof exists beside it and passes. That is
-   available today because `git` is the one place the model cannot route around.
+3. **#9 moved out of the memory column on 2026-10-06**, because `git` is the one place the model
+   cannot route around. The next candidates by observed damage are #11 (matrix updated after
+   every test) and #12 (mirror sync) — both are also `git`-adjacent, so both are reachable by
+   the same method. #3 and #8 need a different answer: they have working detectors that nothing
+   invokes, so the build there is a caller, not a checker.
 
 ## HOW TO REGENERATE THIS
 
