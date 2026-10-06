@@ -134,7 +134,49 @@ def check_proof(proof: dict, claim):
     for key in ("credentials_removed", "session_artefacts_removed", "bundle_carveout_ok"):
         if hyg.get(key) is not True:
             bad.append("hygiene.%s is not true - closure is blocked until the workspace is clean" % key)
+
+    # The fields above only prove a CLAIM was made. The first proof written under this gate
+    # asserted credentials_removed: true while the credential file was still on disk, and the
+    # gate passed it. So verify the one hygiene fact that is mechanically checkable.
+    bad += _unswept_scratch(proof)
     return bad
+
+
+def _unswept_scratch(proof):
+    """-> [reasons] if credential-shaped files survive in this hunt's scratch directory.
+
+    Deliberately narrow. It cannot see a HAR on someone's Desktop or a secret pasted in a note,
+    so it is not a hygiene audit - it closes the one gap that was demonstrated: a proof claiming
+    a clean workspace while the file it names is still there.
+    """
+    import glob
+    target = str(proof.get("target") or proof.get("scratch") or "").strip()
+    if not target:
+        return []                      # nothing named -> nothing mechanically checkable
+    roots = [os.path.join("D:/JARVIS/workspace/scratch", target),
+             os.path.join("workspace/scratch", target)]
+    pats = ("*cred*", "*passw*", "*secret*", "*token*", "*.har")
+    # Dedupe on realpath, not on the relative name. The two roots above are the same directory
+    # by different spellings, so the first version counted every hit twice and reported "2 files"
+    # while naming one. A wrong count is its own defect (pb0712).
+    seen, found = set(), {}
+    for root in roots:
+        if not os.path.isdir(root):
+            continue
+        for pat in pats:
+            for hit in glob.glob(os.path.join(root, "**", pat), recursive=True):
+                real = os.path.realpath(hit)
+                if real in seen or not os.path.isfile(hit):
+                    continue
+                if "_tools" in hit.replace("\\", "/"):
+                    continue
+                seen.add(real)
+                found[real] = os.path.relpath(hit, root)
+    if found:
+        names = sorted(found.values())
+        return ["hygiene claims a clean workspace but %d credential-shaped file(s) remain in "
+                "scratch/%s: %s" % (len(names), target, ", ".join(names[:6]))]
+    return []
 
 
 def check_file(matrix: str):
