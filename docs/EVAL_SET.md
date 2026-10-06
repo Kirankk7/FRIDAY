@@ -1123,3 +1123,27 @@ signatures. Candidate remedy for the NEXT hunt, to be tested rather than assumed
 instruction that (a) names a credential/token, (b) mutates state, or (c) sends Kiran to a UI,
 re-read the relevant section of the target file FIRST, in that turn, not from memory.
 
+### Cross-cutting, 2026-10-06 — STATE PROMOTION WITHOUT EVIDENCE
+
+Six failures in one session, each previously filed under a different signature, all one shape:
+
+| observation | state it was promoted to | evidence that was missing |
+|---|---|---|
+| 3 reports filed | hunt closed | the matrix said FULLY CLOSED 2/11, surface not exhausted |
+| N pages queried | corpus complete | expected / attempted / succeeded / failed were never counted |
+| zero results from a source | source is clean | the source leg had never passed a positive control |
+| the rule is written down | the rule executes | 15 of 22 rules had no enforcement owner |
+| the test was performed | the matrix reflects it | nothing bound a test to a durable artefact |
+| the marker was reflected | it executes | no DOM-level execution oracle had been run |
+
+**The rule:** never promote an observation into a stronger state without the evidence that state
+requires. The tell is linguistic and reliable — the claim is exactly one noun stronger than the
+artefact behind it. *closed* vs *filed*. *complete* vs *queried*. *clean* vs *unqueried*.
+*enforced* vs *reflected*.
+
+**The check that works:** state the weaker fact and the missing evidence in the same sentence.
+"Three reports are filed and 264 of 270 fields are untested" cannot be mistaken for closure, while
+"the hunt is done, three reports filed" can. `pb0785`.
+
+Credit where due: the formulation came out of the operator's review loop, not from me — I had been
+fixing the six instances one at a time without naming what they shared.

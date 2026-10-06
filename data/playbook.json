@@ -10485,6 +10485,20 @@
    "validated": true,
    "verify": "identify the PARENT element of the reflection before choosing the probe shape",
    "added": "2026-10-05"
+  },
+  {
+   "id": "pb0785",
+   "class": "method",
+   "stack": "any",
+   "difficulty": "low",
+   "technique": "Never promote an observation into a stronger state without the evidence that state requires. Six measured instances in one day, all the same shape: N reports filed does not imply a hunt is closed; N pages queried does not imply a complete corpus; zero results does not imply clean; a rule existing does not imply it executed; a test happening does not imply the matrix reflects it; a reflection observed does not imply execution.",
+   "payload": "for each claimed state, name the evidence that state requires, then check it exists",
+   "tell": "the claim is one noun stronger than the artefact behind it - closed vs filed, complete vs queried, clean vs unqueried, enforced vs reflected",
+   "source": "own hunt",
+   "ref": "2026-10-06, six instances across one session",
+   "validated": true,
+   "verify": "state the weaker fact and the missing evidence in the same sentence; if that reads wrong, the promotion was unearned",
+   "added": "2026-10-06"
   }
  ]
 }
