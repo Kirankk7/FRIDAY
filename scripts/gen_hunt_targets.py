@@ -113,8 +113,62 @@ def check():
         absent = len(set(w.lower() for w in want_body) - set(b.lower() for b in body))
         return False, ("corpus body does not match the registry: %d name(s) missing, %d unknown "
                        "(hand-edited?) - regenerate" % (absent, extra))
-    return True, "corpus current: %d names, body verified against registry %s" % (
-        len(want_body), want[:12])
+    # Completeness. Everything above proves the corpus matches the REGISTRY; none of it
+    # proves the registry matches reality. A programme hunted but never registered hashes
+    # consistently and passes every check - the same blind spot one level up.
+    #
+    # The invariant that is actually mechanical: a hunt leaves artefact directories on
+    # disk, so anything with one must be registered. Starting a hunt without registering
+    # it now blocks the next push instead of going unnoticed for weeks.
+    unreg = unregistered_hunt_dirs()
+    if unreg:
+        # Printed by name on purpose: this output is a local hook message, never published,
+        # and the operator cannot act on a count.
+        return False, ("%d hunt artefact director%s on disk with no registry entry, "
+                       "register then regenerate: %s"
+                       % (len(unreg), "y" if len(unreg) == 1 else "ies",
+                          ", ".join(sorted(d[0] for d in unreg))))
+
+    return True, "corpus current: %d names, body verified, %d artefact dir(s) all registered" % (
+        len(want_body), _artefact_dir_count())
+
+
+_ARTEFACT_ROOTS = ("workspace/coverage", "workspace/scratch", "workspace/bundles")
+
+
+def _artefact_dirs():
+    """Directory names under the hunt artefact roots. Leading-underscore dirs are tooling
+    (_tools, _scripts, _screening), not programmes."""
+    found = set()
+    for rel in _ARTEFACT_ROOTS:
+        d = os.path.join(ROOT, *rel.split("/"))
+        if not os.path.isdir(d):
+            continue
+        for name in os.listdir(d):
+            if os.path.isdir(os.path.join(d, name)) and not name.startswith("_"):
+                found.add(name)
+    return found
+
+
+def _artefact_dir_count():
+    return len(_artefact_dirs())
+
+
+def unregistered_hunt_dirs():
+    """-> [(dirname, root)] for artefact dirs with no registry entry under any spelling."""
+    known = set()
+    for n in names_from_registry():
+        low = n.lower()
+        known.update({low, low.replace("-", ""), low.replace("-", "_"),
+                      low.replace("_", ""), low.replace("_", "-")})
+    out = []
+    for name in sorted(_artefact_dirs()):
+        low = name.lower()
+        variants = {low, low.replace("-", ""), low.replace("-", "_"),
+                    low.replace("_", ""), low.replace("_", "-")}
+        if not (variants & known):
+            out.append((name, "artefact dir"))
+    return out
 
 
 # ---------------------------------------------------------------- self-test
