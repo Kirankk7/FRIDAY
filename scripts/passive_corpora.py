@@ -72,7 +72,7 @@ def wayback(host, max_pages=12):
         forms["limit"] = _cdx(host, "limit=100000")
     except Exception as exc:
         forms["limit"] = []
-        print("    wayback limit-form FAILED: %s" % exc)
+        _say("    wayback limit-form FAILED: %s" % exc)
 
     # The paginated form is a DIFFERENT index path, not the same query with an offset, which is
     # why it can return URLs the limit= form lacks (pb0759). It has to be driven properly:
@@ -86,7 +86,7 @@ def wayback(host, max_pages=12):
               "&showNumPages=true") % urllib.parse.quote(host, safe="")
         npages = int(_get(_u).strip() or 0)
     except Exception as exc:
-        print("    wayback showNumPages FAILED: %s" % exc)
+        _say("    wayback showNumPages FAILED: %s" % exc)
     # Page accounting, not a page count. "all N pages" is a COMPLETION claim and an artifact
     # that cannot show expected/attempted/successful/failed cannot make it. A run that walks
     # 219 of 227 pages successfully is PARTIAL, however useful the 219 were - and a failure
@@ -98,7 +98,7 @@ def wayback(host, max_pages=12):
         except Exception as exc:
             pages_fail += 1
             if pages_fail <= 3:
-                print("    wayback page=%d FAILED: %s" % (p, str(exc)[:60]))
+                _say("    wayback page=%d FAILED: %s" % (p, str(exc)[:60]))
         time.sleep(0.4)
     forms["paged"] = paged
     forms["_npages"] = npages
@@ -163,7 +163,7 @@ def urlscan(host, max_pages=20):
         try:
             data = json.loads(_get(q))
         except Exception as exc:
-            print("    urlscan FAILED: %s" % exc)
+            _say("    urlscan FAILED: %s" % exc)
             break
         if total is None:
             total = data.get("total")
@@ -208,12 +208,12 @@ def _cc_indexes(n=3):
     try:
         data = json.loads(_get("https://index.commoncrawl.org/collinfo.json"))
     except Exception as exc:
-        print("    commoncrawl collinfo FAILED: %s" % exc)
+        _say("    commoncrawl collinfo FAILED: %s" % exc)
         return []
     return [d["id"] for d in data[:n] if d.get("id")]
 
 
-def commoncrawl(host, n_idx=5, retries=2):
+def commoncrawl(host, n_idx=5, retries=1, timeout=45):
     """-> (kept, raw, dropped, idx_used, idx_tried). Exact-host filtered like every other leg.
 
     CC indexes 502 intermittently - probing five of them, two returned Bad Gateway while the
@@ -227,16 +227,30 @@ def commoncrawl(host, n_idx=5, retries=2):
         tried.append(idx)
         url = ("https://index.commoncrawl.org/%s-index?url=%s%%2F*&output=json"
                % (idx, urllib.parse.quote(host, safe="")))
-        txt = None
+        # 404 and 5xx are DIFFERENT ANSWERS and must not share a bucket. For a CC index query,
+        # 404 means "this index holds no records for this host" - a valid empty result that
+        # counts as ANSWERED. 502/504 mean the index was unavailable, which is unknown and
+        # counts as FAILED. Conflating them made a genuinely-empty corpus read as a coverage
+        # gap, so the run would mark itself PARTIAL forever and no count could ever be promoted
+        # to a denominator.
+        txt, empty = None, False
         for attempt in range(retries + 1):
             try:
-                txt = _get(url, timeout=120)
+                txt = _get(url, timeout=timeout)
                 break
             except Exception as exc:
+                code = getattr(exc, "code", None)
+                if code == 404:
+                    empty = True
+                    break
                 if attempt == retries:
-                    print("    commoncrawl %s gave up: %s" % (idx, str(exc)[:55]))
+                    _say("    commoncrawl %s UNAVAILABLE: %s" % (idx, str(exc)[:50]))
                 else:
-                    time.sleep(2.5)
+                    time.sleep(1.5)
+        if empty:
+            used.append(idx)                      # answered, with zero records
+            _say("    commoncrawl %s answered: no records for this host" % idx)
+            continue
         if txt is None:
             continue
         used.append(idx)
@@ -298,6 +312,13 @@ REDIRECTISH = ("redirect", "redirect_uri", "redirecturl", "url", "goto", "next",
                "return_to", "returnurl", "callback", "continue", "dest", "destination", "target")
 
 
+def _say(msg):
+    """Print and FLUSH. The first long run block-buffered its output, so after 17 minutes the
+    log was still 0 bytes and the kill took the whole buffer with it. Progress you cannot read
+    until the end is progress you lose."""
+    print(msg, flush=True)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--target", required=True)
@@ -313,34 +334,34 @@ def main():
     everything, per_host = {}, {}
 
     for host in a.host:
-        print("\n=== %s" % host)
+        _say("\n=== %s" % host)
         wb, forms, dropped = wayback(host, max_pages=a.cdx_pages)
-        print("    wayback  limit=%-6d paged=%-6d union=%-6d  off-host dropped=%d"
+        _say("    wayback  limit=%-6d paged=%-6d union=%-6d  off-host dropped=%d"
               % (forms.get("limit", 0), forms.get("paged", 0), len(wb), dropped))
-        print("             cdx pages expected=%d attempted=%d ok=%d failed=%d  -> %s"
+        _say("             cdx pages expected=%d attempted=%d ok=%d failed=%d  -> %s"
               % (forms.get("_pages_expected", 0), forms.get("_pages_attempted", 0),
                  forms.get("_pages_ok", 0), forms.get("_pages_failed", 0),
                  "COMPLETE" if forms.get("_complete") else "PARTIAL - this is a FLOOR"))
-        print("             disjointness: only-in-limit=%d  only-in-paged=%d  <- pb0759 holds "
+        _say("             disjointness: only-in-limit=%d  only-in-paged=%d  <- pb0759 holds "
               "only if these are non-zero" % (forms.get("_only_limit", 0),
                                               forms.get("_only_paged", 0)))
         us, us_raw, us_drop, us_total, us_nourl = (
             ({}, 0, 0, 0, 0) if a.skip_urlscan else urlscan(host))
         if not a.skip_urlscan:
-            print("    urlscan  api_total=%-6s pulled=%-5d exact-host=%-5d off-host=%-5d no-url=%d"
+            _say("    urlscan  api_total=%-6s pulled=%-5d exact-host=%-5d off-host=%-5d no-url=%d"
                   % (us_total, us_raw, len(us), us_drop, us_nourl))
         cc, cc_raw, cc_drop, cc_idx, cc_tried = (
             ({}, 0, 0, [], []) if a.skip_cc else commoncrawl(host))
         if not a.skip_cc:
-            print("    commoncrawl indexes discovered=%d attempted=%d answered=%d failed=%d (%s)"
+            _say("    commoncrawl indexes discovered=%d attempted=%d answered=%d failed=%d (%s)"
                   % (len(cc_tried), len(cc_tried), len(cc_idx), len(cc_tried) - len(cc_idx),
                      ",".join(i[-7:] for i in cc_idx) or "-"))
-            print("                raw=%-6d exact-host=%-6d off-host=%-5d -> %s"
+            _say("                raw=%-6d exact-host=%-6d off-host=%-5d -> %s"
                   % (cc_raw, len(cc), cc_drop,
                      "COMPLETE" if cc_idx and len(cc_idx) == len(cc_tried)
                      else "PARTIAL - this is a FLOOR"))
         urls = set(wb) | set(us) | set(cc)
-        print("    UNION    %d unique urls on this exact host" % len(urls))
+        _say("    UNION    %d unique urls on this exact host" % len(urls))
         per_host[host] = {"wayback_complete": bool(forms.get("_complete")),
                           "cdx_pages_expected": forms.get("_pages_expected", 0),
                           "cdx_pages_attempted": forms.get("_pages_attempted", 0),
@@ -357,10 +378,19 @@ def main():
                           "cc_indexes_answered": cc_idx, "cc_indexes_tried": cc_tried, "union": len(urls)}
         everything[host] = sorted(urls)
 
+        # Checkpoint after every host. A long run that only writes at the end converts an
+        # interruption into total loss - 25 minutes of archive traffic and nothing to show.
+        json.dump({"target": a.target, "per_host": per_host, "urls": everything,
+                   "complete": False},
+                  io.open(os.path.join(outdir, "passive_corpora.json"), "w", encoding="utf-8"),
+                  indent=1)
+        _say("    [checkpointed %d host(s)]" % len(everything))
+
     allurls = sorted({u for v in everything.values() for u in v})
     params, apis, legacy, tokens, jwts = mine(allurls)
 
-    json.dump({"target": a.target, "per_host": per_host, "urls": everything},
+    json.dump({"target": a.target, "per_host": per_host, "urls": everything,
+               "complete": True},
               io.open(os.path.join(outdir, "passive_corpora.json"), "w", encoding="utf-8"),
               indent=1)
 
@@ -375,13 +405,13 @@ def main():
            if re.fullmatch(r"(id|uid|user|userid|account|accountid|store|storeid|org|orgid"
                            r"|[a-z]+Id)", p, re.I)]
     if red:
-        print("  redirect candidates  : %s" % ", ".join("%s(%d)" % x for x in sorted(red, key=lambda x: -x[1])))
+        _say("  redirect candidates  : %s" % ", ".join("%s(%d)" % x for x in sorted(red, key=lambda x: -x[1])))
     if sel:
-        print("  object selectors     : %s" % ", ".join("%s(%d)" % x for x in sorted(sel, key=lambda x: -x[1])[:12]))
+        _say("  object selectors     : %s" % ", ".join("%s(%d)" % x for x in sorted(sel, key=lambda x: -x[1])[:12]))
     if apis:
-        print("\n  top API-shaped paths:")
+        _say("\n  top API-shaped paths:")
         for p in sorted(apis)[:25]:
-            print("    %s" % p[:110])
+            _say("    %s" % p[:110])
     print("\n  wrote %s" % os.path.join(outdir, "passive_corpora.json"))
     print("  NOT MINED by this tool: Common Crawl, source maps, GitHub code search, "
           "mobile artefacts, robots/sitemap. State them next to any count from this run.")
