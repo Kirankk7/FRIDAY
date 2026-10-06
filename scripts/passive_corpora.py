@@ -413,8 +413,17 @@ def main():
         for p in sorted(apis)[:25]:
             _say("    %s" % p[:110])
     print("\n  wrote %s" % os.path.join(outdir, "passive_corpora.json"))
-    print("  NOT MINED by this tool: Common Crawl, source maps, GitHub code search, "
-          "mobile artefacts, robots/sitemap. State them next to any count from this run.")
+    # Derived, not hardcoded. The literal list named Common Crawl even on runs where the CC leg
+    # had just completed - a stale string that understates coverage is the same defect as one
+    # that overstates it, and both make the line untrustworthy.
+    never = ["source maps (on-target)", "GitHub code search", "mobile artefacts",
+             "robots/sitemap"]
+    if a.skip_cc:
+        never.insert(0, "Common Crawl (SKIPPED this run)")
+    if a.skip_urlscan:
+        never.insert(0, "urlscan (SKIPPED this run)")
+    _say("  NOT MINED by this tool: %s." % ", ".join(never))
+    _say("  State them next to any count from this run.")
     return 0
 
 
