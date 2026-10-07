@@ -168,9 +168,28 @@ Legend: **T** tested at least once with a passing control · **P** partial / sin
 
 ## WHAT THIS TABLE IS FOR
 
-**Count the N's.** Roughly **55 of ~95 sub-variants have never been tested in any hunt.** That is
-the honest shape of our coverage, and it explains more than the class-level matrices do: a class
-can read ENFORCED while most of its variant space was never touched.
+**Count the N's.** Verified by parsing this file, not estimated:
+
+```
+CLASS-LEVEL  103 variants   T=42  P=17  N=40  X=4
+MICRO-LEVEL   42 items      tested=17  never=25
+             ---------------------------------------
+TOTAL        145 enumerated
+NEVER         65   45%
+TESTED        59   41%
+PARTIAL       17
+EXCLUDED       4   (DoS, social engineering, enumeration ROE)
+```
+
+**65 of 145 sub-variants have never been tested in any hunt.** That is the honest shape of our
+coverage, and it explains more than the class-level matrices do: a class can read ENFORCED while
+most of its variant space was never touched.
+
+⚠️ The first version of this paragraph said "55 of ~95" — both numbers wrong, written from
+memory into a document whose entire subject is unverified numbers. Three separate counting scripts
+disagreed before one was right (two had regex bugs: `` after `**` never matches, so every `**N**`
+row was silently dropped). **A count in prose is a claim; a count the file can reproduce is a fact.**
+Re-derive with the parser, never re-type the number.
 
 It also redirects effort, and the direction is counter-intuitive. The playbook is thickest in
 xss / sqli / ssrf — the three classes with the **most N rows and zero filed bugs** — and thinnest
