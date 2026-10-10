@@ -30,6 +30,7 @@ Legend: **T** tested at least once with a passing control · **P** partial / sin
 | vertical — lower role invokes higher-role function | P — TIER-blocked on 3 hunts |
 | horizontal function (same level, other principal) | P |
 | service-account / machine-identity escalation | **N** — always TIER |
+| restricted principal lifts its OWN restriction (self-reactivate, self-unsuspend, self-restore role) | **N** — pb0786; needs our second principal |
 
 ## 3. SQLi / NoSQLi
 | variant | state |
@@ -171,17 +172,17 @@ Legend: **T** tested at least once with a passing control · **P** partial / sin
 **Count the N's.** Verified by parsing this file, not estimated:
 
 ```
-CLASS-LEVEL  103 variants   T=42  P=17  N=40  X=4
+CLASS-LEVEL  104 variants   T=42  P=17  N=41  X=4
 MICRO-LEVEL   42 items      tested=17  never=25
              ---------------------------------------
-TOTAL        145 enumerated
-NEVER         65   45%
-TESTED        59   41%
+TOTAL        146 enumerated
+NEVER         66   45%
+TESTED        59   40%
 PARTIAL       17
 EXCLUDED       4   (DoS, social engineering, enumeration ROE)
 ```
 
-**65 of 145 sub-variants have never been tested in any hunt.** That is the honest shape of our
+**66 of 146 sub-variants have never been tested in any hunt** (2026-10-10: +1, self-reactivation, from an ingested writeup). That is the honest shape of our
 coverage, and it explains more than the class-level matrices do: a class can read ENFORCED while
 most of its variant space was never touched.
 

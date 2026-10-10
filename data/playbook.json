@@ -10499,6 +10499,20 @@
    "validated": true,
    "verify": "state the weaker fact and the missing evidence in the same sentence; if that reads wrong, the promotion was unearned",
    "added": "2026-10-06"
+  },
+  {
+   "id": "pb0786",
+   "class": "bfla",
+   "stack": "any",
+   "difficulty": "low",
+   "technique": "A RESTRICTION IS ONLY REAL IF ITS SUBJECT CANNOT LIFT IT. After an admin deactivates, suspends or downgrades a principal, act AS that principal and call the REVERSE transition on itself: activate, unsuspend, restore role, re-add seat, drop enforced MFA. The deactivated flag is often checked at login only, while the status-change endpoint authorises 'may act on self' instead of 'is an active admin'. Distinct from pb0588 (access that passively survives revocation): here the subject actively reverses the restriction.",
+   "payload": "Two principals: owner A, member B. A deactivates B. From B's still-live session (or a fresh login if allowed) replay the activate/role/status request with B's own id. Verdict = A's view of B afterwards, read from the server, not B's UI.",
+   "tell": "A restricted principal still sees ANY control that changes its own state, or deactivation leaves B's session working at all. Positive control in the same batch: B's identical request against ANOTHER user must be refused - if it succeeds, this is plain BFLA, not self-reversal.",
+   "source": "writeup",
+   "ref": "Medium, Rohith S., 'Bypassing User Deactivation Controls', $200, target redacted; shared by Kiran 2026-10-10",
+   "validated": false,
+   "verify": "IMPACT FILTER before filing: in the writeup the deactivated user held an ADMIN/agent role, so triage can argue admins may activate users. File only when B sits BELOW user-management privilege, or the programme states deactivation removes all capability. The stronger root is 'a deactivated principal can act at all' (session not revoked); self-reactivation is its consequence. Self-assessed 'High' in the writeup is the author's label, not a triage outcome.",
+   "added": "2026-10-10"
   }
  ]
 }
