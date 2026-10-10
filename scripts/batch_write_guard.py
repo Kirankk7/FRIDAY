@@ -42,6 +42,7 @@ import hashlib
 import json
 import os
 import posixpath
+import re
 import sys
 import time
 
@@ -141,7 +142,113 @@ def consume_token(h: str) -> bool:
         return False
 
 
+# --------------------------------------------------------------------------- shell route
+SHELL_TOOLS = ("Bash", "PowerShell")
+_QUOTES = "'\""
+# `>`, `>>`, `2>`, `&>` followed by a .js target. Deliberately literal: this covers the write
+# shapes actually used (redirect, heredoc into a redirect), not shell semantics in general.
+_REDIRECT = re.compile(r"(?:\d|&)?>>?\s*(['\"]?)([^\s'\"<>|;&()]+\.js)\1", re.I)
+_TEE = re.compile(r"\btee\b([^|;&\n]*)", re.I)
+_PS_WRITE = re.compile(r"\b(?:Out-File|Set-Content|Add-Content)\b([^|;\n]*)", re.I)
+
+
+def _js_tokens(segment: str) -> list:
+    """Arguments in `segment` ending .js, quotes stripped, flags skipped."""
+    out = []
+    for tok in segment.split():
+        tok = tok.strip(_QUOTES)
+        if tok and not tok.startswith("-") and tok.lower().endswith(".js"):
+            out.append(tok)
+    return out
+
+
+def _resolve(target: str, cwd: str) -> str:
+    """Relative targets are judged where the shell will actually write them."""
+    t = target.replace("\\", "/")
+    if t.startswith("/") or re.match(r"^[A-Za-z]:/", t) or not cwd:
+        return t
+    return cwd.replace("\\", "/").rstrip("/") + "/" + t
+
+
+def shell_write_targets(command: str, cwd: str = "") -> list:
+    """-> resolved .js paths this command visibly writes.
+
+    COVERS: `>` / `>>` redirection (heredoc bodies included, since the hook receives the whole
+    command text), `tee`, and PowerShell Out-File / Set-Content / Add-Content.
+    DOES NOT COVER, by design and stated: a script or interpreter that opens the file itself
+    (`python x.py`, `node -e ...`), variables or command substitution in the target, `cp`/`mv`
+    of an existing file. Those write with zero events. This is a habit-route guard for an
+    honest, forgetful operator - not a shell parser and not adversary-proof.
+    """
+    if not command or ".js" not in command.lower():
+        return []
+    found = [m.group(2) for m in _REDIRECT.finditer(command)]
+    for m in _TEE.finditer(command):
+        found += _js_tokens(m.group(1))
+    for m in _PS_WRITE.finditer(command):
+        found += _js_tokens(m.group(1))
+    seen, out = set(), []
+    for t in found:
+        r = _resolve(t, cwd)
+        if r not in seen:
+            seen.add(r)
+            out.append(r)
+    return out
+
+
 # --------------------------------------------------------------------------- decision
+def _ledger_verdict(text: str, rule_suffix: str = ""):
+    """-> a BLOCK tuple, or None if the ledger is usable and nothing falsified matched.
+
+    Shared by the file route and the shell route on purpose: two copies of this check would
+    drift, and the drift would be invisible until one route quietly stopped refusing.
+    """
+    if not hl.exists():
+        return ("BLOCK",
+                "no hypothesis ledger at data/hypothesis_ledger.jsonl, so no assumption in this "
+                "batch can be checked; seed the ledger before writing console batches",
+                "ledger_absent", "")
+    bad = hl.bad_detectors()
+    if bad:
+        return ("BLOCK",
+                "ledger has %d detector(s) that do not compile (%s); the instrument is unusable "
+                "and cannot issue a pass" % (len(bad), ", ".join(i for i, _ in bad)),
+                "detector_unusable", "")
+    hits = hl.match(text)
+    if hits:
+        rec, pat = hits[0]
+        # TWO reasons, deliberately: the claim names the target's own header/endpoint, so it is
+        # programme data the durable log must redact. Short target-free reason for the log;
+        # full detail only in the deny message, which reaches the session and no kept file.
+        return ("BLOCK",
+                "batch asserts %s, currently FALSIFIED" % rec["id"],
+                "falsified_assumption" + rule_suffix,
+                "batch asserts %s, recorded FALSIFIED: %s. Corrected finding: %s. Supply new "
+                "evidence via experiment_preflight.py --reopen %s if the target has changed."
+                % (rec["id"], rec.get("claim", "")[:90], rec.get("corrected_to", "")[:90],
+                   rec["id"]))
+    return None
+
+
+def decide_shell(command: str, cwd: str = "") -> tuple:
+    """Shell route: the ledger check is ENFORCED; the preflight token is NOT.
+
+    Why no token here: the written content is not cleanly separable from the command text, and
+    `curl ... > bundle.js` into scratch is routine bundle mining that must not be refused.
+    So this route catches a KNOWN-FALSIFIED assumption spelled out in the command, and does not
+    force the preflight question. Stated as a limit, not hidden.
+    """
+    targets = [t for t in shell_write_targets(command, cwd) if in_scope(t)]
+    if not targets:
+        return "PASS", "no scratch .js write in command", "out_of_scope", "", ""
+    ctx = os.path.basename(targets[0])
+    v = _ledger_verdict(command, "_shell")
+    if v:
+        return v + (ctx,)
+    return ("PASS", "shell write to scratch .js; ledger clear; token not required on this route",
+            "shell_ledger_clear", "", ctx)
+
+
 def decide(tool_name: str, tool_input: dict) -> tuple:
     """-> (decision, log_reason, rule_id, operator_detail).
 
@@ -156,36 +263,9 @@ def decide(tool_name: str, tool_input: dict) -> tuple:
     if not text.strip():
         return "PASS", "no batch source in payload", "empty_payload", ""
 
-    # instrument integrity first - a broken detector must never read as a clean batch
-    if not hl.exists():
-        return ("BLOCK",
-                "no hypothesis ledger at data/hypothesis_ledger.jsonl, so no assumption in this "
-                "batch can be checked; seed the ledger before writing console batches",
-                "ledger_absent", "")
-    bad = hl.bad_detectors()
-    if bad:
-        return ("BLOCK",
-                "ledger has %d detector(s) that do not compile (%s); the instrument is unusable "
-                "and cannot issue a pass" % (len(bad), ", ".join(i for i, _ in bad)),
-                "detector_unusable", "")
-
-    hits = hl.match(text)
-    if hits:
-        rec, pat = hits[0]
-        # TWO reasons, deliberately. The claim and the correction name the target's own header
-        # and endpoint, so they are programme data, and the durable log's sanitiser correctly
-        # redacts them. Building the LOGGED reason out of that text made the single most
-        # valuable event in the trail read "<REDACTED: looked like session or target material>"
-        # and carry no attribution whatsoever - found by probing the real ledger, not by the
-        # suite. So: a short target-free reason for the log, and the full detail only in the
-        # deny message, which reaches this session and is never written to a file we keep.
-        return ("BLOCK",
-                "batch asserts %s, currently FALSIFIED" % rec["id"],
-                "falsified_assumption",
-                "batch asserts %s, recorded FALSIFIED: %s. Corrected finding: %s. Supply new "
-                "evidence via experiment_preflight.py --reopen %s if the target has changed."
-                % (rec["id"], rec.get("claim", "")[:90], rec.get("corrected_to", "")[:90],
-                   rec["id"]))
+    v = _ledger_verdict(text)
+    if v:
+        return v
 
     h = content_hash(text)
     tok, why = read_token(h)
@@ -200,10 +280,11 @@ def decide(tool_name: str, tool_input: dict) -> tuple:
             "cleared", "")
 
 
-def emit(decision: str, reason: str, rule_id: str, started: float, ctx: str) -> None:
+def emit(decision: str, reason: str, rule_id: str, started: float, ctx: str,
+         action_id: str = "") -> None:
     ce.emit(TOOL, decision, reason=reason, rule_id=rule_id, context=ctx,
             duration_ms=int((time.time() - started) * 1000),
-            tool_file=os.path.abspath(__file__))
+            tool_file=os.path.abspath(__file__), action_id=action_id)
 
 
 def main() -> int:
@@ -228,13 +309,24 @@ def main() -> int:
     if not isinstance(tool_input, dict):
         tool_input = {}
 
-    decision, reason, rule_id, detail = decide(tool_name, tool_input)
-    ctx = os.path.basename((tool_input.get("file_path") or "").replace("\\", "/")) or tool_name
+    # tool_use_id is present in the real hook input for Write, Bash and PowerShell (pipe-tested
+    # 2026-10-10 before this line was written, not assumed). It is the per-call correlation id:
+    # it lets an event be tied to the exact tool call that caused it, instead of being matched
+    # by timestamp and filename, which two near-simultaneous calls could confuse.
+    action_id = str(call.get("tool_use_id") or "")
 
-    # Events are written for in-scope calls only. Logging every unrelated Write would bury the
-    # signal and make the trail's own counts meaningless.
+    if tool_name in SHELL_TOOLS:
+        decision, reason, rule_id, detail, ctx = decide_shell(
+            str(tool_input.get("command") or ""), str(call.get("cwd") or ""))
+    else:
+        decision, reason, rule_id, detail = decide(tool_name, tool_input)
+        ctx = (os.path.basename((tool_input.get("file_path") or "").replace("\\", "/"))
+               or tool_name)
+
+    # Events are written for in-scope calls only. Logging every unrelated Write or every Bash
+    # call would bury the signal and make the trail's own counts meaningless.
     if rule_id != "out_of_scope":
-        emit(decision, reason, rule_id, started, ctx)
+        emit(decision, reason, rule_id, started, ctx, action_id)
 
     if decision == "BLOCK":
         sys.stdout.write(json.dumps({

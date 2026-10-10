@@ -36,6 +36,10 @@ from core import hypothesis_ledger as hl      # noqa: E402
 
 PY = sys.executable
 RESULTS = []
+# Overridable ONLY so scripts/mutation_check.py can point this suite at a deliberately broken
+# copy of the guard and confirm the suite goes red. Default is the shipped guard.
+GUARD = os.environ.get("JARVIS_GUARD_SCRIPT") or os.path.join(ROOT, "scripts",
+                                                              "batch_write_guard.py")
 
 # Synthetic stand-ins. The shapes mirror the real records; the strings are invented so this file
 # stays publishable. SYNTH-AUTH plays the part of the three-times-repeated cookie assumption.
@@ -96,15 +100,16 @@ class Env(object):
             ti["content"] = content
         if new_string is not None:
             ti["new_string"] = new_string
-        payload = json.dumps({"tool_name": tool, "tool_input": ti})
-        r = subprocess.run([PY, os.path.join(ROOT, "scripts", "batch_write_guard.py")],
-                           input=payload, capture_output=True, text=True,
-                           env=self.env, cwd=ROOT)
-        return r.returncode, r.stdout, ce.read_events(self.log)
+        return self.guard_raw(json.dumps({"tool_name": tool, "tool_input": ti}))
+
+    def shell(self, command, tool="Bash", cwd="D:\\JARVIS", action_id="toolu_TEST"):
+        """A shell tool call in the exact shape the host sends (pipe-tested 2026-10-10)."""
+        return self.guard_raw(json.dumps({
+            "tool_name": tool, "tool_use_id": action_id, "cwd": cwd,
+            "tool_input": {"command": command, "description": "test"}}))
 
     def guard_raw(self, payload):
-        r = subprocess.run([PY, os.path.join(ROOT, "scripts", "batch_write_guard.py")],
-                           input=payload, capture_output=True, text=True,
+        r = subprocess.run([PY, GUARD], input=payload, capture_output=True, text=True,
                            env=self.env, cwd=ROOT)
         return r.returncode, r.stdout, ce.read_events(self.log)
 
@@ -127,6 +132,14 @@ class Env(object):
 
     def clean(self):
         shutil.rmtree(self.tmp, ignore_errors=True)
+
+
+def last_event(log):
+    """-> the newest event, or {} when there is none. A bare [-1] on an empty trail CRASHED the
+    suite under two mutants (M7, M9): still red, but every later check silently stopped running.
+    A check must FAIL cleanly, not take the rest of the suite down with it."""
+    evs = ce.read_events(log)
+    return evs[-1] if evs else {}
 
 
 def denied(rc, out):
@@ -211,7 +224,7 @@ def main():
     check("3e. clean batch with NO preflight is still denied", denied(rc2, out2),
           "rc=%s" % rc2)
     check("3f. that denial is attributed to the missing token, not to a hypothesis",
-          "no_preflight_token" in json.dumps(ce.read_events(e.log)[-1]))
+          "no_preflight_token" in json.dumps(last_event(e.log)))
 
     # ================================================== CRITERION 5
     print("\n  [5] new evidence permits reopening, and the reopening is recorded")
@@ -238,8 +251,8 @@ def main():
     check("5f. and the write is now ALLOWED (rc 0, no output)", rc == 0 and out.strip() == "",
           "rc=%s" % rc)
     check("5g. the allow is logged as PASS/cleared",
-          ce.read_events(e.log)[-1]["decision"] == "PASS"
-          and ce.read_events(e.log)[-1]["rule_id"] == "cleared")
+          last_event(e.log).get("decision") == "PASS"
+          and last_event(e.log).get("rule_id") == "cleared")
 
     # thin evidence must not buy a reopening
     e2 = Env()
@@ -269,10 +282,11 @@ def main():
             tools_guarded.update(t for t in m.split("|") if t)
     except (OSError, ValueError):
         tools_guarded = set()
-    check("6a. the hook config exists and names ONLY file-write tools",
-          tools_guarded == {"Write", "Edit"}, "guards=%s" % (sorted(tools_guarded) or "NONE"))
-    check("6a2. therefore no non-file-write delivery route is covered",
-          "Bash" not in tools_guarded and "PowerShell" not in tools_guarded)
+    check("6a. the hook config names exactly Write, Edit, Bash, PowerShell",
+          tools_guarded == {"Write", "Edit", "Bash", "PowerShell"},
+          "guards=%s" % (sorted(tools_guarded) or "NONE"))
+    check("6a2. and NOT the terminal panel or any other route",
+          not any(t.startswith("mcp__") for t in tools_guarded))
     # onFailure must be "block": a guard that passes when it crashes is not a guard.
     try:
         of = groups[0]["hooks"][0].get("onFailure")
@@ -422,7 +436,79 @@ def main():
           "/" in r3 and not r3.startswith("experiment_preflight"), "len=%d" % len(r3))
     e7.clean()
 
+    # ---------------------------------------------------------------- shell route
+    # Payload shape is the one the host actually sends, pipe-tested before the matcher was
+    # written: tool_input.command carries the whole text (heredoc body included), plus
+    # tool_use_id and cwd at the top level.
+    print("\n  [S] shell route - Bash / PowerShell writes of a .js into scratch")
+    es = Env()
+    FALS = "{zzcanary: 'include'}"
+    shell_cases = [
+        ("S1. Bash heredoc into scratch", "Bash", "D:\\JARVIS",
+         "cat > D:/JARVIS/workspace/scratch/h.js <<'EOF'\nfetch('/x', %s)\nEOF" % FALS),
+        ("S2. Bash tee -a into scratch", "Bash", "D:\\JARVIS",
+         "echo \"fetch('/x', %s)\" | tee -a /d/JARVIS/workspace/scratch/t.js" % FALS),
+        ("S3. PowerShell Set-Content -Path", "PowerShell", "D:\\JARVIS",
+         "Set-Content -Path D:\\JARVIS\\workspace\\scratch\\p.js -Value \"%s\"" % FALS),
+        ("S4. PowerShell | Out-File -FilePath", "PowerShell", "D:\\JARVIS",
+         "\"%s\" | Out-File -FilePath D:\\JARVIS\\workspace\\scratch\\o.js" % FALS),
+        ("S5. PowerShell > redirection", "PowerShell", "D:\\JARVIS",
+         "\"%s\" > D:\\JARVIS\\workspace\\scratch\\r.js" % FALS),
+        ("S6. RELATIVE target resolved against cwd", "Bash",
+         "D:\\JARVIS\\workspace\\scratch", "echo \"%s\" > p.js" % FALS),
+    ]
+    for name, tool, cwd, cmd in shell_cases:
+        rc, out, evs = es.shell(cmd, tool=tool, cwd=cwd, action_id="toolu_" + name[:2])
+        last = evs[-1] if evs else {}
+        check(name + " -> denied", denied(rc, out) and
+              last.get("rule_id") == "falsified_assumption_shell", "rc=%s" % rc)
+
+    check("S7. the shell BLOCK carries the host's tool_use_id as action_id",
+          last_event(es.log).get("action_id") == "toolu_S6",
+          str(last_event(es.log).get("action_id")))
+
+    n0 = len(ce.read_events(es.log))
+    rc, out, evs = es.shell("cat > D:/JARVIS/workspace/scratch/c.js <<'EOF'\n%s\nEOF"
+                            % GOOD_BATCH.strip())
+    check("S8. a CLEAN heredoc into scratch is allowed and logged",
+          rc == 0 and last_event(es.log).get("rule_id") == "shell_ledger_clear"
+          and len(evs) == n0 + 1,
+          "rc=%s" % rc)
+    rc, out, _ = es.shell("curl -s https://example.test/app.js > "
+                          "D:/JARVIS/workspace/scratch/target-a/bundle.js")
+    check("S9. bundle download into scratch is NOT refused (mining must keep working)",
+          rc == 0, "rc=%s" % rc)
+
+    n1 = len(ce.read_events(es.log))
+    rc, out, _ = es.shell("echo \"%s\" > D:/JARVIS/core/x.js" % FALS)
+    check("S10. a .js write OUTSIDE scratch is out of scope", rc == 0, "rc=%s" % rc)
+    rc, out, _ = es.shell("git commit -m \"note %s\"" % FALS)
+    check("S11. falsified text in a command that writes no .js passes", rc == 0, "rc=%s" % rc)
+    check("S12. and neither out-of-scope call wrote an event",
+          len(ce.read_events(es.log)) == n1)
+
+    # The documented limit, asserted AS a limit so it cannot quietly become a claim of coverage.
+    rc, out, _ = es.shell("python -c \"open('D:/JARVIS/workspace/scratch/x.js','w')"
+                          ".write('%s')\"" % FALS.replace("'", ""))
+    check("L1. LIMIT CONFIRMED: an interpreter that opens the file itself is NOT guarded",
+          rc == 0, "rc=%s  (0 = unguarded, as documented)" % rc)
+    es.clean()
+
+    # fail-closed on the shell route - but narrowly: a missing ledger must not lock out every
+    # shell command, only the writes the ledger exists to judge.
+    en = Env(seed=None)
+    rc, out, evs = en.shell("echo hi > D:/JARVIS/workspace/scratch/n.js")
+    check("S13. missing ledger denies a scratch .js shell write",
+          denied(rc, out) and evs and evs[-1]["rule_id"] == "ledger_absent", "rc=%s" % rc)
+    rc, out, _ = en.shell("git status")
+    check("S14. but does NOT block unrelated shell commands", rc == 0, "rc=%s" % rc)
+    en.clean()
+
     print("\n  NOT COVERED BY THIS HARNESS:")
+    print("    - SHELL ROUTE GAPS, by design: an interpreter or script that opens the file itself")
+    print("      (L1 asserts this), variables / command substitution in the target, cp / mv of an")
+    print("      existing file, and the terminal panel. The shell route enforces the LEDGER check")
+    print("      only - it does not require a preflight token.")
     print("    - whether a DENY prevented a real wasted paste. A refusal is a refused write;")
     print("      the counterfactual needs the batch run against the live surface.")
     print("    - detector RECALL. Every test asserts a pattern that was written to match. An")

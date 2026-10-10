@@ -126,7 +126,7 @@ def _sanitise_reason(reason) -> str:
 
 def emit(tool: str, decision: str, reason: str = "", rule_id: str = "",
          context=None, duration_ms: int = 0, test_mode: bool = False,
-         tool_file: str = "", path: str = "") -> bool:
+         tool_file: str = "", path: str = "", action_id: str = "") -> bool:
     """Append one event. -> True if durably written, False if the write failed.
 
     NEVER raises. The caller's decision is already made by the time this runs and must not
@@ -148,6 +148,9 @@ def emit(tool: str, decision: str, reason: str = "", rule_id: str = "",
         "duration_ms": int(duration_ms),
         "context": _sanitise(context),
         "test_mode": bool(test_mode),
+        # Per-call correlation id (the host's tool_use_id) when the caller is a hook. Empty for
+        # git-hook controls, which have no tool call to correlate with - absent, not invented.
+        "action_id": str(action_id or "")[:64],
     }
     # JARVIS_CONTROL_LOG lets a test redirect the trail without touching the real one.
     # Explicit `path` still wins, so a caller can be unambiguous.

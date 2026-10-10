@@ -66,7 +66,7 @@ and that difference is the whole point of this document.
 | 16 | Every console batch carries a positive control and prints raw context | `scripts/console_batch.py` | ⚠️ **discipline-dependent on the chat route only** — see note B, which corrects what this row used to claim |
 | 17 | Bundle keep-pile is `.js`/`.map` only, 30 days | `scripts/prune_bundles.py` | ⚠️ detects, nothing runs it |
 | 18 | `EVAL_SET.md` audited at hunt close | — | ❌ memory only |
-| 23 | No console batch written to a file without a hypothesis preflight, and none asserting a currently-FALSIFIED hypothesis | **PreToolUse hook** → `scripts/batch_write_guard.py` → `data/hypothesis_ledger.jsonl` | ✅ **real on the file-write route, bypassable on the chat route** — fires unasked, denies on a missing ledger / uncompilable detector / crash; see note B |
+| 23 | No console batch written to a file without a hypothesis preflight, and none asserting a currently-FALSIFIED hypothesis | **PreToolUse hook** → `scripts/batch_write_guard.py` → `data/hypothesis_ledger.jsonl` | ✅ **real on Write/Edit (ledger + token) and on visible Bash/PowerShell .js writes into scratch (ledger only); bypassable via chat, interpreter-written files, cp/mv, terminal panel** — fails closed; see note B |
 
 **Note B — a claim this document used to make, now falsified in part.** Row 16 previously read
 *"no hook can sit between the model and the chat window, so this one is structurally
@@ -82,13 +82,27 @@ ENFORCED   a console batch reaching a file. Denied unless a one-shot preflight t
            that exact content exists AND no currently-FALSIFIED assumption is spelled out in it.
            Proven live 2026-10-10: a Write asserting the thrice-falsified cookie-auth claim was
            refused, the file never existed, and the refusal is in the control trail.
-BYPASSABLE a batch delivered without a Write/Edit tool call. CONFIRMED by test, NOT MEASURED -
-           nothing counts those attempts, so the trail's numbers describe the guarded route only
-           and no bypass rate can be quoted from them. The route is WIDER than "typed into
-           chat", and that correction came from verification rather than from design: `Bash`
-           redirection, PowerShell, and any script that opens a file itself all create a .js
-           file without touching the hook. Verified 2026-10-10 - the file appeared, the trail
-           held zero events. The matcher names Write|Edit and nothing else.
+SHELL      (added 2026-10-10) Bash and PowerShell are matched too. A shell command that
+ROUTE      visibly writes a .js into workspace/scratch - `>` / `>>` (heredoc bodies included),
+           `tee`, Out-File / Set-Content / Add-Content, relative targets resolved against cwd -
+           gets the LEDGER check only. The preflight TOKEN is NOT required on this route:
+           content is not cleanly separable from command text, and `curl ... > bundle.js` into
+           scratch is routine bundle mining that must keep working. Proven live: a real Bash
+           heredoc asserting AUTH-001 was refused, file never created, event carries the host's
+           tool_use_id as action_id. Cost: ~76-105 ms added to every Bash/PowerShell call.
+BYPASSABLE CONFIRMED by test, NOT MEASURED - nothing counts these, so no bypass rate exists:
+           batches typed into chat; an interpreter or script that opens the file itself
+           (`python -c`, `node -e`, a .py) - asserted AS a limit by test L1; variables or command
+           substitution in the target; cp / mv of an existing file; and the terminal panel,
+           which is not a matched tool. That last one was found the hard way: when the guard
+           crashed on import, onFailure:block locked Write/Edit/Bash/PowerShell all at once, and
+           the terminal panel was the only route left to repair it.
+LOCKOUT    a guard crash blocks EVERY matched call. Fail-closed is deliberate; the price is that
+RISK       a bad edit to the guard blocks the tools needed to fix it. Repair route: the terminal
+           panel. Run scripts/hypothesis_check.py before trusting any guard edit.
+MUTATION   scripts/mutation_check.py removes one property at a time from a COPY of the guard
+           (14 mutants) and requires the suite to go red. 14/14 killed by failed assertions,
+           0 survived, 0 crash-kills. Covers the guard only - not the ledger or preflight scripts.
 BOUND TO   the token binds to the SHA-256 of the batch CONTENT. It does NOT bind to the
 WHAT       destination path, so the same cleared content may be written to a different filename;
            and `declared` hypothesis ids are RECORDED in the token but not enforced against the
