@@ -41,6 +41,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import posixpath
 import sys
 import time
 
@@ -69,6 +70,13 @@ def in_scope(file_path: str) -> bool:
     p = file_path.replace("\\", "/")
     if not p.lower().endswith(".js"):
         return False
+    # NORMALISE BEFORE MATCHING. Substring matching on a raw path was wrong three ways, all
+    # found by driving a spelling matrix through the shipped function: `workspace//scratch/`
+    # and `workspace/./scratch/` both slipped THROUGH the guard, and
+    # `workspace/scratch/../../core/x.js` was guarded although it resolves into the engine.
+    # posixpath (not os.path) on purpose: separators are already forward slashes here, and
+    # os.path.normpath would re-introduce backslashes on Windows.
+    p = posixpath.normpath(p)
     base = os.path.basename(p).lower()
     parent = os.path.basename(os.path.dirname(p)).lower()
     if ("batch" in base) or ("console" in base) or (parent == "console"):

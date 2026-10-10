@@ -84,19 +84,44 @@ def tool_version(path: str) -> str:
     return v
 
 
-def _sanitise(ctx) -> str:
-    """-> a short label safe to keep forever, or a redaction marker.
+def _redact(s) -> str:
+    """-> the string, or a redaction marker if it looks like session or target material.
 
     Refuses rather than truncates: a truncated URL is still a URL.
     """
-    if ctx is None:
+    if s is None:
         return ""
-    s = str(ctx)
-    low = s.lower()
-    if any(f in low for f in _FORBIDDEN):
+    s = str(s)
+    if any(f in s.lower() for f in _FORBIDDEN):
         return "<REDACTED: looked like session or target material>"
+    return s
+
+
+def _sanitise(ctx) -> str:
+    """For CONTEXT only: a short path-ish label, reduced to its basename.
+
+    Basename-ing is right here because context names a file, and a full path can carry a
+    programme or target name in a parent directory.
+    """
+    s = _redact(ctx)
+    if s.startswith("<REDACTED"):
+        return s
     s = os.path.basename(s.rstrip("/\\")) if ("/" in s or "\\" in s) else s
     return s[:80]
+
+
+def _sanitise_reason(reason) -> str:
+    """For REASON only: redact or keep, never basename.
+
+    Found 2026-10-10 by reading the real trail rather than the tests: a reason mentioning
+    `scripts/experiment_preflight.py` contained a slash, so the shared sanitiser ran
+    os.path.basename over the WHOLE sentence and logged a fragment starting mid-clause. A
+    reason is prose; amputating everything before its last slash destroys the explanation while
+    looking like a successful write. Same defect family as building a logged reason out of text
+    the log must redact: observability needs its own design, not a helper borrowed from
+    somewhere adjacent.
+    """
+    return _redact(reason)[:200]
 
 
 def emit(tool: str, decision: str, reason: str = "", rule_id: str = "",
@@ -119,7 +144,7 @@ def emit(tool: str, decision: str, reason: str = "", rule_id: str = "",
         "tool_version": tool_version(tool_file) if tool_file else "unset",
         "decision": decision,
         "rule_id": rule_id,
-        "reason": _sanitise(reason)[:200],
+        "reason": _sanitise_reason(reason),
         "duration_ms": int(duration_ms),
         "context": _sanitise(context),
         "test_mode": bool(test_mode),

@@ -384,6 +384,21 @@ def main():
     check("R1c. but engine .js outside scratch is NOT swept in", rc == 0, "rc=%s" % rc)
 
     # R2: the logged reason must survive the sanitiser while the operator still gets the detail.
+    # R1d: path SPELLINGS. Substring matching on a raw path was wrong three ways, all found by
+    # driving a matrix through the shipped function and none caught by the suite as first
+    # written. Two slipped through the guard; one guarded an engine file by mistake.
+    for spelling, want_guarded in [
+            ("D:/JARVIS/workspace//scratch/p.js", True),
+            ("D:/JARVIS/workspace/./scratch/p.js", True),
+            ("D:/JARVIS/core/../workspace/scratch/p.js", True),
+            ("D:/JARVIS/workspace/scratch/sub/../p.js", True),
+            ("D:/JARVIS/workspace/scratch/../../core/helper.js", False),
+    ]:
+        rc, out, _ = e7.guard(spelling, content=BAD_BATCH)
+        ok = denied(rc, out) if want_guarded else (rc == 0)
+        check("R1d. %s -> %s" % (spelling[10:], "guarded" if want_guarded else "out"), ok,
+              "rc=%s" % rc)
+
     rc, out, evs = e7.guard("/d/JARVIS/workspace/scratch/x_batch.js",
                             content="fetch('/zzredact-probe')")
     g2 = [x for x in evs if x["tool"] == "batch_write_guard"]
@@ -393,6 +408,18 @@ def main():
           logged_reason[:44])
     check("R2b. and the deny message still carries the ledger detail",
           "fixture token header" in out and "cookies authenticate" in out)
+
+    # R3: a reason containing a slash must not be amputated to its basename. Found by reading
+    # the real trail, not by any test: the no_preflight_token reason names a script path, so the
+    # shared context sanitiser basename'd the whole sentence and logged a mid-clause fragment.
+    rc, out, evs = e7.guard("/d/JARVIS/workspace/scratch/needs_token_batch.js",
+                            content=GOOD_BATCH)
+    g3 = [x for x in evs if x["rule_id"] == "no_preflight_token"]
+    r3 = g3[-1]["reason"] if g3 else ""
+    check("R3. a reason mentioning a path keeps its opening words",
+          r3.startswith("no preflight token"), r3[:46])
+    check("R3b. and is not reduced to a trailing fragment",
+          "/" in r3 and not r3.startswith("experiment_preflight"), "len=%d" % len(r3))
     e7.clean()
 
     print("\n  NOT COVERED BY THIS HARNESS:")

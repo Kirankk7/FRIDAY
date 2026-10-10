@@ -82,9 +82,18 @@ ENFORCED   a console batch reaching a file. Denied unless a one-shot preflight t
            that exact content exists AND no currently-FALSIFIED assumption is spelled out in it.
            Proven live 2026-10-10: a Write asserting the thrice-falsified cookie-auth claim was
            refused, the file never existed, and the refusal is in the control trail.
-BYPASSABLE a batch delivered without a file write. CONFIRMED by test, NOT MEASURED - nothing
-           counts those attempts, so the trail's numbers describe the guarded route only and no
-           bypass rate can be quoted from them.
+BYPASSABLE a batch delivered without a Write/Edit tool call. CONFIRMED by test, NOT MEASURED -
+           nothing counts those attempts, so the trail's numbers describe the guarded route only
+           and no bypass rate can be quoted from them. The route is WIDER than "typed into
+           chat", and that correction came from verification rather than from design: `Bash`
+           redirection, PowerShell, and any script that opens a file itself all create a .js
+           file without touching the hook. Verified 2026-10-10 - the file appeared, the trail
+           held zero events. The matcher names Write|Edit and nothing else.
+BOUND TO   the token binds to the SHA-256 of the batch CONTENT. It does NOT bind to the
+WHAT       destination path, so the same cleared content may be written to a different filename;
+           and `declared` hypothesis ids are RECORDED in the token but not enforced against the
+           ids the detector matched. Both verified by test, both deliberate - the paste is the
+           content, not the path - and both stated here rather than implied to be tighter.
 NOT A      proof that a refusal prevented a wasted operator action. A DENY is a refused write.
 CLAIM      The counterfactual needs the batch run against the live surface.
 FLOOR      detection is textual. An assumption held but never typed does not match, in the tests
