@@ -133,6 +133,17 @@ def main():
 
     # ---------------------------------------------------------------- decision integrity
     # the control's exit code and its logged decision must never disagree
+    # Declare what this harness does NOT cover, every run. A test suite that reports only its
+    # passes invites the reader to assume the rest. 11 decision paths exist across 3 controls.
+    print()
+    print("  NOT COVERED BY THIS HARNESS:")
+    print("    prepush_scan / corpus_completeness / BLOCK")
+    print("      reaching it needs a stale or absent disclosure corpus, and the live corpus is")
+    print("      the thing the control protects. It HAS been demonstrated manually (3 tamper")
+    print("      cases, 2026-10-06) but is not reproduced here and must not be counted as")
+    print("      automated coverage.")
+    print("    the path is covered 10 of 11; this line exists so the 11th stays visible.")
+
     print()
     bad_rows = sum(1 for n, ok, _ in RESULTS if not ok)
     print("  %d of %d acceptance checks passed" % (len(RESULTS) - bad_rows, len(RESULTS)))
