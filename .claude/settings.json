@@ -1,0 +1,18 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python D:/JARVIS/scripts/batch_write_guard.py",
+            "timeout": 15,
+            "onFailure": "block",
+            "statusMessage": "CONSOLE_BATCH_WRITE_REQUIRES_PREFLIGHT"
+          }
+        ]
+      }
+    ]
+  }
+}

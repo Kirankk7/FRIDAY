@@ -72,7 +72,14 @@ agents/ultron/knowledge/notes_private/
 Thumbs.db
 .idea/
 .vscode/
-.claude/
+# `.claude/*` not `.claude/` on purpose: git cannot re-include a file whose parent DIRECTORY is
+# excluded, so the negation below is silently dead under the directory form.
+.claude/*
+# ...except the hook config. The hook IS the enforcement owner for
+# CONSOLE_BATCH_WRITE_REQUIRES_PREFLIGHT, and a rule whose owner is untracked cannot be
+# reviewed, diffed or restored - which is the enforcement-owner rule applied to itself.
+# settings.local.json stays ignored: it is 42KB of machine-specific permission grants.
+!.claude/settings.json
 *.swp
 
 # internal working docs (local only)

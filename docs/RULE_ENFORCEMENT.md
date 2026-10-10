@@ -15,12 +15,19 @@ cannot bypass invokes it at the transition where violation matters.
 ## ENFORCEMENT OWNERS THAT ACTUALLY EXIST
 
 ```
-engine repo   .git/hooks/pre-push      disclosure guard, corpus completeness verified
-mirror repo   .git/hooks/pre-commit    closure gate (added 2026-10-06)
+engine repo   .git/hooks/pre-push          disclosure guard, corpus completeness verified
+mirror repo   .git/hooks/pre-commit        closure gate (added 2026-10-06)
+engine repo   .claude/settings.json        PreToolUse Write|Edit -> batch_write_guard
+                                           (added 2026-10-10, onFailure: block)
 ```
 
-Two. Everything else in the table below is invoked by convention or by memory. Note WHERE the
-second one lives: coverage matrices are gitignored in the engine repo and tracked in the private
+Three — and the third is a different KIND of owner, which is why it is listed here rather than
+folded into the count. The two git hooks sit on an action the model takes deliberately and
+rarely. The PreToolUse hook sits on an ordinary tool call, so it fires whether or not anyone
+intended a gate to run. That is the first owner in this repo that cannot be reached around by
+simply not running a command. Its limit is a different one: it covers the file-write ROUTE only.
+
+Note WHERE the second one lives: coverage matrices are gitignored in the engine repo and tracked in the private
 mirror, so the mirror commit is the transition at which a closure claim becomes durable. A gate
 placed in the engine repo would have been correct-looking and never fired.
 
@@ -56,9 +63,34 @@ and that difference is the whole point of this document.
 | 13 | Post-hunt retro, unprompted | — | ❌ memory only |
 | 14 | `HUNT_PROTOCOL.md` reread at every hunt boundary | `/hunt` skill | ⚠️ **user-invoked** — enforced only when the operator types it, which is by design (the boundary is the operator's to declare) but means it is not automatic |
 | 15 | Route-table sweep done and written before lane selection | — | ❌ memory only |
-| 16 | Every console batch carries a positive control and prints raw context | `scripts/console_batch.py` | ⚠️ **discipline-dependent** — no hook can sit between the model and the chat window, so this one is structurally unenforceable; it works by making the check the same keystroke as producing the batch |
+| 16 | Every console batch carries a positive control and prints raw context | `scripts/console_batch.py` | ⚠️ **discipline-dependent on the chat route only** — see note B, which corrects what this row used to claim |
 | 17 | Bundle keep-pile is `.js`/`.map` only, 30 days | `scripts/prune_bundles.py` | ⚠️ detects, nothing runs it |
 | 18 | `EVAL_SET.md` audited at hunt close | — | ❌ memory only |
+| 23 | No console batch written to a file without a hypothesis preflight, and none asserting a currently-FALSIFIED hypothesis | **PreToolUse hook** → `scripts/batch_write_guard.py` → `data/hypothesis_ledger.jsonl` | ✅ **real on the file-write route, bypassable on the chat route** — fires unasked, denies on a missing ledger / uncompilable detector / crash; see note B |
+
+**Note B — a claim this document used to make, now falsified in part.** Row 16 previously read
+*"no hook can sit between the model and the chat window, so this one is structurally
+unenforceable."* The first clause is still true and the conclusion was too broad. A `PreToolUse`
+hook sits between the model and the **filesystem**, and a batch that is written before it is
+pasted passes through it. So the unenforceable surface is narrower than stated: it is the batch
+typed straight into a reply, not batches in general.
+
+What rule 23 therefore is, precisely:
+
+```
+ENFORCED   a console batch reaching a file. Denied unless a one-shot preflight token keyed to
+           that exact content exists AND no currently-FALSIFIED assumption is spelled out in it.
+           Proven live 2026-10-10: a Write asserting the thrice-falsified cookie-auth claim was
+           refused, the file never existed, and the refusal is in the control trail.
+BYPASSABLE a batch delivered without a file write. CONFIRMED by test, NOT MEASURED - nothing
+           counts those attempts, so the trail's numbers describe the guarded route only and no
+           bypass rate can be quoted from them.
+NOT A      proof that a refusal prevented a wasted operator action. A DENY is a refused write.
+CLAIM      The counterfactual needs the batch run against the live surface.
+FLOOR      detection is textual. An assumption held but never typed does not match, in the tests
+           or in production, so recall is unmeasured and a clean pass is a floor on known
+           mistakes rather than a verdict on the batch.
+```
 
 ## P2 — preferences. The model may deviate with a reason.
 
@@ -72,19 +104,30 @@ and that difference is the whole point of this document.
 ## THE COUNT
 
 ```
-rules enumerated                     22
+rules enumerated                     23      (#1-#23, row count parsed from this file)
 enforced by something unavoidable     2      (#2 pre-push, #9 mirror pre-commit)
+automatic on one route, open on one   1      (#23, file-write enforced / chat route open)
 structural but bypassable             1      (#1, scope guard)
-detects but nothing invokes it        2      (#8, #17)
+detects but nothing invokes it        3      (#3, #8, #17)
 user-invoked by design                1      (#14)
-structurally unenforceable            1      (#16, operator-paste boundary)
-enforced by model memory alone        16
+structurally unenforceable            1      (#16, the chat-paste boundary only)
+memory or bare preference alone      14      (#4-7, #10-13, #15, #18-22)
+                                     ---
+                                      23
 ```
 
-**15 of 22 rules have no enforcement owner.** Of the four that drifted most in the last hunt —
-mirror sync, matrix update, post-hunt retro, state the denominator — one now has an owner and
-three do not. That the drifting four were all in the memory column is not a coincidence worth
-noting; it is the entire finding.
+⚠️ **The previous version of this block summed to 23 for 22 rules.** `#3` was counted once as
+"detects but nothing invokes" and again inside the memory bucket, so the memory figure read 16
+when the classification supports 14. The buckets now sum to the parsed row count, and that sum is
+printed above precisely so the next reader can check it instead of trusting it. A count in prose
+is a claim; a count that reconciles is a fact.
+
+**17 of 23 rules still have no EFFECTIVE owner** — the 14 memory-only rules plus the 3 that have
+a working detector nothing ever calls. Of the four that drifted most in hunt #43 — mirror sync,
+matrix update, post-hunt retro, state the denominator — one has an owner and three do not. That
+the drifting four were all in the memory column is not a coincidence worth noting; it is the
+entire finding. #23 is the first entry added to this file whose owner was built before the rule
+was written down, rather than after the rule was broken.
 
 ## WHAT THIS CHANGES
 
