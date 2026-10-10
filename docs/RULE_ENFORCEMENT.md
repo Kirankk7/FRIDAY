@@ -17,8 +17,10 @@ cannot bypass invokes it at the transition where violation matters.
 ```
 engine repo   .git/hooks/pre-push          disclosure guard, corpus completeness verified
 mirror repo   .git/hooks/pre-commit        closure gate (added 2026-10-06)
-engine repo   .claude/settings.json        PreToolUse Write|Edit -> batch_write_guard
+engine repo   .claude/settings.json        PreToolUse Write|Edit|Bash|PowerShell -> batch_write_guard
                                            (added 2026-10-10, onFailure: block)
+engine repo   .git/hooks/pre-commit        staged control file -> its suites rerun via run_check
+                                           (added 2026-10-10; fails closed)
 ```
 
 Three — and the third is a different KIND of owner, which is why it is listed here rather than
@@ -67,6 +69,21 @@ and that difference is the whole point of this document.
 | 17 | Bundle keep-pile is `.js`/`.map` only, 30 days | `scripts/prune_bundles.py` | ⚠️ detects, nothing runs it |
 | 18 | `EVAL_SET.md` audited at hunt close | — | ❌ memory only |
 | 23 | No console batch written to a file without a hypothesis preflight, and none asserting a currently-FALSIFIED hypothesis | **PreToolUse hook** → `scripts/batch_write_guard.py` → `data/hypothesis_ledger.jsonl` | ✅ **real on Write/Edit (ledger + token) and on visible Bash/PowerShell .js writes into scratch (ledger only); bypassable via chat, interpreter-written files, cp/mv, terminal panel** — fails closed; see note B |
+| 24 | A changed control is not committed until its suites pass, and no hunt is fully closed without valid execution evidence for every required check | **engine pre-commit** → `scripts/precommit_checks.py`; **mirror pre-commit** → `closure_gate.py` → `core/check_evidence.py` | ✅ **real** — see note C |
+
+**Note C — execution evidence.** `scripts/run_check.py` is the only writer of
+`workspace/check_runs.jsonl`. A check id maps to one fixed command in
+`core/check_evidence.REGISTRY` (4 checks, cap 5); no command can be passed in. Each run keeps its
+full output as an artefact and records the artefact hash and a hash of the files the check covers.
+A record is valid only if: latest for its id, command equals the registry, exit 0, artefact
+present and unaltered, covered files unchanged since the run (else STALE — and unchanged controls
+keep their evidence, so nothing reruns without a reason). The closure gate reads ONLY these
+records and ignores any check status written into a proof. Applies to hunts whose matrix closes
+on/after 2026-10-11. **Not tamper-proof:** records are local JSONL and can be forged; the test
+suite forges them openly to exercise each rule. Close dates are read from the matrix, so a
+backdated close would dodge the cutoff. Suites run against the working tree, not the staged
+snapshot. Proven live 2026-10-10: a deliberately broken control was staged, the real hook
+reran its suite, the commit was refused, HEAD did not move.
 
 **Note B — a claim this document used to make, now falsified in part.** Row 16 previously read
 *"no hook can sit between the model and the chat window, so this one is structurally
@@ -127,8 +144,8 @@ FLOOR      detection is textual. An assumption held but never typed does not mat
 ## THE COUNT
 
 ```
-rules enumerated                     23      (#1-#23, row count parsed from this file)
-enforced by something unavoidable     2      (#2 pre-push, #9 mirror pre-commit)
+rules enumerated                     24      (#1-#24, row count parsed from this file)
+enforced by something unavoidable     3      (#2 pre-push, #9 mirror pre-commit, #24 both pre-commits)
 automatic on one route, open on one   1      (#23, file-write enforced / chat route open)
 structural but bypassable             1      (#1, scope guard)
 detects but nothing invokes it        3      (#3, #8, #17)
@@ -136,7 +153,7 @@ user-invoked by design                1      (#14)
 structurally unenforceable            1      (#16, the chat-paste boundary only)
 memory or bare preference alone      14      (#4-7, #10-13, #15, #18-22)
                                      ---
-                                      23
+                                      24
 ```
 
 ⚠️ **The previous version of this block summed to 23 for 22 rules.** `#3` was counted once as
@@ -145,7 +162,7 @@ when the classification supports 14. The buckets now sum to the parsed row count
 printed above precisely so the next reader can check it instead of trusting it. A count in prose
 is a claim; a count that reconciles is a fact.
 
-**17 of 23 rules still have no EFFECTIVE owner** — the 14 memory-only rules plus the 3 that have
+**17 of 24 rules still have no EFFECTIVE owner** — the 14 memory-only rules plus the 3 that have
 a working detector nothing ever calls. Of the four that drifted most in hunt #43 — mirror sync,
 matrix update, post-hunt retro, state the denominator — one has an owner and three do not. That
 the drifting four were all in the memory column is not a coincidence worth noting; it is the

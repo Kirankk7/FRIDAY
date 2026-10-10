@@ -32,6 +32,7 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from core.control_event import emit as _emit  # noqa: E402
+from core import check_evidence as _ev  # noqa: E402
 
 # A hunt is declared closed when the header carries a real date rather than a dash.
 _CLOSED_FIELD = re.compile(r"\|\s*closed\s*\|\s*([^|]*)\|", re.I)
@@ -209,7 +210,27 @@ def check_file(matrix: str):
         proof = json.load(io.open(p, encoding="utf-8"))
     except Exception as exc:
         return ["%s is not valid json (%s)" % (os.path.basename(p), exc)]
-    return check_proof(proof, claim)
+    return check_proof(proof, claim) + evidence_reasons(proof, closed)
+
+
+def evidence_reasons(proof: dict, closed: str) -> list:
+    """-> [reasons] when a hunt claims fully_closed classes without valid check evidence.
+
+    Reads ONLY records written by scripts/run_check.py. Any check status the agent writes into
+    the proof is ignored on purpose - a typed "PASS" is a declaration, not execution evidence.
+    Applies to hunts closed on/after EVIDENCE_REQUIRED_FROM: earlier closures predate the
+    mechanism, and today's evidence would certify nothing about how they were closed. That
+    cutoff reads the matrix's own close date, so a backdated close would dodge it - stated, not
+    defended against (forgetful operator, not adversary).
+    """
+    if proof.get("grandfathered") is True:
+        return []
+    if not closed or closed < _ev.EVIDENCE_REQUIRED_FROM:
+        return []
+    if not any(c.get("fully_closed") for c in (proof.get("classes") or [])):
+        return []
+    return ["required check %s - run: python scripts/run_check.py %s" % (why, cid)
+            for cid, why in _ev.validate_all().items()]
 
 
 def staged_matrices():
