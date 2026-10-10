@@ -55,6 +55,9 @@ def main():
 
     # secrets must never reach a file we keep forever
     lp2 = os.path.join(tmp, "b.jsonl")
+    # prepush: allow - synthetic literals, deliberately credential-SHAPED so the redaction
+    # path is actually exercised. The pre-push guard flags this line correctly; it is the one
+    # place in the repo where a fake credential must exist for a test to mean anything.
     ce.emit("t", "PASS", "cookie=abc123; authorization: Bearer xyz",
             context="https://target.example/secret?token=abc", path=lp2)
     e2 = ce.read_events(lp2)[0]
