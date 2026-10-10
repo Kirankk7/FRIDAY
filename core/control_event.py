@@ -20,6 +20,19 @@ Two rules this module will not break:
      sanitised label, never a URL, programme name, path, token, header or request body. The log
      itself lives under `workspace/`, which is gitignored.
 
+HOW TO READ THIS LOG - three boundaries, each one a claim it does NOT support:
+
+  * **A BLOCK event is not a prevented failure.** It records that a control refused an action.
+    Whether that action would have caused harm is a separate question needing the attempted
+    action, the specific failure condition, and usually a controlled test. The first six BLOCK
+    events in this trail were triggered by a synthetic credential literal in our own test
+    fixture: six real refusals, zero prevented disclosures.
+  * **Block rate is not accuracy.** A control that refuses everything has a perfect block rate
+    and is useless. Precision and recall need a labelled set of known-good and known-bad cases,
+    reported with the size of that set, and kept separate from real-world counts.
+  * **Event counts measure the guarded path only.** An action taken outside an instrumented
+    control leaves no event, and absence of an event is not absence of the action.
+
 Run identity: `JARVIS_RUN_ID` if set, otherwise a unique id generated once per PROCESS and
 reused for every event that process emits. Deliberately not per-day - two sessions on one day
 would be merged into one run, which is a knowingly wrong measurement.
