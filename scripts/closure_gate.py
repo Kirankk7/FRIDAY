@@ -28,6 +28,10 @@ import os
 import re
 import subprocess
 import sys
+import time
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from core.control_event import emit as _emit  # noqa: E402
 
 # A hunt is declared closed when the header carries a real date rather than a dash.
 _CLOSED_FIELD = re.compile(r"\|\s*closed\s*\|\s*([^|]*)\|", re.I)
@@ -235,16 +239,22 @@ def staged_matrices():
 
 
 def main():
+    _t0 = time.time()
+    _me = os.path.abspath(__file__)
     args = sys.argv[1:]
     if args == ["--staged"]:
         targets = staged_matrices()
         if not targets:
             print("closure gate: no matrix staged.")
+            _emit("closure_gate", "PASS", "no matrix staged", rule_id="not_applicable",
+                  duration_ms=int((time.time()-_t0)*1000), tool_file=_me)
             return 0
     elif args:
         targets = args
     else:
         print(__doc__.strip().split("\n\n")[0])
+        _emit("closure_gate", "ERROR", "no target given", rule_id="usage",
+              duration_ms=int((time.time()-_t0)*1000), tool_file=_me)
         return 2
 
     failures = {}
@@ -255,6 +265,9 @@ def main():
 
     if not failures:
         print("closure gate: %d matrix file(s) checked, every closure claim is backed." % len(targets))
+        _emit("closure_gate", "PASS", "every closure claim is backed",
+              rule_id="closure_proof_required", context="%d matrix file(s)" % len(targets),
+              duration_ms=int((time.time()-_t0)*1000), tool_file=_me)
         return 0
 
     print("")
@@ -269,6 +282,10 @@ def main():
     print("  Write the proof beside the matrix, then commit again.")
     print("  Override only if the claim is genuinely not a closure: git commit --no-verify")
     print("")
+    _emit("closure_gate", "BLOCK", "closure claimed without proof",
+          rule_id="closure_proof_required",
+          context="%d of %d matrix file(s) failed" % (len(failures), len(targets)),
+          duration_ms=int((time.time()-_t0)*1000), tool_file=_me)
     return 1
 
 

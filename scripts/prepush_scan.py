@@ -24,6 +24,10 @@ import os
 import re
 import subprocess
 import sys
+import time
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from core.control_event import emit as _emit  # noqa: E402
 
 # Credential / operator-identifying shapes. Generic on purpose: these are patterns, not secrets, so they
 # are safe to publish. Anything target-SPECIFIC belongs in .hunt_targets.
@@ -128,10 +132,14 @@ def scan(diff: str, names: list) -> list:
 
 
 def main() -> int:
+    _t0 = time.time()
+    _me = os.path.abspath(__file__)
     base = _base_ref(sys.argv[1] if len(sys.argv) > 1 else "")
     diff = _git("diff", f"{base}..HEAD") if base else _git("diff", "--cached")
     if not diff.strip():
         print("pre-push scan: nothing outgoing.")
+        _emit("prepush_scan", "PASS", "nothing outgoing", rule_id="no_diff",
+              duration_ms=int((time.time()-_t0)*1000), tool_file=_me)
         return 0
 
     names, corpus_ok, corpus_msg = _corpus_state()
@@ -146,6 +154,9 @@ def main() -> int:
         print("  assurance: it would report CLEAN while being unable to see live programmes.")
         print("    python scripts/gen_hunt_targets.py              # regenerate from the registry")
         print("    python scripts/gen_hunt_targets.py --self-test  # prove it detects what it holds")
+        _emit("prepush_scan", "BLOCK", "disclosure corpus not verifiable",
+              rule_id="corpus_completeness",
+              duration_ms=int((time.time()-_t0)*1000), tool_file=_me)
         return 1
 
     hits = scan(diff, names)
@@ -155,6 +166,9 @@ def main() -> int:
         print("  The count is meaningful: the corpus hash matches the registry that produced it,")
         print("  so these are all currently-configured programmes, not whatever a stale file held.")
         print("  Still read the diff: grep cannot see prose, notes, or context only a human recognises.")
+        _emit("prepush_scan", "PASS", "no disclosure hit", rule_id="disclosure_scan",
+              context="%d name(s) checked" % len(names),
+              duration_ms=int((time.time()-_t0)*1000), tool_file=_me)
         return 0
 
     print(f"\n  PUSH BLOCKED — {len(hits)} disclosure risk(s) in {scope}:\n")
@@ -166,6 +180,9 @@ def main() -> int:
     print("    git reset --soft <base>   # unwind, keep the work")
     print("    # sanitize, then recommit code only — the engine is public, the hunt is not")
     print("  Override only if every hit above is genuinely generic: git push --no-verify\n")
+    _emit("prepush_scan", "BLOCK", "disclosure risk in outgoing diff",
+          rule_id="disclosure_scan", context="%d hit(s)" % len(hits),
+          duration_ms=int((time.time()-_t0)*1000), tool_file=_me)
     return 1
 
 

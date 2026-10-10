@@ -12,6 +12,10 @@ requiring every batch to be self-describing.
 Exit 0 = contract satisfied. Non-zero = do not hand this to the operator.
 """
 import re, subprocess, sys, shutil, json, os
+import time
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from core.control_event import emit as _emit  # noqa: E402
 
 # --- the contract. Each rule names the real failure it comes from.
 DESTRUCTIVE = re.compile(r"\b(DELETE|PUT)\b|method\s*:\s*[\"'](DELETE|PUT)", re.I)
@@ -63,8 +67,13 @@ def check(path):
     return fails, warns
 
 def main():
+    _t0 = time.time()
+    _me = os.path.abspath(__file__)
     if len(sys.argv) < 2:
-        print("usage: console_batch.py <batch.js> [...]"); return 2
+        print("usage: console_batch.py <batch.js> [...]")
+        _emit("console_batch", "ERROR", "no batch file given", rule_id="usage",
+              duration_ms=int((time.time()-_t0)*1000), tool_file=_me)
+        return 2
     bad = 0
     for p in sys.argv[1:]:
         fails, warns = check(p)
@@ -76,6 +85,11 @@ def main():
             print("  -> DO NOT HAND TO OPERATOR")
         else:
             print("  -> contract satisfied (%d warning(s))" % len(warns))
+    _emit("console_batch", "BLOCK" if bad else "PASS",
+          "contract violated" if bad else "contract satisfied",
+          rule_id="console_batch_contract",
+          context="%d file(s)" % len(sys.argv[1:]),
+          duration_ms=int((time.time()-_t0)*1000), tool_file=_me)
     return bad
 
 if __name__ == "__main__":
