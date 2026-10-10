@@ -57,6 +57,11 @@ MUTANTS = [
      '    action_id = str(call.get("tool_use_id") or "")\n', '    action_id = ""\n'),
     ("M14", "uncompilable detectors ignored",
      "    bad = hl.bad_detectors()\n", "    bad = []\n"),
+    # Prefix-only mutations keep the line valid Python: `"" and r"..."` evaluates to "".
+    ("M15", "quoted redirect targets with spaces not parsed",
+     "_QUOTED_ALT = r", '_QUOTED_ALT = "" and r'),
+    ("M16", "tee/cmdlet args split on whitespace again",
+     "_ARG = re.compile(", '_ARG = re.compile(r"(\\S+)") or re.compile('),
 ]
 
 

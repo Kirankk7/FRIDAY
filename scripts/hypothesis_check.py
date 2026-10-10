@@ -504,6 +504,33 @@ def main():
     check("S14. but does NOT block unrelated shell commands", rc == 0, "rc=%s" % rc)
     en.clean()
 
+    # QUOTED TARGETS WITH SPACES. Raised in review against the regex itself: the redirect target
+    # capture excluded whitespace even inside quotes, and tee / cmdlet args were split on
+    # whitespace. A quoted path with a space is still a VISIBLE write, so it is in stated scope.
+    eq = Env()
+    quoted = [
+        ("Q1. Bash > \"relative path with space\" (cwd-resolved)", "Bash", "D:\\JARVIS",
+         "printf \"%s\" > \"workspace/scratch/probe file.js\"" % FALS),
+        ("Q2. Bash tee 'absolute path with space'", "Bash", "D:\\JARVIS",
+         "echo \"%s\" | tee 'D:/JARVIS/workspace/scratch/my file.js'" % FALS),
+        ("Q3. PowerShell Set-Content -Path \"...space...\"", "PowerShell", "D:\\JARVIS",
+         "Set-Content -Path \"D:\\JARVIS\\workspace\\scratch\\probe file.js\" -Value \"%s\""
+         % FALS),
+        ("Q4. PowerShell > \"...space...\"", "PowerShell", "D:\\JARVIS",
+         "\"%s\" > \"D:\\JARVIS\\workspace\\scratch\\r file.js\"" % FALS),
+        ("Q5. PowerShell Out-File -FilePath '...space...'", "PowerShell", "D:\\JARVIS",
+         "\"%s\" | Out-File -FilePath 'D:\\JARVIS\\workspace\\scratch\\o file.js'" % FALS),
+    ]
+    for name, tool, cwd, cmd in quoted:
+        rc, out, _ = eq.shell(cmd, tool=tool, cwd=cwd)
+        check(name + " -> denied", denied(rc, out)
+              and last_event(eq.log).get("rule_id") == "falsified_assumption_shell",
+              "rc=%s" % rc)
+    # and the fix must not widen scope: a quoted .js with a space OUTSIDE scratch stays out
+    rc, out, _ = eq.shell("printf \"%s\" > \"D:/JARVIS/core/a b.js\"" % FALS)
+    check("Q6. quoted path with space OUTSIDE scratch stays out of scope", rc == 0, "rc=%s" % rc)
+    eq.clean()
+
     print("\n  NOT COVERED BY THIS HARNESS:")
     print("    - SHELL ROUTE GAPS, by design: an interpreter or script that opens the file itself")
     print("      (L1 asserts this), variables / command substitution in the target, cp / mv of an")

@@ -144,19 +144,25 @@ def consume_token(h: str) -> bool:
 
 # --------------------------------------------------------------------------- shell route
 SHELL_TOOLS = ("Bash", "PowerShell")
-_QUOTES = "'\""
+# A QUOTED target may contain spaces; a bare one ends at whitespace. Found in review: the first
+# version excluded whitespace even inside quotes, so `> "scratch/probe file.js"` and every
+# quoted tee / cmdlet path with a space went unguarded (5 of 5 shapes, test Q1-Q5).
+_QUOTED_ALT = r"\"([^\"\n]+?\.js)\"|'([^'\n]+?\.js)'|"
 # `>`, `>>`, `2>`, `&>` followed by a .js target. Deliberately literal: this covers the write
 # shapes actually used (redirect, heredoc into a redirect), not shell semantics in general.
-_REDIRECT = re.compile(r"(?:\d|&)?>>?\s*(['\"]?)([^\s'\"<>|;&()]+\.js)\1", re.I)
+_REDIRECT = re.compile(r"(?:\d|&)?>>?\s*(?:" + _QUOTED_ALT + r"([^\s'\"<>|;&()]+\.js))", re.I)
 _TEE = re.compile(r"\btee\b([^|;&\n]*)", re.I)
 _PS_WRITE = re.compile(r"\b(?:Out-File|Set-Content|Add-Content)\b([^|;\n]*)", re.I)
+# One shell argument: a double-quoted string, a single-quoted string, or a bare word.
+_ARG = re.compile(r"\"([^\"]*)\"|'([^']*)'|(\S+)")
 
 
 def _js_tokens(segment: str) -> list:
-    """Arguments in `segment` ending .js, quotes stripped, flags skipped."""
+    """Arguments in `segment` ending .js, quotes respected (a quoted arg may hold spaces),
+    flags skipped."""
     out = []
-    for tok in segment.split():
-        tok = tok.strip(_QUOTES)
+    for m in _ARG.finditer(segment):
+        tok = next(g for g in m.groups() if g is not None)
         if tok and not tok.startswith("-") and tok.lower().endswith(".js"):
             out.append(tok)
     return out
@@ -182,7 +188,7 @@ def shell_write_targets(command: str, cwd: str = "") -> list:
     """
     if not command or ".js" not in command.lower():
         return []
-    found = [m.group(2) for m in _REDIRECT.finditer(command)]
+    found = [next(g for g in m.groups() if g) for m in _REDIRECT.finditer(command)]
     for m in _TEE.finditer(command):
         found += _js_tokens(m.group(1))
     for m in _PS_WRITE.finditer(command):
